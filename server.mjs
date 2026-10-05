@@ -8,6 +8,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
+import { ensureHome } from './lib/home.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const DATA = process.env.LAX_DATA || path.join(ROOT, 'data'); // LAX_DATA: tests run a private Lax
@@ -18,6 +19,8 @@ const PORT = Number(process.env.LAX_PORT || 7777);
 const HOST = process.env.LAX_HOST || '127.0.0.1';
 const PUBLIC_URL = (process.env.LAX_PUBLIC_URL || '').replace(/\/$/, '');
 const DEFAULT_WORKDIR = process.env.LAX_WORKDIR || path.join(os.homedir(), 'REPOS');
+// Lax's own home: the assistant runs there, with its CLAUDE.md (who it is + notes about you). Your repos are readable from it.
+const LAX_HOME = process.env.LAX_HOME || path.join(os.homedir(), '.lax');
 
 fs.mkdirSync(DATA, { recursive: true });
 const tokenFile = path.join(DATA, 'token');
@@ -296,7 +299,7 @@ function channelEvent(b) {
 // Voice goes into a live session (a claude-lax tab), or else to Lax itself: an assistant you can ask anything.
 // It's one long-running headless Claude in LAX_WORKDIR that also knows what your sessions are doing.
 let voiceRun = null;
-const ASSISTANT = 'assistant'; // its key in voiceSessions
+const ASSISTANT = 'assistant:' + LAX_HOME; // its key in voiceSessions (a conversation only resumes in the folder it started in)
 const tabLabel = (s) => `${s.project}·${s.where || 'cli'}`;
 function sessionsBrief() {
   const list = sessionList().filter((s) => s.id !== voiceSessions[ASSISTANT]);
@@ -306,9 +309,9 @@ function sessionsBrief() {
     return `- ${tabLabel(s)} (${s.status}, active ${Math.round((Date.now() - s.ts) / 60000)} min ago, in ${s.cwd || '?'})${lines ? ':\n' + lines : ''}`;
   }).join('\n');
 }
-const assistantPrompt = () => `You are ${settings.name}, a small pixel companion that lives on the user's phone. They are talking to you by voice. ` +
-  'Answer anything they ask, briefly and warmly, like a friendly assistant. You run on their Mac and can use tools when it really helps. ' +
-  'Start your reply with ONE short, plain sentence (no markdown, no code) that can be read aloud; details may follow.\n\n' +
+// Who Lax is lives in LAX_HOME/CLAUDE.md; this adds what changes per message.
+const assistantPrompt = () => (settings.name !== 'Lax' ? `Your name is now ${settings.name}.\n` : '') +
+  'The user is talking to you by voice: start with ONE short, plain sentence that can be read aloud.\n\n' +
   `Their Claude Code sessions right now (tab name, status, latest activity):\n${sessionsBrief()}`;
 function talk(text) {
   const cid = pickChannel();
@@ -322,12 +325,13 @@ function talk(text) {
     return true;
   }
   if (voiceRun) return false;
-  const cwd = DEFAULT_WORKDIR, name = settings.name.toLowerCase();
-  const args = ['-p', text, '--output-format', 'stream-json', '--verbose', '--append-system-prompt', assistantPrompt()];
+  const cwd = LAX_HOME, name = settings.name.toLowerCase();
+  ensureHome(LAX_HOME, DEFAULT_WORKDIR);
+  const args = ['-p', text, '--output-format', 'stream-json', '--verbose', '--add-dir', DEFAULT_WORKDIR, '--append-system-prompt', assistantPrompt()];
   if (voiceSessions[ASSISTANT]) args.push('--resume', voiceSessions[ASSISTANT]);
   pet.voice++; gainXp(3); save();
   feed(`> ${short(text, 90)}`, 'prompt', name);
-  const child = spawn('claude', args, { cwd, env: { ...process.env, LAX_VOICE: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn('claude', args, { cwd, env: { ...process.env, LAX_VOICE: '1', LAX_HOME }, stdio: ['ignore', 'pipe', 'pipe'] });
   voiceRun = { child, cwd, sessionId: voiceSessions[ASSISTANT] || null };
   broadcast('react', { state: 'thinking' }); pushState();
   let buf = '', result = null;

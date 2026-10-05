@@ -45,7 +45,12 @@ try {
   }
 
   // Voice-launched headless runs have no terminal: the phone is the only way to approve.
-  if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && !SAFE.test(input.tool_name)) {
+  // Lax's assistant may always edit its own home (its notes about you), without asking.
+  const home = process.env.LAX_HOME, file = input.tool_input?.file_path || '';
+  const ownNotes = home && /^(Edit|Write|MultiEdit)$/.test(input.tool_name) && path.resolve(file).startsWith(path.resolve(home) + path.sep);
+  if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && ownNotes) {
+    console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', permissionDecisionReason: 'Lax\'s own notes.' } }));
+  } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && !SAFE.test(input.tool_name)) {
     const { decision } = await post('/api/ask', input, 120000);
     console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse',
       permissionDecision: decision === 'allow' ? 'allow' : 'deny',

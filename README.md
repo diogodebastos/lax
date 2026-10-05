@@ -38,6 +38,15 @@ One URL. The layout follows the screen, and `?layout=wide|tall|big` forces one:
 - **tall** (cover screen held sideways, 260×512): Lax on top, terminal below
 - **big** (open / Flex mode): Lax above the fold; session chips, terminal and buttons below it
 
+## Lax's home (`~/.lax`)
+
+Talking from the **all** tab goes to Lax itself: an assistant you can ask anything. It runs Claude Code in its own home, `~/.lax` (override with `LAX_HOME`):
+- `~/.lax/CLAUDE.md` holds who Lax is, plus **Notes** it keeps about you. It adds them on its own, you can edit them, and it reads them to you when you ask what it remembers.
+- `~/.lax/.claude/settings.json`: it can read your repos (`LAX_WORKDIR`, default `~/REPOS`) freely. Editing anything outside its home needs your approval on the phone.
+- Each message also carries a short summary of your Claude Code sessions, so "what's my cli session doing?" works.
+
+These files are created on first use and never overwritten.
+
 ## Life menu
 
 Tap **LAX ≡** (or **♥ life** when the phone is open) to:
