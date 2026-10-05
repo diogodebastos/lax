@@ -313,6 +313,7 @@ http.createServer(async (req, res) => {
     case '/api/decide': { const p = pending.get(b.id); if (p) p.finish(b.decision === 'allow' ? 'allow' : 'deny'); return json(res, { ok: !!p }); }
     case '/api/settings': updateSettings(b); pushState(); return json(res, { ok: true, settings });
     case '/api/rebirth': rebirth(); broadcast('reborn', {}); pushState(); return json(res, { ok: true });
+    case '/api/diag': console.log(`[phone ${new Date().toISOString().slice(11, 19)}] ${JSON.stringify(b).slice(0, 600)}`); return json(res, { ok: true });
     case '/api/talk': return json(res, { ok: talk(String(b.text || '').slice(0, 2000)) });
     default: return json(res, { error: 'not found' }, 404);
   }

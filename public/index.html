@@ -83,7 +83,7 @@
 
   /* Open phone (main screen / Flex mode): top half Lax, bottom half terminal — the fold sits on the seam. */
   body.big { display:block; }
-  body.big #app { width:100vw; height:100vh; transform:none !important; }
+  body.big #app { width:100vw; height:100vh; height:100dvh; transform:none !important; }
   body.big #top { height:50%; }
   body.big #stage { inset:auto; }
   body.big #hud { font-size:22px; top:10px; left:14px; right:14px; gap:10px; } body.big #xp { height:8px; } body.big #dots b { width:10px; height:10px; }
@@ -109,7 +109,7 @@
   body.wide #bubble { position:relative; left:auto; right:auto; top:auto; margin:10px 12px 4px 14px; flex:none; }
   body.wide #bubble::after { left:-9px; bottom:auto; top:12px; border-right:0; border-left:3px solid #000; }
 
- position:fixed; inset:0; z-index:10; background:#000; display:grid; place-items:center; text-align:center; color:var(--coral); font-size:22px; cursor:pointer; }
+  #wake { position:fixed; inset:0; z-index:10; background:#000; display:grid; place-items:center; text-align:center; color:var(--coral); font-size:22px; cursor:pointer; }
   #wake small { display:block; color:var(--dim); font-size:15px; margin-top:6px; }
 </style>
 </head>
@@ -123,7 +123,7 @@
   </div>
   <div id="bottom">
   <div id="chips"></div>
-  <div id="term"><div class="session">lax v0 — waiting for claude code…</div><div><span id="cursor"></span></div></div>
+  <div id="term"><div class="session">lax v0.3 — waiting for claude code…</div><div><span id="cursor"></span></div></div>
   <div id="bar"><button id="talk">🎙 tap to talk</button><button id="lifeBtn">♥ life</button></div>
   </div>
   <div id="life">
@@ -150,6 +150,6 @@
   </div>
 </div>
 <div id="wake"><div>tap to wake Lax<small>(unlocks sound + mic)</small></div></div>
-<script src="lax.js?v=3"></script>
+<script src="lax.js?v=5"></script>
 </body>
 </html>

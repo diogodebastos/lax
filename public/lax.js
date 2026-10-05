@@ -32,6 +32,11 @@ function fit() {
 }
 addEventListener('resize', fit); fit();
 
+const VERSION = 'v0.3';
+// Diagnostics → the Mac's server log (data/server.log), so phone-only problems are visible there.
+const diag = (event, data = {}) => { if (DEMO || !TOKEN) return; try { fetch('/api/diag', { method: 'POST', keepalive: true,
+  headers: { 'content-type': 'application/json', 'x-lax-token': TOKEN }, body: JSON.stringify({ event, ...data }) }); } catch {} };
+addEventListener('error', (e) => diag('js-error', { msg: e.message, at: `${e.filename}:${e.lineno}` }));
 const api = (p, body) => fetch(p, { method: 'POST', headers: { 'content-type': 'application/json', 'x-lax-token': TOKEN }, body: JSON.stringify(body || {}) }).then((r) => r.json());
 
 // ---------- palette ----------
@@ -273,16 +278,19 @@ const MIC_ERRORS = {
   'no-speech': 'I didn\'t hear anything. Tap me and talk.',
 };
 hint.textContent = !SR || isBrave ? 'no voice in this browser: tap to type' : IDLE_HINT;
+(async () => { let mic = 'unknown'; try { mic = (await navigator.permissions.query({ name: 'microphone' })).state; } catch {}
+  diag('load', { v: VERSION, ua: navigator.userAgent, secure: isSecureContext, sr: !!SR, brave: isBrave, mediaDevices: !!navigator.mediaDevices, mic, w: innerWidth, h: innerHeight, dpr: devicePixelRatio }); })();
 function startListening() {
   if (listening) { cancelled = true; rec?.abort(); return; }
   if (voiceBusy) { showBubble({ id: 'busy', kind: 'reply', text: 'Still working on the last one…' }); return; }
   if (!SR || isBrave) { const text = prompt('Talk to Lax:'); if (text) send(text); return; }
   speechSynthesis?.cancel(); heard = ''; cancelled = false; listening = true; hint.textContent = 'listening… (tap to cancel)'; sfx([440]);
   rec = new SR(); rec.lang = navigator.language || 'en-US'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+  ['start', 'audiostart', 'soundstart', 'speechstart', 'speechend', 'audioend', 'nomatch'].forEach((ev) => rec.addEventListener(ev, () => diag('sr-' + ev)));
   rec.onresult = (e) => { heard = [...e.results].map((r) => r[0].transcript).join(''); hint.textContent = heard.slice(-40); };
-  rec.onerror = (e) => { if (e.error !== 'aborted') showBubble({ id: 'mic', kind: 'error', text: MIC_ERRORS[e.error] || 'Mic error: ' + e.error }); };
-  rec.onend = () => { listening = false; hint.textContent = IDLE_HINT; if (!cancelled && heard.trim()) { sfx([330]); send(heard.trim()); } heard = ''; };
-  try { rec.start(); } catch (err) { listening = false; hint.textContent = IDLE_HINT; showBubble({ id: 'mic', kind: 'error', text: 'Mic error: ' + err.message }); }
+  rec.onerror = (e) => { diag('sr-error', { error: e.error, message: e.message }); if (e.error !== 'aborted') showBubble({ id: 'mic', kind: 'error', text: MIC_ERRORS[e.error] || 'Mic error: ' + e.error }); };
+  rec.onend = () => { diag('sr-end', { heard: heard.slice(0, 80), cancelled }); listening = false; hint.textContent = IDLE_HINT; if (!cancelled && heard.trim()) { sfx([330]); send(heard.trim()); } heard = ''; };
+  diag('talk-tap'); try { rec.start(); } catch (err) { diag('sr-start-throw', { msg: err.message }); listening = false; hint.textContent = IDLE_HINT; showBubble({ id: 'mic', kind: 'error', text: 'Mic error: ' + err.message }); }
 }
 function stopListening() { if (rec && listening) rec.stop(); }
 function send(text) {
@@ -305,7 +313,14 @@ if (qs.has('awake')) wakeEl.remove();
 wakeEl.addEventListener('click', async () => {
   wakeEl.remove(); sfx([523, 784]); hop(1.4);
   try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch {}
-  if (SR && !isBrave) navigator.mediaDevices?.getUserMedia({ audio: true }).then((st) => st.getTracks().forEach((t) => t.stop())).catch(() => {});
+  diag('wake');
+  if (SR && !isBrave) {
+    if (!navigator.mediaDevices) diag('gum-missing');
+    else navigator.mediaDevices.getUserMedia({ audio: true })
+      .then((st) => { diag('gum-ok', { tracks: st.getTracks().length }); st.getTracks().forEach((t) => t.stop()); })
+      .catch((err) => { diag('gum-error', { name: err.name, msg: err.message });
+        showBubble({ id: 'mic', kind: 'error', text: err.name === 'NotAllowedError' ? MIC_ERRORS['not-allowed'] : 'Mic: ' + err.name }); });
+  }
   try { await document.documentElement.requestFullscreen?.(); } catch {}
   const lock = async () => { try { await navigator.wakeLock?.request('screen'); } catch {} };
   lock(); document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && lock());
