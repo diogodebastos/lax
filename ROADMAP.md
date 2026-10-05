@@ -49,9 +49,9 @@ Pixel Lax (squash and stretch, Super Meat Boy energy) with idle / working / wait
 
 ## Next
 
-### Phase 3.5: quick actions from the phone [diogodebastos/lax#11](https://github.com/diogodebastos/lax/issues/11)
+### Phase 3.5: quick actions by voice [diogodebastos/lax#11](https://github.com/diogodebastos/lax/issues/11)
 - `claude-lax` runs Claude Code inside a small terminal wrapper, so Lax can type into it.
-- On a live tab: **clear**, **compact**, **interrupt** and **continue** buttons, and by voice ("clear", "stop").
+- In a live tab, say "clear", "compact", "stop" or "continue". Voice only, no buttons.
 - A closed list of actions only. Your terminal feels exactly the same.
 
 ### Phase 4: Lax on the cover screen [diogodebastos/lax#3](https://github.com/diogodebastos/lax/issues/3)
