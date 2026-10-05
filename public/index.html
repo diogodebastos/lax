@@ -96,10 +96,11 @@
   body.big #hint { font-size:18px; bottom:10px; }
   body.big #term { font-size:19px; line-height:18px; padding:10px 14px; }
   body.big #life { font-size:22px; padding:14px 18px; } body.big #life h3 { font-size:18px; } body.big #life header { font-size:28px; }
-  #chips { display:none; } body.big #chips { display:flex; gap:8px; flex-wrap:wrap; padding:10px 14px 0; font-size:18px; }
-  #chips span { border:2px solid #2c2824; padding:0 6px; color:#b7b0a4; } #chips span::before { content:'■ '; color:var(--dim); }
-  #chips span { cursor:pointer; } #chips .live { color:var(--fg); border-color:#4a4239; }
-  #chips .sel { border-color:var(--coral); color:var(--coral); box-shadow:0 0 0 1px var(--coral); }
+  /* Session chips are tabs: they sit on the terminal's top line; the selected one opens into it ("brought to the front"). */
+  #chips { display:none; } body.big #chips { display:flex; gap:6px; flex-wrap:wrap; align-items:flex-end; padding:10px 14px 0; font-size:18px; position:relative; z-index:1; margin-bottom:-2px; }
+  #chips span { border:2px solid #2c2824; border-bottom-color:#1f1c19; padding:1px 8px 2px; color:#b7b0a4; background:#0b0a09; cursor:pointer; } #chips span::before { content:'■ '; color:var(--dim); }
+  #chips .live { color:var(--fg); border-color:#4a4239; border-bottom-color:#1f1c19; }
+  #chips .sel { border-color:var(--coral); border-bottom-color:#000; background:#000; color:var(--coral); padding-top:4px; }
   #chips .bg::before { content:''; }
   #chips .working::before { color:var(--blue); } #chips .waiting::before { color:var(--amber); } #chips .done::before { color:var(--green); }
   #bottom { flex:1; display:flex; flex-direction:column; min-height:0; }
@@ -177,6 +178,6 @@
   </div>
 </div>
 <div id="wake"><div>tap to wake Lax<small>(unlocks sound + mic)</small></div></div>
-<script src="lax.js?v=9"></script>
+<script src="lax.js?v=10"></script>
 </body>
 </html>

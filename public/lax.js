@@ -309,6 +309,8 @@ function speak(text) {
 // the mic permission prompt cancels the touch, and continuous recognition is flaky there.
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const isBrave = !!navigator.brave;
+// Set once the browser proves it can't do speech recognition (e.g. Brave: no Google speech service). Then taps go to typing.
+let voiceBroken = !SR;
 let rec, heard = '', cancelled = false;
 const hint = $('#hint');
 let IDLE_HINT = 'tap Lax to talk';
@@ -318,28 +320,40 @@ function routeChannel() {
 }
 function talkRoute() { const live = routeChannel(); return live ? `🔗 ${live.project}` : '☁ background'; }
 function setTarget(v) { voiceTarget = v; updateHint(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); if (!DEMO) api('/api/target', { target: v }); }
-function updateHint() { IDLE_HINT = `tap Lax to talk → ${talkRoute()}`; if (!listening && SR && !isBrave) hint.textContent = IDLE_HINT; }
+function updateHint() { IDLE_HINT = `${voiceBroken ? 'tap Lax to type' : 'tap Lax to talk'} → ${talkRoute()}`; if (!listening) hint.textContent = IDLE_HINT; }
 const MIC_ERRORS = {
   'not-allowed': 'Mic is blocked. Tap the icon left of the address → Permissions → Microphone → Allow, then reload.',
   'service-not-allowed': 'This browser has no speech recognition. Use Chrome.',
-  'network': isBrave ? 'Brave has no speech recognition. Open Lax in Chrome.' : 'Speech service unreachable. Check your connection.',
+  'network': isBrave ? 'Brave can\'t do speech recognition, so type instead (or use Chrome for voice).' : 'Speech service unreachable. Check your connection.',
   'audio-capture': 'No microphone found.',
   'no-speech': 'I didn\'t hear anything. Tap me and talk.',
 };
-hint.textContent = !SR || isBrave ? 'no voice in this browser: tap to type' : IDLE_HINT;
+updateHint();
 (async () => { let mic = 'unknown'; try { mic = (await navigator.permissions.query({ name: 'microphone' })).state; } catch {}
   diag('load', { v: VERSION, ua: navigator.userAgent, secure: isSecureContext, sr: !!SR, brave: isBrave, mediaDevices: !!navigator.mediaDevices, mic, w: innerWidth, h: innerHeight, dpr: devicePixelRatio }); })();
 function startListening() {
   if (listening) { cancelled = true; rec?.abort(); return; }
   if (voiceBusy && !answerHook) { showBubble({ id: 'busy', kind: 'reply', text: 'Still working on the last one…' }); return; }
-  if (!SR || isBrave) { const h = answerHook; answerHook = null; const text = prompt(h ? 'Your answer:' : 'Talk to Lax:'); if (text) (h ? h(text) : send(text)); else if (h) renderBubble(); return; }
+  if (voiceBroken) return typeInstead();
   speechSynthesis?.cancel(); heard = ''; cancelled = false; listening = true; hint.textContent = 'listening… (tap to cancel)'; sfx([440]);
   rec = new SR(); rec.lang = navigator.language || 'en-US'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
   ['start', 'audiostart', 'soundstart', 'speechstart', 'speechend', 'audioend', 'nomatch'].forEach((ev) => rec.addEventListener(ev, () => diag('sr-' + ev)));
   rec.onresult = (e) => { heard = [...e.results].map((r) => r[0].transcript).join(''); hint.textContent = heard.slice(-40); };
-  rec.onerror = (e) => { diag('sr-error', { error: e.error, message: e.message }); if (e.error !== 'aborted') showBubble({ id: 'mic', kind: 'error', text: MIC_ERRORS[e.error] || 'Mic error: ' + e.error }); };
+  rec.onerror = (e) => {
+    diag('sr-error', { error: e.error, message: e.message });
+    if (e.error === 'aborted') return;
+    showBubble({ id: 'mic', kind: 'error', text: MIC_ERRORS[e.error] || 'Mic error: ' + e.error });
+    // No recognition service at all: remember it and let you type this one right away.
+    if (['network', 'service-not-allowed', 'language-not-supported'].includes(e.error)) { voiceBroken = true; cancelled = true; updateHint(); setTimeout(typeInstead, 300); }
+  };
   rec.onend = () => { diag('sr-end', { heard: heard.slice(0, 80), cancelled }); listening = false; hint.textContent = IDLE_HINT; const h = answerHook; answerHook = null; if (!cancelled && heard.trim()) { sfx([330]); h ? h(heard.trim()) : send(heard.trim()); } else if (h) renderBubble(); heard = ''; };
   diag('talk-tap'); try { rec.start(); } catch (err) { diag('sr-start-throw', { msg: err.message }); listening = false; hint.textContent = IDLE_HINT; showBubble({ id: 'mic', kind: 'error', text: 'Mic error: ' + err.message }); }
+}
+// Typing fallback: same destination as voice (the open question, or your session).
+function typeInstead() {
+  const h = answerHook; answerHook = null;
+  const text = prompt(h ? 'Your answer:' : 'Talk to Lax:');
+  if (text?.trim()) (h ? h(text.trim()) : send(text.trim())); else if (h) renderBubble();
 }
 function stopListening() { if (rec && listening) rec.stop(); }
 function send(text) {
@@ -362,7 +376,7 @@ wakeEl.addEventListener('click', async () => {
   wakeEl.remove(); sfx([523, 784]); hop(1.4);
   try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch {}
   diag('wake');
-  if (SR && !isBrave) {
+  if (SR) {
     if (!navigator.mediaDevices) diag('gum-missing');
     else navigator.mediaDevices.getUserMedia({ audio: true })
       .then((st) => { diag('gum-ok', { tracks: st.getTracks().length }); st.getTracks().forEach((t) => t.stop()); })
