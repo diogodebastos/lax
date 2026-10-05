@@ -99,8 +99,9 @@
   body.big #hint::before, body.big #hint::after { height:4px; background:repeating-linear-gradient(90deg, #2a2521 0 4px, transparent 4px 12px); }
   body.big #term { font-size:19px; line-height:18px; padding:10px 14px; }
   body.big #life { font-size:22px; padding:14px 18px; } body.big #life h3 { font-size:18px; } body.big #life header { font-size:28px; }
-  /* Session chips are tabs: they sit on the terminal's top line; the selected one opens into it ("brought to the front"). */
-  #chips { display:none; } body.big #chips { display:flex; gap:6px; flex-wrap:wrap; align-items:flex-end; padding:10px 14px 0; font-size:18px; position:relative; z-index:1; margin-bottom:-2px; }
+  /* Session chips are tabs: they sit on the terminal's top line; the selected one opens into it ("brought to the front").
+     No padding above: the open tab's top edge is exactly at 50%, on the Flip's hinge. */
+  #chips { display:none; } body.big #chips { display:flex; gap:6px; flex-wrap:wrap; align-items:flex-end; padding:0 14px; font-size:18px; position:relative; z-index:1; margin-bottom:-2px; }
   #chips span { border:2px solid #2c2824; border-bottom-color:#1f1c19; padding:1px 8px 2px; color:#b7b0a4; background:#0b0a09; cursor:pointer; } #chips span::before { content:'■ '; color:var(--dim); }
   #chips .live { color:var(--fg); border-color:#4a4239; border-bottom-color:#1f1c19; }
   #chips .sel { border-color:var(--coral); border-bottom-color:#000; background:#000; color:var(--coral); padding-top:4px; }
@@ -111,8 +112,9 @@
 
   /* Closed phone, held upright: the Flip 3 cover screen is a 512×260 landscape strip → Lax left, bubble + terminal right. */
   body.wide #app { width:512px; height:260px; flex-direction:row; }
-  body.wide #top { width:228px; height:260px; }
-  body.wide #stage { inset:auto; left:10px; top:44px; width:208px; height:204px; }
+  /* Exactly half: held sideways and open, the terminal starts on the hinge (the page is centred, so 256 of 512 = mid-screen). */
+  body.wide #top { width:256px; height:260px; }
+  body.wide #stage { inset:auto; left:24px; top:44px; width:208px; height:204px; }
   body.wide #bottom { border-left:2px solid #1f1c19; }
   body.wide #term { border-top:0; font-size:15px; line-height:14px; }
   body.wide #bubble { position:relative; left:auto; right:auto; top:auto; margin:10px 12px 4px 14px; flex:none; }
