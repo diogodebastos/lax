@@ -334,6 +334,9 @@ function talk(text) {
 // ---------- http ----------
 const lanIp = () => Object.values(os.networkInterfaces()).flat().find((i) => i && i.family === 'IPv4' && !i.internal)?.address;
 const phoneUrl = () => `${PUBLIC_URL || `http://${lanIp()}:${PORT}`}/?t=${TOKEN}`;
+// The Android app's pairing link: Lax URL + the Cloudflare Access service token for its background link.
+const appPairUrl = () => 'lax://pair?' + new URLSearchParams({ u: phoneUrl(),
+  id: process.env.CF_ACCESS_CLIENT_ID || '', s: process.env.CF_ACCESS_CLIENT_SECRET || '' });
 // Truly local: loopback AND not proxied. cloudflared also connects from 127.0.0.1, but adds cf-* headers.
 const isLocal = (req) => /^(::1|127\.0\.0\.1|::ffff:127\.0\.0\.1)$/.test(req.socket.remoteAddress)
   && !['cf-connecting-ip', 'cf-ray', 'x-forwarded-for', 'cf-access-jwt-assertion'].some((h) => h in req.headers);
@@ -348,7 +351,7 @@ http.createServer(async (req, res) => {
   if (url.pathname === '/pair') {
     if (!isLocal(req)) { res.writeHead(403); return res.end(); }
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-    return res.end(fs.readFileSync(path.join(ROOT, 'public', 'pair.html'), 'utf8').replace('%%URL%%', phoneUrl()));
+    return res.end(fs.readFileSync(path.join(ROOT, 'public', 'pair.html'), 'utf8').replace('%%URL%%', phoneUrl()).replace('%%APP%%', appPairUrl()));
   }
   if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
     const f = path.join(ROOT, 'public', url.pathname === '/' ? 'index.html' : path.normalize(url.pathname));

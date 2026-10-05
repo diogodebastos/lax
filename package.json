@@ -15,7 +15,8 @@
     "remove-service": "node scripts/install-launchd.mjs --remove",
     "logs": "tail -f data/server.log data/tunnel.log",
     "install-channel": "node scripts/install-channel.mjs",
-    "remove-channel": "node scripts/install-channel.mjs --remove"
+    "remove-channel": "node scripts/install-channel.mjs --remove",
+    "android": "node scripts/android.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",

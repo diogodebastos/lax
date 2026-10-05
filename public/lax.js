@@ -7,6 +7,9 @@ let TOKEN = qs.get('t');
 try { if (TOKEN) localStorage.lax_t = TOKEN; else TOKEN = localStorage.lax_t; } catch {}
 if (qs.get('t')) history.replaceState(null, '', location.pathname);
 const DEMO = qs.has('demo');
+// Inside the Lax Android app: Android's own speech recognition, TTS and vibration (see android/…/LaxBridge.kt).
+const NATIVE = (() => { try { return window.LaxNative?.isNative() ? window.LaxNative : null; } catch { return null; } })();
+const buzz = (pattern) => (NATIVE ? NATIVE.vibrate(pattern.join(',')) : navigator.vibrate?.(pattern));
 
 const $ = (s) => document.querySelector(s);
 const app = $('#app'), cv = $('#stage'), g = cv.getContext('2d');
@@ -32,7 +35,7 @@ function fit() {
 }
 addEventListener('resize', fit); fit();
 
-const VERSION = 'v0.3';
+const VERSION = 'v0.4';
 // Diagnostics → the Mac's server log (data/server.log), so phone-only problems are visible there.
 const diag = (event, data = {}) => { if (DEMO || !TOKEN) return; try { fetch('/api/diag', { method: 'POST', keepalive: true,
   headers: { 'content-type': 'application/json', 'x-lax-token': TOKEN }, body: JSON.stringify({ event, ...data }) }); } catch {} };
@@ -225,7 +228,7 @@ function showBubble(b) {
   b.sticky = b.actions || b.kind === 'question';
   if (!b.sticky) b.expires = performance.now() + (b.kind === 'reply' ? 15000 : 9000);
   renderBubble();
-  if (b.kind === 'permission' || b.kind === 'question') { sfx([660, 880, 660]); navigator.vibrate?.([80, 60, 80]); }
+  if (b.kind === 'permission' || b.kind === 'question') { sfx([660, 880, 660]); buzz([80, 60, 80]); }
   else if (b.kind === 'levelup') { sfx([523, 659, 784, 1046]); setReact('happy', 2500); }
   else if (b.kind === 'done') { sfx([784, 1046]); setReact('happy'); }
   else if (b.kind === 'error') { sfx([220, 160]); setReact('error'); }
@@ -294,9 +297,11 @@ function sfx(notes) {
 }
 let voice;
 function pickVoice() { const vs = speechSynthesis.getVoices(); voice = vs.find((v) => /en[-_]/i.test(v.lang) && /female|samantha|google us/i.test(v.name)) || vs.find((v) => /^en/i.test(v.lang)) || vs[0]; }
-if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+if (!NATIVE && 'speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
 function speak(text) {
-  if (!('speechSynthesis' in window) || !text || !settings.voice) return;
+  if (!text || !settings.voice) return;
+  if (NATIVE) return NATIVE.speak(text, settings.pitch);
+  if (!('speechSynthesis' in window)) return;
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text.replace(/[`*_#]/g, '')); if (voice) u.voice = voice;
   u.pitch = settings.pitch; u.rate = 1.08;
@@ -310,7 +315,7 @@ function speak(text) {
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const isBrave = !!navigator.brave;
 // Set once the browser proves it can't do speech recognition (e.g. Brave: no Google speech service). Then taps go to typing.
-let voiceBroken = !SR;
+let voiceBroken = !SR && !NATIVE;
 let rec, heard = '', cancelled = false;
 const hint = $('#hint');
 let IDLE_HINT = 'tap Lax to talk';
@@ -325,16 +330,20 @@ const MIC_ERRORS = {
   'service-not-allowed': 'This browser has no speech recognition. Use Chrome.',
   'network': isBrave ? 'Brave can\'t do speech recognition, so type instead (or use Chrome for voice).' : 'Speech service unreachable. Check your connection.',
   'audio-capture': 'No microphone found.',
+  ...(NATIVE && { 'not-allowed': 'Lax needs the mic. Allow it, then tap me again.',
+    'network': 'Speech service unreachable. Check your connection.', 'busy': 'The mic is busy. Try again in a sec.' }),
   'no-speech': 'I didn\'t hear anything. Tap me and talk.',
 };
 updateHint();
 (async () => { let mic = 'unknown'; try { mic = (await navigator.permissions.query({ name: 'microphone' })).state; } catch {}
-  diag('load', { v: VERSION, ua: navigator.userAgent, secure: isSecureContext, sr: !!SR, brave: isBrave, mediaDevices: !!navigator.mediaDevices, mic, w: innerWidth, h: innerHeight, dpr: devicePixelRatio }); })();
+  diag('load', { v: VERSION, native: !!NATIVE, ua: navigator.userAgent, secure: isSecureContext, sr: !!SR, brave: isBrave, mediaDevices: !!navigator.mediaDevices, mic, w: innerWidth, h: innerHeight, dpr: devicePixelRatio }); })();
 function startListening() {
-  if (listening) { cancelled = true; rec?.abort(); return; }
+  if (listening) { cancelled = true; NATIVE ? NATIVE.cancelListening() : rec?.abort(); return; }
   if (voiceBusy && !answerHook) { showBubble({ id: 'busy', kind: 'reply', text: 'Still working on the last one…' }); return; }
   if (voiceBroken) return typeInstead();
-  speechSynthesis?.cancel(); heard = ''; cancelled = false; listening = true; hint.textContent = 'listening… (tap to cancel)'; sfx([440]);
+  heard = ''; cancelled = false; listening = true; hint.textContent = 'listening… (tap to cancel)'; sfx([440]);
+  if (NATIVE) { NATIVE.hush(); diag('talk-tap', { native: true }); NATIVE.listen(navigator.language || 'en-US'); return; }
+  speechSynthesis.cancel();
   rec = new SR(); rec.lang = navigator.language || 'en-US'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
   ['start', 'audiostart', 'soundstart', 'speechstart', 'speechend', 'audioend', 'nomatch'].forEach((ev) => rec.addEventListener(ev, () => diag('sr-' + ev)));
   rec.onresult = (e) => { heard = [...e.results].map((r) => r[0].transcript).join(''); hint.textContent = heard.slice(-40); };
@@ -345,16 +354,31 @@ function startListening() {
     // No recognition service at all: remember it and let you type this one right away.
     if (['network', 'service-not-allowed', 'language-not-supported'].includes(e.error)) { voiceBroken = true; cancelled = true; updateHint(); setTimeout(typeInstead, 300); }
   };
-  rec.onend = () => { diag('sr-end', { heard: heard.slice(0, 80), cancelled }); listening = false; hint.textContent = IDLE_HINT; const h = answerHook; answerHook = null; if (!cancelled && heard.trim()) { sfx([330]); h ? h(heard.trim()) : send(heard.trim()); } else if (h) renderBubble(); heard = ''; };
+  rec.onend = endListening;
   diag('talk-tap'); try { rec.start(); } catch (err) { diag('sr-start-throw', { msg: err.message }); listening = false; hint.textContent = IDLE_HINT; showBubble({ id: 'mic', kind: 'error', text: 'Mic error: ' + err.message }); }
 }
+function endListening() {
+  diag('sr-end', { heard: heard.slice(0, 80), cancelled }); listening = false; hint.textContent = IDLE_HINT;
+  const h = answerHook; answerHook = null;
+  if (!cancelled && heard.trim()) { sfx([330]); h ? h(heard.trim()) : send(heard.trim()); } else if (h) renderBubble();
+  heard = '';
+}
+// The app's speech recognizer calls these (LaxBridge.kt).
+window.laxOnSpeech = (text, final) => { if (!listening) return; heard = text; hint.textContent = heard.slice(-40); if (final) endListening(); };
+window.laxOnSpeechError = (error) => {
+  if (!listening) return;
+  diag('sr-error', { error, native: true });
+  if (error !== 'aborted') showBubble({ id: 'mic', kind: 'error', text: MIC_ERRORS[error] || 'Mic error: ' + error });
+  cancelled = true; endListening();
+};
+window.laxOnSpeaking = (on) => { speaking = !!on; };
 // Typing fallback: same destination as voice (the open question, or your session).
 function typeInstead() {
   const h = answerHook; answerHook = null;
   const text = prompt(h ? 'Your answer:' : 'Talk to Lax:');
   if (text?.trim()) (h ? h(text.trim()) : send(text.trim())); else if (h) renderBubble();
 }
-function stopListening() { if (rec && listening) rec.stop(); }
+function stopListening() { if (!listening) return; NATIVE ? NATIVE.stopListening() : rec?.stop(); }
 function send(text) {
   showBubble({ id: 'you' + Date.now(), kind: 'you', text: '“' + text + '”' });
   if (DEMO) { voiceBusy = true; setTimeout(() => { voiceBusy = false; showBubble({ id: 'r' + Date.now(), kind: 'reply', text: 'Demo mode — I heard you!', speak: true }); }, 1800); return; }
@@ -370,7 +394,8 @@ addEventListener('keyup', (e) => { if (e.code === 'Space') stopListening(); });
 
 // ---------- wake (audio unlock, fullscreen, keep screen on) ----------
 const wakeEl = $('#wake');
-if (qs.has('awake')) wakeEl.remove();
+// The app needs no wake tap: audio, full screen and keep-screen-on are native there.
+if (qs.has('awake') || NATIVE) wakeEl.remove();
 wakeEl.addEventListener('click', async () => {
   wakeEl.remove(); sfx([523, 784]); hop(1.4);
   try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch {}

@@ -1,0 +1,152 @@
+package com.diogodebastos.lax
+
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import android.util.Log
+import android.webkit.JavascriptInterface
+import android.webkit.WebView
+import org.json.JSONObject
+import java.util.Locale
+
+/**
+ * `window.LaxNative` for the page: Android's own speech recognition and TTS (no browser quirks), and vibration.
+ * Results come back as calls to the page's globals: laxOnSpeech(text, final), laxOnSpeechError(code), laxOnSpeaking(on).
+ */
+class LaxBridge(private val act: MainActivity, private val web: WebView) {
+    private val main = Handler(Looper.getMainLooper())
+    private var recognizer: SpeechRecognizer? = null
+    private var lang = "en-US"
+    private var ttsReady = false
+    private val tts = TextToSpeech(act) { status ->
+        ttsReady = status == TextToSpeech.SUCCESS
+        if (ttsReady) pickVoice()
+    }
+
+    init {
+        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(id: String?) = js("laxOnSpeaking", "true")
+            override fun onDone(id: String?) = js("laxOnSpeaking", "false")
+            @Deprecated("Deprecated in Java") override fun onError(id: String?) = js("laxOnSpeaking", "false")
+            override fun onStop(id: String?, interrupted: Boolean) = js("laxOnSpeaking", "false")
+        })
+    }
+
+    private fun js(fn: String, vararg args: String) {
+        main.post { web.evaluateJavascript("window.$fn && $fn(${args.joinToString(",")})", null) }
+    }
+
+    @JavascriptInterface fun isNative() = true
+
+    // ---------- speech recognition ----------
+    @JavascriptInterface fun listen(language: String?) = main.post {
+        lang = language?.takeIf { it.isNotBlank() } ?: "en-US"
+        if (act.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            act.requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), MainActivity.REQ_MIC)
+            js("laxOnSpeechError", "'not-allowed'")
+            return@post
+        }
+        if (!SpeechRecognizer.isRecognitionAvailable(act)) { js("laxOnSpeechError", "'service-not-allowed'"); return@post }
+        start(preferOffline = true)
+    }
+
+    private fun start(preferOffline: Boolean) {
+        recognizer?.destroy()
+        recognizer = SpeechRecognizer.createSpeechRecognizer(act).apply {
+            setRecognitionListener(Listener(preferOffline))
+            startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, preferOffline)
+            })
+        }
+    }
+
+    /** Finish now and deliver what was heard. */
+    @JavascriptInterface fun stopListening() = main.post { recognizer?.stopListening() }
+
+    /** Drop it: nothing is sent. */
+    @JavascriptInterface fun cancelListening() = main.post {
+        recognizer?.cancel()
+        js("laxOnSpeechError", "'aborted'")
+    }
+
+    private inner class Listener(private val preferOffline: Boolean) : RecognitionListener {
+        private fun text(b: Bundle?) = b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
+        override fun onPartialResults(b: Bundle?) { val t = text(b); if (t.isNotEmpty()) js("laxOnSpeech", JSONObject.quote(t), "false") }
+        override fun onResults(b: Bundle?) {
+            val t = text(b)
+            if (t.isEmpty()) js("laxOnSpeechError", "'no-speech'") else js("laxOnSpeech", JSONObject.quote(t), "true")
+        }
+        override fun onError(error: Int) {
+            // No offline language pack: try again online before giving up.
+            if (preferOffline && (error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE || error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED)) {
+                main.post { start(preferOffline = false) }; return
+            }
+            val code = when (error) {
+                SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "no-speech"
+                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "not-allowed"
+                SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT,
+                SpeechRecognizer.ERROR_SERVER, SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> "network"
+                SpeechRecognizer.ERROR_AUDIO -> "audio-capture"
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "busy"
+                SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE, SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED -> "language-not-supported"
+                SpeechRecognizer.ERROR_CLIENT -> "aborted"
+                else -> "error-$error"
+            }
+            Log.i("LaxBridge", "speech error $error → $code")
+            js("laxOnSpeechError", JSONObject.quote(code))
+        }
+        override fun onReadyForSpeech(p: Bundle?) {}
+        override fun onBeginningOfSpeech() {}
+        override fun onRmsChanged(rms: Float) {}
+        override fun onBufferReceived(buf: ByteArray?) {}
+        override fun onEndOfSpeech() {}
+        override fun onEvent(type: Int, p: Bundle?) {}
+    }
+
+    // ---------- text-to-speech ----------
+    private fun pickVoice() {
+        val en = tts.voices?.filter { it.locale.language == "en" && !it.isNetworkConnectionRequired }
+        val v = en?.firstOrNull { it.locale.country == "US" } ?: en?.firstOrNull()
+        if (v != null) tts.voice = v else tts.language = Locale.US
+    }
+
+    @JavascriptInterface fun speak(text: String?, pitch: Double) = main.post {
+        if (!ttsReady || text.isNullOrBlank()) return@post
+        tts.setPitch(pitch.toFloat().coerceIn(0.5f, 2f))
+        tts.setSpeechRate(1.08f)
+        tts.speak(text.replace(Regex("[`*_#]"), ""), TextToSpeech.QUEUE_FLUSH, null, "lax")
+    }
+
+    @JavascriptInterface fun hush() = main.post { tts.stop(); js("laxOnSpeaking", "false") }
+
+    // ---------- vibration ----------
+    /** pattern: "80,60,80" (on, off, on… in ms), like navigator.vibrate. */
+    @JavascriptInterface fun vibrate(pattern: String?) {
+        val ms = pattern?.split(',')?.mapNotNull { it.trim().toLongOrNull()?.coerceIn(0, 2000) }?.take(20) ?: return
+        if (ms.isEmpty()) return
+        val v = if (Build.VERSION.SDK_INT >= 31) act.getSystemService(VibratorManager::class.java).defaultVibrator
+                else @Suppress("DEPRECATION") act.getSystemService(Vibrator::class.java)
+        v.vibrate(VibrationEffect.createWaveform(longArrayOf(0) + ms.toLongArray(), -1))
+    }
+
+    fun shutdown() {
+        recognizer?.destroy()
+        tts.shutdown()
+    }
+}
