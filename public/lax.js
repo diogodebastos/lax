@@ -198,10 +198,12 @@ requestAnimationFrame(loop);
 // ---------- HUD + feed ----------
 function renderHud() {
   // Chips = sessions. Live ones (started with claude-lax) can be tapped to choose where your voice goes.
-  const target = routeChannel();
-  $('#chips').innerHTML = sessions.slice(0, 8).map((s) => {
+  const target = routeChannel(), shown = sessions.slice(0, 8);
+  // No live session to talk to: the most recently active one is still "in front" (dimmer, it can't hear you).
+  const front = target ? null : shown.reduce((a, b) => (!a || (b.ts || 0) > (a.ts || 0) ? b : a), null);
+  $('#chips').innerHTML = shown.map((s) => {
     const ch = channels.find((c) => c.sessionPid && c.sessionPid === s.pid);
-    return `<span class="${s.status}${ch ? ' live' : ''}${ch && ch === target ? ' sel' : ''}" data-cid="${ch ? ch.cid : ''}" data-project="${esc(s.project)}">${esc(s.project)}</span>`;
+    return `<span class="${s.status}${ch ? ' live' : ''}${ch && ch === target ? ' sel' : ''}${s === front ? ' front' : ''}" data-cid="${ch ? ch.cid : ''}" data-project="${esc(s.project)}">${esc(s.project)}</span>`;
   }).join('');
   $('#lvl').textContent = `Lv${pet.level}`;
   $('#xp i').style.width = Math.round(100 * (pet.xp - pet.prevXp) / Math.max(1, pet.nextXp - pet.prevXp)) + '%';
