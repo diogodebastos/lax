@@ -54,10 +54,10 @@ Pixel Lax (squash and stretch, Super Meat Boy energy) with idle / working / wait
 - In a live tab, say "clear", "compact", "stop" or "continue". Voice only, no buttons.
 - A closed list of actions only. Your terminal feels exactly the same.
 
-### Phase 3.6: share to your phone [diogodebastos/lax#12](https://github.com/diogodebastos/lax/issues/12)
-- A session or Lax's assistant can send a file or text to the phone: "share the card via WhatsApp to Ritalicious".
-- The app opens WhatsApp in that chat with the file attached (or the share sheet). You make the one tap on Send.
-- Lock screen: a notification, and tapping it opens the chat.
+### Phase 3.6: share via WhatsApp [diogodebastos/lax#12](https://github.com/diogodebastos/lax/issues/12)
+- "Share the card via WhatsApp to Ritalicious": on the Mac (the default), WhatsApp Desktop opens that chat with the image pasted in. You press Enter.
+- Text opens the chat with the message typed in; with `app: any`, the macOS share sheet.
+- "…on my phone": the Lax app does the same on the phone.
 
 ### Phase 4: Lax on the cover screen [diogodebastos/lax#3](https://github.com/diogodebastos/lax/issues/3)
 This is the product: glance, don't open.
