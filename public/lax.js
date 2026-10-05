@@ -566,6 +566,6 @@ $('#chips').addEventListener('click', (e) => {
   if (chip.dataset.cid) return setTarget(chip.dataset.cid);
   // "all" (and sessions that can't hear) → talking goes to Lax itself, the assistant.
   if (voiceTarget !== 'background') setTarget('background'); else renderHud();
-  if (chip.dataset.view !== 'all') showBubble({ id: 'notlive', kind: 'reply', text: `${chip.dataset.label} can't hear me, so I'll answer you myself. Start it with claude-lax to talk to it.` });
+  if (chip.dataset.view !== 'all') showBubble({ id: 'notlive', kind: 'reply', text: `${chip.dataset.label} can't hear me, so I'll answer you myself. Start it with `lax` to talk to it.` });
 });
 setView(view);

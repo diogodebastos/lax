@@ -297,7 +297,7 @@ function channelEvent(b) {
 }
 
 // ---------- voice → Claude Code (headless, uses your Claude subscription login) ----------
-// Voice goes into a live session (a claude-lax tab), or else to Lax itself: an assistant you can ask anything.
+// Voice goes into a live session (a tab started with `lax`), or else to Lax itself: an assistant you can ask anything.
 // It's one long-running headless Claude in LAX_WORKDIR that also knows what your sessions are doing.
 let voiceRun = null;
 const ASSISTANT = 'assistant:' + LAX_HOME; // its key in voiceSessions (a conversation only resumes in the folder it started in)
