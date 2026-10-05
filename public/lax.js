@@ -20,7 +20,8 @@ const W = 52, H = 51, GROUND = 46, CX = 26;
 function layoutFor() {
   const forced = qs.get('layout'); if (forced) return forced;
   if (innerWidth >= 340 && innerHeight >= 600) return 'big';
-  if (innerWidth >= 640 && innerHeight >= 300 && innerWidth > innerHeight) return 'side';
+  // The cover screen is never 300 tall, so any landscape screen that is gets the side layout (open phone, desktop).
+  if (innerHeight >= 300 && innerWidth > innerHeight) return 'side';
   return innerWidth / innerHeight > 1.3 ? 'wide' : 'tall';
 }
 function fit() {
