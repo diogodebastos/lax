@@ -38,9 +38,13 @@ function fit() {
   if (l === 'tall') { app.style.transform = `scale(${Math.min(innerWidth / 260, innerHeight / 512)})`; return; }
   const top = $('#top').getBoundingClientRect(), k = Math.max(1, Math.floor(Math.min(top.width / W, (top.height - 40) / H)));
   cv.style.width = W * k + 'px'; cv.style.height = H * k + 'px';
-  cv.style.left = Math.round((top.width - W * k) / 2) + 'px'; cv.style.top = Math.round(top.height - H * k - 8) + 'px';
+  // Lax stands on the hint line: the gap from its shadow (canvas row GROUND+2) down to the hint text equals the gap
+  // from the hint text down to the tabs (the bottom of #top), so shadow, text and tabs are evenly spaced.
+  const hint = $('#hint').getBoundingClientRect(), gap = top.bottom - hint.bottom, hintTop = hint.top - top.top;
+  cv.style.left = Math.round((top.width - W * k) / 2) + 'px'; cv.style.top = Math.round(hintTop - gap - (GROUND + 2) * k) + 'px';
 }
 addEventListener('resize', fit); fit();
+document.fonts?.ready.then(fit); // the pixel font changes the hint's height, which Lax's position depends on
 
 const VERSION = 'v0.4';
 // Diagnostics → the Mac's server log (data/server.log), so phone-only problems are visible there.
