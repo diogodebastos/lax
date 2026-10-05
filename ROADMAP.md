@@ -84,13 +84,27 @@ Once Lax passes the one-week bar.
 - Remove the leftover LAN bits.
 - Tag `v0.2.0`.
 
+### Phase 9: viral release [diogodebastos/lax#9](https://github.com/diogodebastos/lax/issues/9)
+The best possible Lax, built to be shared. Phase 8 makes the repo presentable; this makes it spread.
+- Filmable moments: Lax waking on the closed phone and fixing failing tests by voice; the morning it changed itself; an evolution timelapse; "how did we fix that?"
+- A share card (stage, level, traits, skills learned, problems solved) and a timelapse export.
+- `npx lax`: zero to talking in under 5 minutes, on any Android phone or browser, with the Flip 3 as the hero.
+- Hand-drawn sprites and chiptune sound, promoted from *Later*.
+- Write-ups: how Lax uses every Claude Code extension point; Lax on Cloudflare; an agent that rewrites itself for one person. Then Show HN, r/ClaudeAI and the clips.
+
+### Phase 10: Cloudflare-native relay [diogodebastos/lax#10](https://github.com/diogodebastos/lax/issues/10)
+The Mac stays the brain; Cloudflare becomes the always-on link and Lax's public face.
+- A Worker + Durable Object relay: the phone and the Mac both connect over hibernatable WebSockets; messages queue while either side is offline.
+- With the Mac asleep, the phone shows "Mac asleep" and the last state; on wake, pending approvals arrive in order, exactly once.
+- Passes messages through with a short queue only (optional end-to-end encryption); memory, history and code never live on Cloudflare.
+- Serves the landing page and opt-in public share cards; optional Workers AI for small talk while the Mac sleeps.
+- Stays within the free tier for one user; the tunnel remains as a direct path.
+
 ## Later (ideas, not yet scheduled)
 
 **Lax itself**
-- Hand-drawn sprite sheets per stage, replacing the procedural drawing (Aseprite), with more poses and a proper "evolution" animation.
 - Traits from languages (colors and accessories per language you write most) and from projects.
 - Per-session personality: Lax reacts differently to long-running, failing, or very chatty sessions.
-- Sound design: a small chiptune palette per state; a "done" jingle that grows with level.
 
 **Talking**
 - Wake word or squeeze-to-talk on the app, without tapping.
