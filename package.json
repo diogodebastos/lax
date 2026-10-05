@@ -10,6 +10,9 @@
   "scripts": {
     "start": "node --no-warnings server.mjs",
     "install-hooks": "node scripts/install-hooks.mjs",
-    "remove-hooks": "node scripts/install-hooks.mjs --remove"
+    "remove-hooks": "node scripts/install-hooks.mjs --remove",
+    "install-service": "node scripts/install-launchd.mjs",
+    "remove-service": "node scripts/install-launchd.mjs --remove",
+    "logs": "tail -f data/server.log data/tunnel.log"
   }
 }

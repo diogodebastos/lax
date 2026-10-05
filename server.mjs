@@ -11,7 +11,12 @@ import { DatabaseSync } from 'node:sqlite';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const DATA = path.join(ROOT, 'data');
+// Optional local config (gitignored): { LAX_PUBLIC_URL, CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET, ... }
+try { for (const [k, v] of Object.entries(JSON.parse(fs.readFileSync(path.join(DATA, 'env.json'), 'utf8')))) process.env[k] ??= String(v); } catch {}
 const PORT = Number(process.env.LAX_PORT || 7777);
+// Tunnel only by default: nothing on the LAN can reach Lax, cloudflared connects over loopback.
+const HOST = process.env.LAX_HOST || '127.0.0.1';
+const PUBLIC_URL = (process.env.LAX_PUBLIC_URL || '').replace(/\/$/, '');
 const DEFAULT_WORKDIR = process.env.LAX_WORKDIR || path.join(os.homedir(), 'REPOS');
 
 fs.mkdirSync(DATA, { recursive: true });
@@ -264,7 +269,10 @@ function talk(text) {
 
 // ---------- http ----------
 const lanIp = () => Object.values(os.networkInterfaces()).flat().find((i) => i && i.family === 'IPv4' && !i.internal)?.address;
-const phoneUrl = () => `http://${lanIp()}:${PORT}/?t=${TOKEN}`;
+const phoneUrl = () => `${PUBLIC_URL || `http://${lanIp()}:${PORT}`}/?t=${TOKEN}`;
+// Truly local: loopback AND not proxied. cloudflared also connects from 127.0.0.1, but adds cf-* headers.
+const isLocal = (req) => /^(::1|127\.0\.0\.1|::ffff:127\.0\.0\.1)$/.test(req.socket.remoteAddress)
+  && !['cf-connecting-ip', 'cf-ray', 'x-forwarded-for', 'cf-access-jwt-assertion'].some((h) => h in req.headers);
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
 const body = (req) => new Promise((res) => { let b = ''; req.on('data', (d) => (b += d)); req.on('end', () => { try { res(JSON.parse(b || '{}')); } catch { res({}); } }); });
 const json = (res, obj, code = 200) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
@@ -274,7 +282,7 @@ http.createServer(async (req, res) => {
   const authed = (req.headers['x-lax-token'] || url.searchParams.get('t')) === TOKEN;
 
   if (url.pathname === '/pair') {
-    if (!/^(::1|127\.0\.0\.1|::ffff:127\.0\.0\.1)$/.test(req.socket.remoteAddress)) { res.writeHead(403); return res.end(); }
+    if (!isLocal(req)) { res.writeHead(403); return res.end(); }
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     return res.end(fs.readFileSync(path.join(ROOT, 'public', 'pair.html'), 'utf8').replace('%%URL%%', phoneUrl()));
   }
@@ -287,7 +295,7 @@ http.createServer(async (req, res) => {
   if (!authed) return json(res, { error: 'bad token' }, 401);
 
   if (url.pathname === '/api/stream') {
-    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
+    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache, no-transform', connection: 'keep-alive', 'x-accel-buffering': 'no' });
     clients.add(res); req.on('close', () => clients.delete(res));
     res.write(`event: state\ndata: ${JSON.stringify(stateMsg())}\n\n`);
     for (const p of pending.values()) res.write(`event: bubble\ndata: ${JSON.stringify(p.bubble)}\n\n`);
@@ -307,6 +315,6 @@ http.createServer(async (req, res) => {
     case '/api/talk': return json(res, { ok: talk(String(b.text || '').slice(0, 2000)) });
     default: return json(res, { error: 'not found' }, 404);
   }
-}).listen(PORT, '0.0.0.0', () => {
-  console.log(`Lax is awake.\n  Mac:   http://localhost:${PORT}/?t=${TOKEN}\n  Phone: ${phoneUrl()}\n  Pair:  http://localhost:${PORT}/pair  (QR code)`);
+}).listen(PORT, HOST, () => {
+  console.log(`Lax is awake on ${HOST}:${PORT}.\n  Mac:   http://localhost:${PORT}/?t=${TOKEN}\n  Phone: ${phoneUrl()}\n  Pair:  http://localhost:${PORT}/pair  (QR code)`);
 });

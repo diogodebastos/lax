@@ -47,12 +47,55 @@ Tap **LAX ≡** (or **♥ life** when the phone is open) to:
 - browse its memory (stats, favorite tools, milestones)
 - **rebirth** it: hold for 2s to wipe its memory and start over
 
-## Phone (no reset needed)
+## Reaching Lax from anywhere (Cloudflare Tunnel + Access)
 
-1. The phone and Mac must be on the same Wi-Fi. Open the **Phone** URL printed by `npm start` in Chrome.
-2. **Mic needs a secure origin.** Over plain LAN http, enable `chrome://flags/#unsafely-treat-insecure-origin-as-secure`, add `http://<mac-ip>:7777`, and relaunch. Later we can switch to Tailscale HTTPS instead.
-3. Tap "wake" to unlock sound and the mic. Lax goes fullscreen and keeps the screen awake.
-4. Cover screen: use Good Lock → MultiStar (or a cover-screen launcher) to run Chrome there.
+Lax only listens on `127.0.0.1`. The phone reaches it through a Cloudflare Tunnel at `https://lax.diogodebastos.com`, behind Cloudflare Access (an email-PIN login). Lax's token is a second lock. The tunnel's real HTTPS is also what lets Chrome use the mic, with no flags.
+
+```bash
+brew install cloudflared
+cloudflared tunnel login                      # browser: pick diogodebastos.com
+cloudflared tunnel create lax
+cloudflared tunnel route dns lax lax.diogodebastos.com
+```
+
+`~/.cloudflared/config.yml`:
+
+```yaml
+tunnel: lax
+credentials-file: /Users/<you>/.cloudflared/<tunnel-id>.json
+ingress:
+  - hostname: lax.diogodebastos.com
+    service: http://127.0.0.1:7777
+  - service: http_status:404
+```
+
+`data/env.json` (gitignored):
+
+```json
+{ "LAX_PUBLIC_URL": "https://lax.diogodebastos.com", "CF_ACCESS_CLIENT_ID": "…", "CF_ACCESS_CLIENT_SECRET": "…" }
+```
+
+**Access (Zero Trust dashboard):** create a self-hosted app for `lax.diogodebastos.com` with:
+- an **Allow** policy for your email (one-time PIN, 1-month session)
+- a **Service Auth** policy for the `lax-android` service token, which the Android app uses for its background connection
+
+`/pair` only answers requests from the Mac itself. Anything that arrives through the tunnel gets a 403.
+
+## Always on (launchd)
+
+```bash
+npm run install-service   # server (+ tunnel once configured): starts at login, restarts on crash
+npm run remove-service
+npm run logs
+```
+
+On power, turn on System Settings → Battery → Options → *Prevent automatic sleeping when the display is off*.
+
+## Phone
+
+1. Open `http://localhost:7777/pair` on the Mac and scan the QR code with the phone. Open it in **Chrome**; Brave has no speech recognition.
+2. Log in once with the email PIN. Tap "wake", then hold to talk.
+3. Cover screen and background notifications: see the Android app (phase 2) and the cover-screen setup (phase 3) issues.
 
 ## Behaviour notes
 
@@ -60,4 +103,4 @@ Tap **LAX ≡** (or **♥ life** when the phone is open) to:
 - **Voice runs** use their own Claude session per project (resumed each time). The project is the one where Claude Code was active most recently. Read-only tools run freely. Anything else (edits, Bash) needs ✓ on the phone, and silence counts as a no.
 - When the server is down, the hook exits in milliseconds, so Claude Code is never slowed down.
 
-Env: `LAX_PORT` (7777), `LAX_ASK_TIMEOUT` (30), `LAX_WORKDIR` (fallback voice project, `~/REPOS`).
+Env (or `data/env.json`): `LAX_PORT` (7777), `LAX_HOST` (127.0.0.1), `LAX_PUBLIC_URL`, `LAX_ASK_TIMEOUT` (30), `LAX_WORKDIR` (fallback voice project, `~/REPOS`).
