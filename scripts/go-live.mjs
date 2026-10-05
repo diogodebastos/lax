@@ -2,7 +2,7 @@
 // Claude Code loads the Lax channel only at startup, so a running session can't switch on; instead this opens a
 // new terminal window in the same folder running `lax --resume <this conversation>`.
 //   node scripts/go-live.mjs [session-id] [--dry-run]   (id defaults to $CLAUDE_CODE_SESSION_ID, set inside Claude Code)
-// LAX_TERMINAL=iTerm|Terminal picks the app (default: iTerm if installed, else Terminal).
+// LAX_TERMINAL=Ghostty|iTerm|Terminal picks the app (default: the first one installed, in that order).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -23,14 +23,19 @@ if (!fs.existsSync(transcript)) fail(`Can't find this conversation under ${path.
 const LAX = path.join(os.homedir(), '.local', 'bin', 'lax');
 if (!fs.existsSync(LAX)) fail('The `lax` command isn\'t installed: run `npm run install-channel` in the lax repo.');
 
-const app = process.env.LAX_TERMINAL || (fs.existsSync('/Applications/iTerm.app') ? 'iTerm' : 'Terminal');
+const app = process.env.LAX_TERMINAL || ['Ghostty', 'iTerm'].find((a) => fs.existsSync(`/Applications/${a}.app`)) || 'Terminal';
 // An interactive login shell, so PATH (where `claude` lives) is the user's own.
 const q = (s) => `'${s.replace(/'/g, `'\\''`)}'`;
 const cmd = `cd ${q(cwd)} && exec ${q(LAX)} --resume ${id}`;
 const as = (s) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-const script = app === 'iTerm'
-  ? `tell application "iTerm"\nactivate\ncreate window with default profile command "/bin/zsh -ilc ${as(q(cmd))}"\nend tell`
-  : `tell application "Terminal"\nactivate\ndo script "${as(cmd)}"\nend tell`;
+const shell = `/bin/zsh -ilc ${q(cmd)}`;
+const script = {
+  // Ghostty 1.3+ is scriptable: a new window with its own folder and command.
+  Ghostty: `tell application "Ghostty"\nactivate\nnew window with configuration {initial working directory:"${as(cwd)}", command:"${as(shell)}"}\nend tell`,
+  iTerm: `tell application "iTerm"\nactivate\ncreate window with default profile command "${as(shell)}"\nend tell`,
+  Terminal: `tell application "Terminal"\nactivate\ndo script "${as(cmd)}"\nend tell`,
+}[app];
+if (!script) fail(`Unknown LAX_TERMINAL: ${app} (use Ghostty, iTerm or Terminal).`);
 if (dry) { console.log(`would open ${app} with: ${cmd}\n--- AppleScript ---\n${script}`); process.exit(0); }
 try { execFileSync('osascript', ['-e', script], { stdio: ['ignore', 'ignore', 'pipe'] }); }
 catch (e) { fail(`Couldn't open ${app}: ${String(e.stderr || e.message).trim()}\nRun it yourself: ${cmd}`); }
