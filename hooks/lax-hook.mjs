@@ -19,6 +19,10 @@ const post = (p, body, ms) => fetch(URL_BASE + p, {
 // Tools that never need a human in voice mode.
 const SAFE = /^(Read|Glob|Grep|LS|TodoWrite|WebSearch|WebFetch|Task|Agent)$/;
 const ev = input.hook_event_name;
+// Where the session runs, for its tab label: mac (Claude desktop app), cli (terminal, claude-lax), api (headless: Lax's voice, SDK), web (cloud).
+const entry = process.env.CLAUDE_CODE_ENTRYPOINT || '';
+input.lax_where = process.env.LAX_VOICE === '1' || entry.startsWith('sdk') ? 'api'
+  : entry === 'claude-desktop' ? 'mac' : process.env.CLAUDE_CODE_REMOTE ? 'web' : 'cli';
 
 try {
   // Tie the session to its claude process (rare events only; ps costs a few ms) so the phone can match

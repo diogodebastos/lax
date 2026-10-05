@@ -135,7 +135,10 @@ function sessionList() {
 const stateMsg = () => ({ pet: petView(), sessions: sessionList(), voiceBusy: !!voiceRun, thinking: !!channelWait, settings,
   channels: channelList(), voiceTarget });
 const pushState = () => broadcast('state', stateMsg());
-const feed = (line, kind = 'tool', project) => broadcast('feed', { line, kind, project, ts: Date.now() });
+// session: which Claude Code session a line belongs to, so the phone can show one session's tab at a time.
+const feed = (line, kind = 'tool', project, session) => broadcast('feed', { line, kind, project, session, ts: Date.now() });
+// The hook-side session a lax channel runs in (matched by the claude process pid).
+const channelSession = (c) => c?.sessionPid ? [...sessions.entries()].find(([, s]) => s.pid === c.sessionPid)?.[0] : undefined;
 const proj = (cwd) => (cwd ? path.basename(cwd) : '?');
 const short = (s, n = 60) => { s = String(s ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 
@@ -163,17 +166,17 @@ const spoken = (text) => {
 function onHook(h) {
   const sid = h.session_id, project = proj(h.cwd);
   const s = sessions.get(sid) || { project, status: 'idle', ts: 0 };
-  s.ts = Date.now(); s.project = project; if (h.cwd) s.cwd = h.cwd; if (h.lax_session_pid) s.pid = h.lax_session_pid;
+  s.ts = Date.now(); s.project = project; if (h.cwd) s.cwd = h.cwd; if (h.lax_where) s.where = h.lax_where; if (h.lax_session_pid) s.pid = h.lax_session_pid;
   sessions.set(sid, s);
   touchDay();
   if (/^(PostToolUse|PostToolUseFailure|Stop|UserPromptSubmit)$/.test(h.hook_event_name)) clearRelays((c) => c.cwd === h.cwd);
   switch (h.hook_event_name) {
     case 'SessionStart':
       pet.sessions++; gainXp(2); s.status = 'idle';
-      feed(`● session ${project}`, 'session', project); logEvent(sid, project, 'session', h.source || 'start');
+      feed(`● session ${project}`, 'session', project, sid); logEvent(sid, project, 'session', h.source || 'start');
       break;
     case 'UserPromptSubmit':
-      s.status = 'working'; feed(`> ${short(h.prompt, 90)}`, 'prompt', project);
+      s.status = 'working'; feed(`> ${short(h.prompt, 90)}`, 'prompt', project, sid);
       logEvent(sid, project, 'prompt', short(h.prompt, 500));
       break;
     case 'PreToolUse': {
@@ -182,12 +185,12 @@ function onHook(h) {
       if (n === 'Bash' && /\b(test|pytest|jest|vitest|cargo test|go test)\b/.test(h.tool_input?.command || '')) pet.tools.__tests = (pet.tools.__tests || 0) + 1;
       const ext = (h.tool_input?.file_path || '').split('.').pop();
       if (/^(Edit|Write|MultiEdit)$/.test(n) && LANG[ext]) pet.langs[LANG[ext]] = (pet.langs[LANG[ext]] || 0) + 1;
-      feed(describeTool(n, h.tool_input), 'tool', project);
+      feed(describeTool(n, h.tool_input), 'tool', project, sid);
       break;
     }
     case 'PostToolUse': {
       const r = h.tool_response; const err = r && (r.is_error || r.interrupted || (typeof r.exit_code === 'number' && r.exit_code !== 0));
-      if (err) { pet.errors++; feed(`  ✗ ${h.tool_name} failed`, 'error', project); broadcast('react', { state: 'error' }); }
+      if (err) { pet.errors++; feed(`  ✗ ${h.tool_name} failed`, 'error', project, sid); broadcast('react', { state: 'error' }); }
       break;
     }
     case 'Notification':
@@ -199,14 +202,14 @@ function onHook(h) {
     case 'Stop': {
       s.status = 'done'; pet.turns++; gainXp(5);
       const msg = h.last_assistant_message || '';
-      feed(`✓ ${project}: ${short(spoken(msg), 90)}`, 'done', project);
+      feed(`✓ ${project}: ${short(spoken(msg), 90)}`, 'done', project, sid);
       logEvent(sid, project, 'done', short(msg, 1000));
       if (!(voiceRun && voiceRun.sessionId === sid)) // voice runs speak their own result
         broadcast('bubble', { id: 'done-' + sid + Date.now(), kind: 'done', text: `${project}: ${spoken(msg) || 'done!'}`, session: sid, speak: false });
       break;
     }
     case 'SessionEnd':
-      sessions.delete(sid); feed(`○ ${project} ended`, 'session', project);
+      sessions.delete(sid); feed(`○ ${project} ended`, 'session', project, sid);
       break;
   }
   save(); pushState();
@@ -232,7 +235,7 @@ function ask(h) {
       const ss = sessions.get(h.session_id); if (ss?.status === 'waiting') { ss.status = 'working'; pushState(); }
       if (decision === 'allow' || decision === 'answer') pet.approvals++; else if (decision === 'deny') pet.denials++;
       const line = { allow: '✓ approved from phone', deny: '✗ denied from phone', answer: '✓ answered from phone' }[decision];
-      if (line) { feed(`  ${line}`, decision === 'deny' ? 'error' : 'done', project); save(); }
+      if (line) { feed(`  ${line}`, decision === 'deny' ? 'error' : 'done', project, h.session_id); save(); }
       resolve(answers ? { decision, answers } : { decision });
     }
     pending.set(id, { finish, bubble });
@@ -263,7 +266,7 @@ function channelEvent(b) {
   if (b.type === 'reply') {
     if (channelWait?.cid === b.cid) { clearTimeout(channelWait.timer); channelWait = null; }
     const text = String(b.text || '');
-    feed(`↩ ${short(spoken(text), 90)}`, 'done', c.project); logEvent('', c.project, 'reply', short(text, 1000));
+    feed(`↩ ${short(spoken(text), 90)}`, 'done', c.project, channelSession(c)); logEvent('', c.project, 'reply', short(text, 1000));
     broadcast('bubble', { id: 'ch' + Date.now(), kind: 'reply', text: short(text.replace(/```[\s\S]*?```/g, ' '), 400), say: spoken(text), speak: true });
   } else if (b.type === 'permission') {
     const id = 'relay-' + b.request_id;
@@ -275,7 +278,7 @@ function channelEvent(b) {
       if (decision !== 'allow' && decision !== 'deny') return;
       sendChannel(b.cid, 'verdict', { request_id: b.request_id, behavior: decision });
       if (decision === 'allow') pet.approvals++; else pet.denials++;
-      feed(`  ${decision === 'allow' ? '✓ approved' : '✗ denied'} from phone`, decision === 'allow' ? 'done' : 'error', c.project); save();
+      feed(`  ${decision === 'allow' ? '✓ approved' : '✗ denied'} from phone`, decision === 'allow' ? 'done' : 'error', c.project, channelSession(c)); save();
     } });
     broadcast('bubble', bubble);
   }
@@ -295,7 +298,7 @@ function talk(text) {
     clearTimeout(channelWait?.timer);
     channelWait = { cid, timer: setTimeout(() => { channelWait = null; pushState(); }, 180000) };
     pet.voice++; gainXp(3); save();
-    feed(`> ${short(text, 90)}`, 'prompt', c.project); pushState();
+    feed(`> ${short(text, 90)}`, 'prompt', c.project, channelSession(c)); pushState();
     return true;
   }
   if (voiceRun) return false;
@@ -305,7 +308,7 @@ function talk(text) {
   const args = ['-p', text, '--output-format', 'stream-json', '--verbose', '--append-system-prompt', VOICE_PROMPT];
   if (voiceSessions[cwd]) args.push('--resume', voiceSessions[cwd]);
   pet.voice++; gainXp(3); save();
-  feed(`> ${short(text, 90)}`, 'prompt', proj(cwd));
+  feed(`> ${short(text, 90)}`, 'prompt', proj(cwd), voiceSessions[cwd]);
   const child = spawn('claude', args, { cwd, env: { ...process.env, LAX_VOICE: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
   voiceRun = { child, cwd, sessionId: voiceSessions[cwd] || null };
   broadcast('react', { state: 'thinking' }); pushState();

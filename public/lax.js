@@ -196,27 +196,41 @@ function loop(now) {
 requestAnimationFrame(loop);
 
 // ---------- HUD + feed ----------
+// Tab labels: project·where (mac = desktop app, cli = terminal / claude-lax, api = headless, web = cloud), numbered if repeated.
+function tabLabels(list) {
+  const seen = {};
+  return list.map((s) => { const base = `${s.project}·${s.where || 'cli'}`; seen[base] = (seen[base] || 0) + 1; return seen[base] > 1 ? `${base} ${seen[base]}` : base; });
+}
 function renderHud() {
-  // Chips = sessions. Live ones (started with claude-lax) can be tapped to choose where your voice goes.
-  const target = routeChannel(), shown = sessions.slice(0, 8);
-  // No live session to talk to: the most recently active one is still "in front" (dimmer, it can't hear you).
-  const front = target ? null : shown.reduce((a, b) => (!a || (b.ts || 0) > (a.ts || 0) ? b : a), null);
-  $('#chips').innerHTML = shown.map((s) => {
-    const ch = channels.find((c) => c.sessionPid && c.sessionPid === s.pid);
-    return `<span class="${s.status}${ch ? ' live' : ''}${ch && ch === target ? ' sel' : ''}${s === front ? ' front' : ''}" data-cid="${ch ? ch.cid : ''}" data-project="${esc(s.project)}">${esc(s.project)}</span>`;
+  // Tabs: "all", then one per session. The open tab filters the terminal; a live one (claude-lax) also hears your voice.
+  const shown = sessions.slice(0, 8), labels = tabLabels(shown);
+  if (view !== 'all' && !shown.some((s) => s.id === view)) setView('all');
+  $('#chips').innerHTML = `<span class="all${view === 'all' ? ' sel' : ''}" data-view="all">all</span>` + shown.map((s, i) => {
+    const ch = channels.find((c) => c.sessionPid && c.sessionPid === s.pid), open = s.id === view;
+    return `<span class="${s.status}${ch ? ' live' : ''}${open ? (ch ? ' sel' : ' front') : ''}" data-view="${esc(s.id)}" data-cid="${ch ? ch.cid : ''}" data-label="${esc(labels[i])}">${esc(labels[i])}</span>`;
   }).join('');
   $('#lvl').textContent = `Lv${pet.level}`;
   $('#xp i').style.width = Math.round(100 * (pet.xp - pet.prevXp) / Math.max(1, pet.nextXp - pet.prevXp)) + '%';
   $('#dots').innerHTML = sessions.slice(0, 6).map((s) => `<b class="${s.status}" title="${s.project}"></b>`).join('');
 }
 const term = $('#term');
-function feed(line, kind = 'tool', project) {
-  const d = document.createElement('div'); d.className = kind;
+// Which tab is open: 'all' or a session id. Per device, so it lives here, not on the Mac.
+let view = 'all'; try { view = localStorage.lax_view || 'all'; } catch {}
+// session: the line's session id; none = shown under "all" only; '*' = shown in every tab (local link messages).
+const visible = (d) => view === 'all' || d.dataset.s === '*' || d.dataset.s === view;
+function setView(v) {
+  view = v; try { localStorage.lax_view = v; } catch {}
+  document.body.classList.toggle('view-all', v === 'all');
+  for (const d of term.children) if (d.dataset.s !== undefined) d.hidden = !visible(d);
+  term.scrollTop = term.scrollHeight;
+}
+function feed(line, kind = 'tool', project, session = '') {
+  const d = document.createElement('div'); d.className = kind; d.dataset.s = session; d.hidden = !visible(d);
   if (project && kind !== 'session') { const p = document.createElement('span'); p.className = 'p'; p.textContent = project.slice(0, 8) + ' '; d.append(p); }
   // Follow new lines only if you're already at the bottom (so scrolling back to read isn't yanked away).
   const stick = term.scrollHeight - term.scrollTop - term.clientHeight < 40;
   d.append(line); term.insertBefore(d, term.lastElementChild);
-  while (term.children.length > 200) term.firstElementChild.remove();
+  while (term.children.length > 400) term.firstElementChild.remove();
   if (stick) term.scrollTop = term.scrollHeight;
   if (kind === 'tool') lastWork = performance.now();
 }
@@ -417,24 +431,24 @@ wakeEl.addEventListener('click', async () => {
 // ---------- live link ----------
 function applyState(s) { pet = s.pet; sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
 if (DEMO) demo();
-else if (!TOKEN) feed('no token — open the URL printed by `npm start`', 'error');
+else if (!TOKEN) feed('no token — open the URL printed by `npm start`', 'error', undefined, '*');
 else {
   const es = new EventSource('/api/stream?t=' + encodeURIComponent(TOKEN));
   es.addEventListener('state', (e) => applyState(JSON.parse(e.data)));
-  es.addEventListener('feed', (e) => { const f = JSON.parse(e.data); feed(f.line, f.kind, f.project); });
+  es.addEventListener('feed', (e) => { const f = JSON.parse(e.data); feed(f.line, f.kind, f.project, f.session); });
   es.addEventListener('bubble', (e) => showBubble(JSON.parse(e.data)));
   es.addEventListener('clear', (e) => clearBubble(JSON.parse(e.data).id));
   es.addEventListener('reborn', () => { [...term.children].slice(0, -1).forEach((d) => d.remove()); parts.length = 0; hop(1.8);
     showBubble({ id: 'born', kind: 'reply', text: `Hi! I'm ${settings.name}. Nice to meet you.`, speak: true }); });
   es.addEventListener('react', (e) => { const r = JSON.parse(e.data); if (r.state === 'thinking') voiceBusy = true; else setReact(r.state); });
-  es.onopen = () => feed('linked to mac ✓', 'session');
-  es.onerror = () => feed('link lost, retrying…', 'error');
+  es.onopen = () => feed('linked to mac ✓', 'session', undefined, '*');
+  es.onerror = () => feed('link lost, retrying…', 'error', undefined, '*');
 }
 
 // ---------- demo mode (?demo) — cycles every state without a server ----------
 function demo() {
   pet = { name: 'Lax', level: 7, stage: 'cube', traits: ['headband'], mood: 'happy', xp: 400, prevXp: 360, nextXp: 490, streak: 4 };
-  sessions = [{ project: 'api', status: 'working' }, { project: 'web', status: 'done' }]; applyLook(); renderHud();
+  sessions = [{ id: 'd1', project: 'api', where: 'mac', status: 'working' }, { id: 'd2', project: 'web', where: 'cli', status: 'done' }]; applyLook(); renderHud();
   const steps = [
     () => feed('> fix the flaky auth test', 'prompt', 'api'),
     () => feed('Read auth.test.ts', 'tool', 'api'), () => feed('Grep "refreshToken"', 'tool', 'api'),
@@ -504,6 +518,9 @@ applyLook(); fit();
 $('#sRoute').addEventListener('click', (e) => { const v = e.target.dataset.v; if (v) setTarget(v); });
 $('#chips').addEventListener('click', (e) => {
   const chip = e.target.closest('span'); if (!chip) return;
-  if (chip.dataset.cid) { setTarget(chip.dataset.cid); sfx([660, 880]); hop(0.8); return; }
-  showBubble({ id: 'notlive', kind: 'reply', text: `${chip.dataset.project} can't hear me. Start it with claude-lax to talk to it.` });
+  setView(chip.dataset.view); sfx([660, 880]); hop(0.8);
+  if (chip.dataset.cid) return setTarget(chip.dataset.cid);
+  if (voiceTarget !== 'auto') setTarget('auto'); else renderHud();
+  if (chip.dataset.view !== 'all') showBubble({ id: 'notlive', kind: 'reply', text: `${chip.dataset.label} can't hear me. Start it with claude-lax to talk to it.` });
 });
+setView(view);

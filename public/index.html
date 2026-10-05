@@ -49,12 +49,12 @@
 
   /* Terminal feed */
   #term { flex:1; min-height:0; border-top:2px solid #1f1c19; padding:5px 6px; font-size:14px; line-height:13px; overflow-y:auto; overscroll-behavior:contain; display:flex; flex-direction:column; -webkit-overflow-scrolling:touch; }
-  #term > :first-child { margin-top:auto; }
+  #term::before { content:''; flex:1 0 0; } /* lines sit at the bottom, even when a tab hides the first ones */
   #term div { flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#b7b0a4; }
   body.big #term div { white-space:pre-wrap; word-break:break-word; margin-bottom:3px; }
   #term .prompt { color:var(--fg); } #term .done { color:var(--green); } #term .error { color:var(--red); }
   #term .session { color:var(--dim); } #term .tool::before { content:''; }
-  #term .p { color:var(--coral); }
+  #term .p { color:var(--coral); } body:not(.view-all) #term .p { display:none; } #term div[hidden] { display:none; }
   #cursor { display:inline-block; width:6px; height:10px; background:var(--green); animation:blink 1s steps(2) infinite; vertical-align:-1px; }
 
   /* Life menu */
@@ -101,6 +101,7 @@
   #chips span { border:2px solid #2c2824; border-bottom-color:#1f1c19; padding:1px 8px 2px; color:#b7b0a4; background:#0b0a09; cursor:pointer; } #chips span::before { content:'■ '; color:var(--dim); }
   #chips .live { color:var(--fg); border-color:#4a4239; border-bottom-color:#1f1c19; }
   #chips .sel { border-color:var(--coral); border-bottom-color:#000; background:#000; color:var(--coral); padding-top:4px; }
+  #chips .all::before { content:'≡ '; }
   #chips .front { border-color:#6b6459; border-bottom-color:#000; background:#000; color:var(--fg); padding-top:4px; }
   #chips .working::before { color:var(--blue); } #chips .waiting::before { color:var(--amber); } #chips .done::before { color:var(--green); }
   #bottom { flex:1; display:flex; flex-direction:column; min-height:0; }
@@ -150,7 +151,7 @@
   </div>
   <div id="bottom">
   <div id="chips"></div>
-  <div id="term"><div class="session">lax v0.3 — waiting for claude code…</div><div><span id="cursor"></span></div></div>
+  <div id="term"><div class="session">lax v0.4 — waiting for claude code…</div><div><span id="cursor"></span></div></div>
   </div>
   <div id="life">
     <header><span>♥ <span id="lifeName">LAX</span>'s life</span><button id="lifeClose">✕</button></header>
