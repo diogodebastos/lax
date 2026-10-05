@@ -1,6 +1,6 @@
 # Lax roadmap
 
-Lax is a pixel companion for Claude Code that lives on an old Galaxy Z Flip 3. It shows what your sessions are doing, lets you answer them from your pocket, talks back, and grows with how you work. The Mac is the brain and memory; the phone is the body. It uses no API credits: all model work runs through your Claude Code login.
+Lax is a pixel companion for Claude Code that lives on an old Galaxy Z Flip 3. It shows what your sessions are doing, lets you answer them from your pocket, talks back, and evolves in two ways: in looks, from how you work, and in usefulness, from what it learns and what it runs for you. The Mac is the brain and memory; the phone is the body. It uses no API credits: all model work runs through your Claude Code login.
 
 Each phase has a detailed GitHub issue. We work phase by phase: build, test locally, commit, Diogo tests on the real phone, push, close, next.
 
@@ -48,13 +48,25 @@ A small native app. It shows the same Lax page, plus:
 - Remove the leftover LAN bits.
 - Tag `v0.2.0`.
 
+### Phase 6: Lax remembers [diogodebastos/lax#6](https://github.com/diogodebastos/lax/issues/6)
+Real evolution: Lax learns your projects, auto-generates skills, and never forgets how a problem was solved.
+- When a session ends, a background `claude -p` distills it into project notes, "problem → fix" solutions, and skill candidates.
+- Repeated workflows become draft skills. You approve them on the phone, and they're installed for every Claude Code session.
+- New sessions start with a short brief for their project; Claude (and you, by voice) can `recall` past fixes.
+- A "what Lax knows" view on the phone, where you can edit or forget each item. Learning gives XP, so the looks follow the brain.
+
+### Phase 7: Lax schedules [diogodebastos/lax#7](https://github.com/diogodebastos/lax/issues/7)
+Focused automation: natural-language scheduling for reports, backups and briefings, running unattended through the Mac.
+- "Every weekday at 8:30, brief me on open PRs" becomes a job you confirm before it's saved.
+- Each run is a fresh, focused `claude -p` with its own cwd, tool allowlist and budget, plus Phase 6 memory.
+- Anything outside the allowlist pauses and asks on the phone; results arrive as a spoken summary, a notification, and a run log.
+
 ## Later (ideas, not yet scheduled)
 
 **Lax itself**
 - Hand-drawn sprite sheets per stage, replacing the procedural drawing (Aseprite), with more poses and a proper "evolution" animation.
 - Traits from languages (colors and accessories per language you write most) and from projects.
 - Per-session personality: Lax reacts differently to long-running, failing, or very chatty sessions.
-- A memory log you can scroll: "the day we fixed the auth race", built from milestones and session summaries.
 - Sound design: a small chiptune palette per state; a "done" jingle that grows with level.
 
 **Talking**
