@@ -34,11 +34,14 @@ const plist = (label, args, log) => `<?xml version="1.0" encoding="UTF-8"?>
 const agents = [
   { label: 'com.diogodebastos.lax', args: [NODE, '--no-warnings', path.join(ROOT, 'server.mjs')], log: path.join(ROOT, 'data', 'server.log') },
 ];
-const tunnelConfigured = fs.existsSync(path.join(os.homedir(), '.cloudflared', 'config.yml'));
-if (CLOUDFLARED && tunnelConfigured) {
-  agents.push({ label: 'com.diogodebastos.lax-tunnel', args: [CLOUDFLARED, 'tunnel', '--no-autoupdate', 'run', 'lax'], log: path.join(ROOT, 'data', 'tunnel.log') });
+// Remotely-managed tunnel (scripts/cf-setup.mjs) → data/tunnel-token; or a locally-managed one in ~/.cloudflared.
+const tokenFile = path.join(ROOT, 'data', 'tunnel-token');
+const tunnelArgs = fs.existsSync(tokenFile) ? ['tunnel', '--no-autoupdate', 'run', '--token-file', tokenFile]
+  : fs.existsSync(path.join(os.homedir(), '.cloudflared', 'config.yml')) ? ['tunnel', '--no-autoupdate', 'run', 'lax'] : null;
+if (CLOUDFLARED && tunnelArgs) {
+  agents.push({ label: 'com.diogodebastos.lax-tunnel', args: [CLOUDFLARED, ...tunnelArgs], log: path.join(ROOT, 'data', 'tunnel.log') });
 } else if (!remove) {
-  console.log('(tunnel agent skipped: cloudflared or ~/.cloudflared/config.yml not found yet)');
+  console.log('(tunnel agent skipped: run scripts/cf-setup.mjs first)');
 }
 
 fs.mkdirSync(path.join(ROOT, 'data'), { recursive: true });
