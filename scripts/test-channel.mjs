@@ -60,10 +60,10 @@ check('✓ on phone → verdict back to the session', verdict?.params?.request_i
 // Same session's PermissionRequest hook must step aside for tool approvals (no duplicate bubble)…
 const hook = (input) => execFileSync(process.execPath, [path.join(ROOT, 'hooks', 'lax-hook.mjs')], { input: JSON.stringify(input), encoding: 'utf8', timeout: 15000 });
 const t0 = Date.now();
-const out = hook({ hook_event_name: 'PermissionRequest', session_id: 'x', cwd: ROOT, tool_name: 'Bash', tool_input: { command: 'ls' } });
+const out = hook({ hook_event_name: 'PermissionRequest', session_id: 'lax-test', cwd: ROOT, tool_name: 'Bash', tool_input: { command: 'ls' } });
 check('hook steps aside for tool approvals in a channel session', out.trim() === '' && Date.now() - t0 < 3000, `${Date.now() - t0}ms`);
 // …but questions still use the options UI.
-const q = fetch(LAX + '/api/ask', { method: 'POST', headers: H, body: JSON.stringify({ hook_event_name: 'PermissionRequest', session_id: 'x', cwd: ROOT, tool_name: 'AskUserQuestion',
+const q = fetch(LAX + '/api/ask', { method: 'POST', headers: H, body: JSON.stringify({ hook_event_name: 'PermissionRequest', session_id: 'lax-test', cwd: ROOT, tool_name: 'AskUserQuestion',
   tool_input: { questions: [{ question: 'Q?', header: 'h', multiSelect: false, options: [{ label: 'A' }, { label: 'B' }] }] } }) }).then((r) => r.json());
 await sleep(400);
 const qb = phone.find((e) => e.ev === 'bubble' && e.d.kind === 'question');
@@ -71,6 +71,7 @@ check('questions still go to the options UI', !!qb);
 if (qb) await post('/api/decide', { id: qb.d.id, decision: 'answer', answers: { 'Q?': 'B' } });
 check('question answered', (await q).answers?.['Q?'] === 'B');
 
+hook({ hook_event_name: 'SessionEnd', session_id: 'lax-test', cwd: ROOT }); // don't leave a fake session chip behind
 await client.close();
 await sleep(600);
 const after = phone.filter((e) => e.ev === 'state').pop()?.d;

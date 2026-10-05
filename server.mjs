@@ -229,6 +229,7 @@ function ask(h) {
     const timer = setTimeout(() => finish('none'), Math.min(600, settings.askTimeout * (questions ? 4 : 1)) * 1000);
     function finish(decision, answers) {
       clearTimeout(timer); pending.delete(id); broadcast('clear', { id });
+      const ss = sessions.get(h.session_id); if (ss?.status === 'waiting') { ss.status = 'working'; pushState(); }
       if (decision === 'allow' || decision === 'answer') pet.approvals++; else if (decision === 'deny') pet.denials++;
       const line = { allow: '✓ approved from phone', deny: '✗ denied from phone', answer: '✓ answered from phone' }[decision];
       if (line) { feed(`  ${line}`, decision === 'deny' ? 'error' : 'done', project); save(); }
