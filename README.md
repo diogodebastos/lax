@@ -111,8 +111,8 @@ On power, turn on System Settings → Battery → Options → *Prevent automatic
 Lax is also a Claude Code **channel**: what you say to Lax goes into a running terminal session, and Claude answers back through Lax.
 
 ```bash
-npm run install-channel   # user-level MCP server `lax` + `claude-lax` command in ~/.local/bin (remove-channel undoes)
-claude-lax                # = claude --dangerously-load-development-channels server:lax
+npm run install-channel   # user-level MCP server `lax` + a `lax` command in ~/.local/bin (also `claude-lax`; remove-channel undoes)
+lax                       # = claude --dangerously-load-development-channels server:lax, from any folder; takes the same flags as claude
 ```
 
 - The first time, accept the development-channel warning and the MCP prompt. The startup notice reads "Channels (experimental) … server:lax".
