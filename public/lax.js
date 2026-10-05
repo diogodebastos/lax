@@ -318,7 +318,6 @@ let IDLE_HINT = 'tap Lax to talk';
 function routeChannel() {
   return voiceTarget === 'background' ? null : channels.find((c) => c.cid === voiceTarget) || [...channels].sort((a, b) => b.active - a.active)[0] || null;
 }
-function talkRoute() { const live = routeChannel(); return live ? `🔗 ${live.project}` : '☁ background'; }
 function setTarget(v) { voiceTarget = v; updateHint(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); if (!DEMO) api('/api/target', { target: v }); }
 function updateHint() { IDLE_HINT = voiceBroken ? 'tap Lax to type' : 'tap Lax to talk'; if (!listening) hint.textContent = IDLE_HINT; }
 const MIC_ERRORS = {
