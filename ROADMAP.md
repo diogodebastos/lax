@@ -39,14 +39,15 @@ Pixel Lax (squash and stretch, Super Meat Boy energy) with idle / working / wait
 - The channel stays dormant in sessions not started with `claude-lax`.
 - Tests run against a private, throwaway Lax.
 
-## Next
-
-### Phase 3: Lax Android app [diogodebastos/lax#2](https://github.com/diogodebastos/lax/issues/2)
-Trimmed to what the ambient Lax needs. The Claude app already covers remote control and approval pushes, so this doesn't grow in that direction.
-- A background link to the Mac that survives the phone sleeping.
+### Phase 3: Lax Android app ✅ [diogodebastos/lax#2](https://github.com/diogodebastos/lax/issues/2)
+- A small native app (`android/`, Kotlin, no dependencies) that shows the Lax page full screen, over the lock screen.
+- A background link to the Mac that survives sleep, reboots (it starts on boot) and network drops (it relinks within seconds).
+- **Approve / Deny notifications** that buzz, wake the screen, and work on the lock screen and the cover screen.
 - Android's own speech recognition and text-to-speech, with no browser quirks.
-- QR pairing, start on boot, and the battery-killer exemptions One UI needs.
-- The Approve / Deny notifications already built stay, as the bridge to the cover screen.
+- Pairing by QR (`/pair` → Android app) or over USB (`npm run android -- --pair`).
+- Tabs are sessions: an "all" tab, then `project·where` (mac / cli / api / web). The open tab filters the terminal.
+
+## Next
 
 ### Phase 4: Lax on the cover screen [diogodebastos/lax#3](https://github.com/diogodebastos/lax/issues/3)
 This is the product: glance, don't open.
