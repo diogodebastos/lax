@@ -49,6 +49,11 @@ Pixel Lax (squash and stretch, Super Meat Boy energy) with idle / working / wait
 
 ## Next
 
+### Phase 3.5: quick actions from the phone [diogodebastos/lax#11](https://github.com/diogodebastos/lax/issues/11)
+- `claude-lax` runs Claude Code inside a small terminal wrapper, so Lax can type into it.
+- On a live tab: **clear**, **compact**, **interrupt** and **continue** buttons, and by voice ("clear", "stop").
+- A closed list of actions only. Your terminal feels exactly the same.
+
 ### Phase 4: Lax on the cover screen [diogodebastos/lax#3](https://github.com/diogodebastos/lax/issues/3)
 This is the product: glance, don't open.
 - Run the app full-screen on the Flip 3's cover strip, through Good Lock MultiStar or CoverScreen OS.
@@ -115,7 +120,6 @@ The Mac stays the brain; Cloudflare becomes the always-on link and Lax's public 
 
 **Claude Code**
 - See and switch sessions from the phone with richer status (current tool, elapsed time, last error).
-- Quick actions from the phone: interrupt, "continue", "run the tests", compact.
 - Plan-mode review on the open phone: read the plan and approve or reject it.
 - Package the channel as a plugin once channels leave research preview (no development flag).
 
