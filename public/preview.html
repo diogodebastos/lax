@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lax on Flip 3</title>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<style>
+  /* Mockup of a Galaxy Z Flip 3 running the real Lax page (demo mode) in its three poses. 1 mm ≈ 4 px. */
+  :root { --shell:#2b2f33; --shell2:#1b1e21; --glass:#050505; --fg:#e8e2d6; --dim:#8a8378; --coral:#D97757; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:#121110; color:var(--fg); font-family:'VT323',monospace; padding:28px 16px 40px; }
+  h1 { color:var(--coral); font-weight:400; font-size:38px; text-align:center; }
+  .sub { text-align:center; color:var(--dim); font-size:19px; margin:2px 0 26px; }
+  .row { display:flex; flex-wrap:wrap; gap:44px; justify-content:center; align-items:flex-start; }
+  figure { display:flex; flex-direction:column; align-items:center; gap:12px; }
+  figcaption { font-size:20px; text-align:center; max-width:300px; line-height:1.05; }
+  figcaption b { color:var(--coral); font-weight:400; display:block; font-size:24px; }
+  figcaption span { color:var(--dim); }
+  iframe { border:0; display:block; background:#000; }
+
+  /* Closed: 72 × 86 mm. Cover screen strip (≈ 41 × 21 mm) sits right of the two cameras. */
+  .closed { width:289px; height:346px; border-radius:30px; background:linear-gradient(160deg,#3a3f44,var(--shell2)); padding:14px; position:relative;
+    box-shadow:0 18px 40px rgba(0,0,0,.6), inset 0 0 0 2px #4a4f55; }
+  .closed .band { position:absolute; left:14px; right:14px; top:14px; height:96px; border-radius:18px; background:var(--glass); box-shadow:inset 0 0 0 2px #222; }
+  .cam { position:absolute; width:30px; height:30px; border-radius:50%; background:radial-gradient(circle at 40% 40%,#334 0 20%,#000 45%); box-shadow:0 0 0 3px #1a1a1a, 0 0 0 5px #333; left:14px; }
+  .cam.a { top:12px; } .cam.b { top:54px; }
+  .cover { position:absolute; left:58px; top:8px; width:203px; height:103px; overflow:hidden; border-radius:4px; }
+  .cover iframe { width:512px; height:260px; transform:scale(.3965); transform-origin:0 0; }
+  .closed .hinge { position:absolute; left:0; right:0; bottom:0; height:22px; border-radius:0 0 30px 30px; background:linear-gradient(#24272a,#3a3f44); }
+  .closed .logo { position:absolute; bottom:46px; width:100%; left:0; text-align:center; color:#6b7077; font-family:sans-serif; font-size:11px; letter-spacing:3px; }
+
+  .zoom { border:3px solid #000; box-shadow:0 0 0 2px #3a3f44, 0 10px 30px rgba(0,0,0,.5); border-radius:6px; overflow:hidden; }
+  .zoom iframe { width:512px; height:260px; }
+
+  /* Open: 72 × 166 mm, 6.7" 22:9 screen ≈ 412 × 1007 CSS px. */
+  .open { width:289px; height:664px; border-radius:30px; background:var(--shell2); padding:9px; position:relative; box-shadow:0 18px 40px rgba(0,0,0,.6), inset 0 0 0 2px #4a4f55; }
+  .open .screen { width:271px; height:646px; border-radius:22px; overflow:hidden; position:relative; }
+  .open iframe { width:412px; height:982px; transform:scale(.6578); transform-origin:0 0; }
+  .crease { position:absolute; left:9px; right:9px; top:50%; height:2px; background:linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent); pointer-events:none; }
+  .punch { position:absolute; top:16px; left:50%; width:9px; height:9px; margin-left:-4px; border-radius:50%; background:#000; box-shadow:0 0 0 2px #111; z-index:2; }
+
+  /* Flex mode: same open page, bottom half folded toward the viewer. */
+  .flex { perspective:900px; width:300px; height:610px; position:relative; }
+  .flex .half { position:absolute; left:6px; width:289px; height:341px; background:var(--shell2); padding:9px; overflow:hidden; box-shadow:inset 0 0 0 2px #4a4f55; }
+  .flex .upper { top:0; border-radius:30px 30px 4px 4px; }
+  .flex .lower { top:339px; border-radius:4px 4px 30px 30px; transform-origin:top center; transform:rotateX(62deg); box-shadow:inset 0 0 0 2px #4a4f55, 0 30px 40px rgba(0,0,0,.6); }
+  .flex .clip { width:271px; height:323px; overflow:hidden; border-radius:22px 22px 0 0; position:relative; }
+  .flex .lower .clip { border-radius:0 0 22px 22px; }
+  .flex iframe { width:412px; height:982px; transform:scale(.6578); transform-origin:0 0; }
+  .flex .lower iframe { margin-top:-323px; }
+  .notes { max-width:880px; margin:40px auto 0; color:#b7b0a4; font-size:19px; line-height:1.15; columns:2 280px; column-gap:36px; }
+  .notes p { break-inside:avoid; margin-bottom:12px; } .notes b { color:var(--fg); font-weight:400; }
+</style>
+</head>
+<body>
+<h1>Lax on a Galaxy Z Flip 3</h1>
+<p class="sub">This is the live page in demo mode, at the phone's real proportions.</p>
+
+<div class="row">
+  <figure>
+    <div class="closed">
+      <div class="band"><div class="cam a"></div><div class="cam b"></div>
+        <div class="cover"><iframe src="/?demo&awake&layout=wide" title="cover screen"></iframe></div></div>
+      <div class="logo">SAMSUNG</div><div class="hinge"></div>
+    </div>
+    <figcaption><b>closed — cover screen</b>1.9" strip, 512×260.<span> Lax on the left, the thing that needs you plus the live feed on the right.</span></figcaption>
+  </figure>
+
+  <figure>
+    <div class="zoom"><iframe src="/?demo&awake&layout=wide" title="cover zoom"></iframe></div>
+    <figcaption><b>cover screen, zoomed</b><span>Tap ✓ / ✗ to approve. Hold Lax to talk. Tap LAX ≡ for the life menu.</span></figcaption>
+  </figure>
+</div>
+
+<div class="row" style="margin-top:46px">
+  <figure>
+    <div class="open"><div class="punch"></div><div class="screen"><iframe src="/?demo&awake" title="open phone"></iframe></div><div class="crease"></div></div>
+    <figcaption><b>open — main screen</b>6.7", fluid layout.<span> Lax and the bubble above the fold, with session chips, the terminal and buttons below it.</span></figcaption>
+  </figure>
+
+  <figure>
+    <div class="flex">
+      <div class="half upper"><div class="clip"><iframe src="/?demo&awake" title="flex top"></iframe></div></div>
+      <div class="half lower"><div class="clip"><iframe src="/?demo&awake" title="flex bottom"></iframe></div></div>
+    </div>
+    <figcaption><b>flex mode — on your desk</b><span>Half-folded it stands by itself, with Lax facing you and the terminal on the bottom half. This is the desk-buddy pose.</span></figcaption>
+  </figure>
+</div>
+
+<div class="notes">
+  <p><b>Getting it onto the cover screen.</b> The Flip 3 only runs widgets there by default. Install Good Lock → MultiStar → "Launch apps from cover screen" and add Chrome. If your One UI version doesn't offer that, a cover-screen launcher app like CoverScreen OS does the same job.</p>
+  <p><b>Orientation.</b> Held closed and upright, the strip is landscape, so the left/right layout applies. Hold it sideways and Lax switches to the tall 260×512 layout. Open, it uses the full fluid layout.</p>
+  <p><b>Always on.</b> Lax asks the browser to keep the screen awake. For a desk buddy, keep the phone charging with Settings → Battery → Protect battery turned on (charging stops at 85%).</p>
+  <p><b>Same page everywhere.</b> All three poses are one URL. The layout follows the screen size, so closing or opening the phone just changes Lax's body.</p>
+</div>
+</body>
+</html>

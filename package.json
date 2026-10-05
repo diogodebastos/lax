@@ -1,0 +1,15 @@
+{
+  "name": "lax",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Lax — a pixel companion for Claude Code that lives on an old phone.",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --no-warnings server.mjs",
+    "install-hooks": "node scripts/install-hooks.mjs",
+    "remove-hooks": "node scripts/install-hooks.mjs --remove"
+  }
+}
