@@ -50,6 +50,9 @@ class LaxBridge(private val act: MainActivity, private val web: WebView) {
 
     @JavascriptInterface fun isNative() = true
 
+    /** The camera hole's safe insets in CSS px: {"top":31.3,…}. */
+    @JavascriptInterface fun insets(): String = act.cutout
+
     // ---------- speech recognition ----------
     private var retried = false
 

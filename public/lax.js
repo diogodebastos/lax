@@ -23,6 +23,8 @@ function layoutFor() {
 }
 function fit() {
   const l = layoutFor();
+  // In the app the page runs under the camera hole: keep the top bar clear of it.
+  try { const i = JSON.parse(NATIVE?.insets() || '{}'); document.documentElement.style.setProperty('--inset-top', (i.top || 0) + 'px'); } catch {}
   document.body.classList.toggle('big', l === 'big'); document.body.classList.toggle('wide', l === 'wide');
   const b = $('#bubble'), want = l === 'wide' ? $('#bottom') : $('#top');
   if (b.parentElement !== want) want.insertBefore(b, want.firstElementChild);
