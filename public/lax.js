@@ -14,19 +14,23 @@ const buzz = (pattern) => (NATIVE ? NATIVE.vibrate(pattern.join(',')) : navigato
 const $ = (s) => document.querySelector(s);
 const app = $('#app'), cv = $('#stage'), g = cv.getContext('2d');
 const W = 52, H = 51, GROUND = 46, CX = 26;
-// Three bodies: 'wide' = closed Flip 3 cover screen (512×260 landscape strip), 'tall' = cover screen held sideways
-// (260×512), 'big' = phone open / Flex mode (fluid; Lax on the top half, terminal below the fold). ?layout= forces one.
+// Bodies: 'wide' = closed Flip 3 cover screen (512×260 landscape strip), 'tall' = cover screen held sideways
+// (260×512), 'big' = phone open / Flex mode (fluid; Lax on the top half, terminal below the fold),
+// 'side' = phone open and held sideways (Lax on the left half, tabs + terminal on the right). ?layout= forces one.
 function layoutFor() {
   const forced = qs.get('layout'); if (forced) return forced;
   if (innerWidth >= 340 && innerHeight >= 600) return 'big';
+  if (innerWidth >= 640 && innerHeight >= 300 && innerWidth > innerHeight) return 'side';
   return innerWidth / innerHeight > 1.3 ? 'wide' : 'tall';
 }
 function fit() {
   const l = layoutFor();
   // In the app the page runs under the camera hole: keep the top bar clear of it.
   try { const i = JSON.parse(NATIVE?.insets() || '{}'); document.documentElement.style.setProperty('--inset-top', (i.top || 0) + 'px'); } catch {}
-  document.body.classList.toggle('big', l === 'big'); document.body.classList.toggle('wide', l === 'wide');
-  const b = $('#bubble'), want = l === 'wide' ? $('#bottom') : $('#top');
+  // 'side' is 'big' turned sideways: same sizes, two halves side by side.
+  document.body.classList.toggle('big', l === 'big' || l === 'side'); document.body.classList.toggle('side', l === 'side');
+  document.body.classList.toggle('wide', l === 'wide');
+  const b = $('#bubble'), want = l === 'wide' || l === 'side' ? $('#bottom') : $('#top');
   if (b.parentElement !== want) want.insertBefore(b, want.firstElementChild);
   cv.style.cssText = '';
   if (l === 'wide') { app.style.transform = `scale(${Math.min(innerWidth / 512, innerHeight / 260)})`; return; }
