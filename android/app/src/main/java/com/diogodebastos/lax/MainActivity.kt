@@ -25,6 +25,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import org.json.JSONObject
 
 /** Lax's body: the same page as the browser, full screen, with native voice through [LaxBridge]. */
 class MainActivity : Activity() {
@@ -52,6 +53,21 @@ class MainActivity : Activity() {
 
         web = WebView(this).apply { setBackgroundColor(Color.BLACK) }
         setContentView(web)
+        // Edge to edge, under the camera hole too: the page then covers the whole screen, so its 50% is the hinge.
+        window.setDecorFitsSystemWindows(false)
+        window.attributes = window.attributes.apply {
+            layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+        }
+        web.setOnApplyWindowInsetsListener { v, insets ->
+            // The page keeps its top bar clear of the camera hole (LaxNative.insets()).
+            val c = insets.displayCutout
+            val d = resources.displayMetrics.density
+            cutout = JSONObject().apply {
+                if (c != null) put("top", c.safeInsetTop / d).put("left", c.safeInsetLeft / d)
+                    .put("right", c.safeInsetRight / d).put("bottom", c.safeInsetBottom / d)
+            }.toString()
+            v.onApplyWindowInsets(insets)
+        }
         immersive()
         web.settings.apply {
             javaScriptEnabled = true
@@ -82,6 +98,8 @@ class MainActivity : Activity() {
     }
 
     @Volatile private var asleep = false
+    /** Camera-hole insets in CSS px, as JSON, for the page. */
+    @Volatile var cutout = "{}"
 
     /** The offline copy of the page, with Lax asleep. Polls the Mac and loads the real page once it answers. */
     private fun sleep() {

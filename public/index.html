@@ -92,7 +92,7 @@
   body.big #app { width:100vw; height:100vh; height:100dvh; transform:none !important; }
   body.big #top { height:50%; }
   body.big #stage { inset:auto; }
-  body.big #hud { font-size:22px; top:10px; left:14px; right:14px; gap:10px; } body.big #xp { height:8px; } body.big #dots b { width:10px; height:10px; }
+  body.big #hud { font-size:22px; top:calc(10px + var(--inset-top, 0px)); left:14px; right:14px; gap:10px; } body.big #xp { height:8px; } body.big #dots b { width:10px; height:10px; }
   body.big #bubble { font-size:24px; line-height:21px; top:44px; left:18px; right:20px; padding:8px 12px 10px; }
   body.big #bubble .tag { font-size:17px; } body.big #bubble .text { max-height:88px; } body.big #bubble button { font-size:24px; }
   body.big #hint { font-size:18px; bottom:10px; padding:0 10px; gap:10px; }
