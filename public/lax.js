@@ -57,7 +57,9 @@ function applyLook() {
   $('#nameBtn').textContent = settings.name.toUpperCase(); $('#lifeName').textContent = settings.name.toUpperCase();
 }
 let pet = { name: 'Lax', level: 1, stage: 'sprout', traits: [], mood: 'happy', xp: 0, prevXp: 0, nextXp: 10 };
-let sessions = [], voiceBusy = false, thinking = false, lastWork = 0, channels = [], voiceTarget = 'auto';
+let sessions = [], voiceBusy = false, thinking = false, lastWork = 0, channels = [], voiceTarget = 'background';
+// The Mac is asleep or off (no link): Lax sleeps too. ASLEEP = the app's offline copy of this page (no Mac at all).
+const ASLEEP = qs.has('asleep'); let macAsleep = ASLEEP;
 let listening = false, speaking = false, react = null, reactUntil = 0;
 const body = { y: 0, vy: 0, s: 0, sv: 0, look: 0, blinkAt: 0, nextHop: 3 };
 const parts = [];
@@ -67,6 +69,7 @@ function mode(now) {
   if (listening) return 'listening';
   if (speaking) return 'talking';
   if (react && now < reactUntil) return react;
+  if (macAsleep) return 'sleep';
   if (voiceBusy || thinking) return 'thinking';
   if (now - lastWork < 5000) return 'working';
   if (pet.mood === 'sleepy' || pet.mood === 'dusty') return 'sleep';
@@ -340,7 +343,7 @@ function routeChannel() {
   return voiceTarget === 'background' ? null : channels.find((c) => c.cid === voiceTarget) || [...channels].sort((a, b) => b.active - a.active)[0] || null;
 }
 function setTarget(v) { voiceTarget = v; updateHint(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); if (!DEMO) api('/api/target', { target: v }); }
-function updateHint() { IDLE_HINT = voiceBroken ? 'tap Lax to type' : 'tap Lax to talk'; if (!listening) hint.textContent = IDLE_HINT; }
+function updateHint() { IDLE_HINT = macAsleep ? 'zzz… your mac is asleep' : voiceBroken ? 'tap Lax to type' : 'tap Lax to talk'; if (!listening) hint.textContent = IDLE_HINT; }
 const MIC_ERRORS = {
   'not-allowed': 'Mic is blocked. Tap the icon left of the address → Permissions → Microphone → Allow, then reload.',
   'service-not-allowed': 'This browser has no speech recognition. Use Chrome.',
@@ -354,6 +357,7 @@ updateHint();
 (async () => { let mic = 'unknown'; try { mic = (await navigator.permissions.query({ name: 'microphone' })).state; } catch {}
   diag('load', { v: VERSION, native: !!NATIVE, ua: navigator.userAgent, secure: isSecureContext, sr: !!SR, brave: isBrave, mediaDevices: !!navigator.mediaDevices, mic, w: innerWidth, h: innerHeight, dpr: devicePixelRatio }); })();
 function startListening() {
+  if (macAsleep) { hop(0.5); showBubble({ id: 'asleep', kind: 'reply', text: 'Zzz… your Mac is asleep or off. I\'ll wake up when it does.' }); return; }
   if (listening) { cancelled = true; NATIVE ? NATIVE.cancelListening() : rec?.abort(); return; }
   if (voiceBusy && !answerHook) { showBubble({ id: 'busy', kind: 'reply', text: 'Still working on the last one…' }); return; }
   if (voiceBroken) return typeInstead();
@@ -430,19 +434,36 @@ wakeEl.addEventListener('click', async () => {
 
 // ---------- live link ----------
 function applyState(s) { pet = s.pet; sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
+// Remember how Lax looks, so the app's offline page can show the same Lax asleep.
+const remember = () => { try { NATIVE?.remember(JSON.stringify({ pet, settings })); } catch {} };
+function setAsleep(v) { if (macAsleep === v) return; macAsleep = v; updateHint(); }
 if (DEMO) demo();
+else if (ASLEEP) asleep();
 else if (!TOKEN) feed('no token — open the URL printed by `npm start`', 'error', undefined, '*');
-else {
+else connect();
+function connect() {
   const es = new EventSource('/api/stream?t=' + encodeURIComponent(TOKEN));
-  es.addEventListener('state', (e) => applyState(JSON.parse(e.data)));
+  es.addEventListener('state', (e) => { applyState(JSON.parse(e.data)); remember(); });
   es.addEventListener('feed', (e) => { const f = JSON.parse(e.data); feed(f.line, f.kind, f.project, f.session); });
   es.addEventListener('bubble', (e) => showBubble(JSON.parse(e.data)));
   es.addEventListener('clear', (e) => clearBubble(JSON.parse(e.data).id));
   es.addEventListener('reborn', () => { [...term.children].slice(0, -1).forEach((d) => d.remove()); parts.length = 0; hop(1.8);
     showBubble({ id: 'born', kind: 'reply', text: `Hi! I'm ${settings.name}. Nice to meet you.`, speak: true }); });
   es.addEventListener('react', (e) => { const r = JSON.parse(e.data); if (r.state === 'thinking') voiceBusy = true; else setReact(r.state); });
-  es.onopen = () => feed('linked to mac ✓', 'session', undefined, '*');
-  es.onerror = () => feed('link lost, retrying…', 'error', undefined, '*');
+  es.onopen = () => { if (macAsleep) { setAsleep(false); hop(1.4); } feed('linked to mac ✓', 'session', undefined, '*'); };
+  es.onerror = () => {
+    if (!macAsleep) feed('mac unreachable, sleeping until it wakes…', 'error', undefined, '*');
+    setAsleep(true);
+    // Cloudflare answers for a sleeping Mac with an error page, which ends EventSource for good: retry by hand.
+    if (es.readyState === EventSource.CLOSED) setTimeout(connect, 10000);
+  };
+}
+// The app's offline page: the Mac couldn't be reached at all. Show Lax asleep, as it last looked.
+function asleep() {
+  try { const m = JSON.parse(NATIVE?.recall() || 'null'); if (m) { pet = m.pet || pet; settings = m.settings || settings; } } catch {}
+  applyLook(); renderHud(); updateHint();
+  feed('your mac is asleep or off', 'session', undefined, '*');
+  feed('lax wakes up when it does. zzz…', 'session', undefined, '*');
 }
 
 // ---------- demo mode (?demo) — cycles every state without a server ----------
@@ -479,7 +500,7 @@ async function openLife() {
   if (!DEMO) { try { memory = await fetch('/api/memory', { headers: { 'x-lax-token': TOKEN } }).then((r) => r.json()); } catch {} renderLife(); }
 }
 function renderLife() {
-  $('#sRoute').innerHTML = [['auto', 'auto'], ...channels.map((c) => [c.cid, c.project]), ['background', 'background']]
+  $('#sRoute').innerHTML = [['background', 'assistant'], ...channels.map((c) => [c.cid, c.project])]
     .map(([v, l]) => `<button data-v="${esc(v)}" class="${v === voiceTarget ? 'on' : ''}">${esc(l)}</button>`).join('');
   $('#sName').value !== settings.name && document.activeElement !== $('#sName') && ($('#sName').value = settings.name);
   $('#sPitch').value = settings.pitch;
@@ -520,7 +541,8 @@ $('#chips').addEventListener('click', (e) => {
   const chip = e.target.closest('span'); if (!chip) return;
   setView(chip.dataset.view); sfx([660, 880]); hop(0.8);
   if (chip.dataset.cid) return setTarget(chip.dataset.cid);
-  if (voiceTarget !== 'auto') setTarget('auto'); else renderHud();
-  if (chip.dataset.view !== 'all') showBubble({ id: 'notlive', kind: 'reply', text: `${chip.dataset.label} can't hear me. Start it with claude-lax to talk to it.` });
+  // "all" (and sessions that can't hear) → talking goes to Lax itself, the assistant.
+  if (voiceTarget !== 'background') setTarget('background'); else renderHud();
+  if (chip.dataset.view !== 'all') showBubble({ id: 'notlive', kind: 'reply', text: `${chip.dataset.label} can't hear me, so I'll answer you myself. Start it with claude-lax to talk to it.` });
 });
 setView(view);

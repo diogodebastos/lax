@@ -145,6 +145,13 @@ class LaxBridge(private val act: MainActivity, private val web: WebView) {
         v.vibrate(VibrationEffect.createWaveform(longArrayOf(0) + ms.toLongArray(), -1))
     }
 
+    // ---------- memory for the offline page ----------
+    /** How Lax looks (pet + settings JSON), so the asleep page can draw the same Lax when the Mac is unreachable. */
+    @JavascriptInterface fun remember(json: String?) {
+        if (json != null && json.length < 20_000) act.getSharedPreferences("lax", 0).edit().putString("look", json).apply()
+    }
+    @JavascriptInterface fun recall(): String = act.getSharedPreferences("lax", 0).getString("look", null) ?: ""
+
     fun shutdown() {
         recognizer?.destroy()
         tts.shutdown()

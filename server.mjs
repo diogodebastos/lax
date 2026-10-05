@@ -130,13 +130,18 @@ function broadcast(type, data) {
 }
 function sessionList() {
   const cutoff = Date.now() - 6 * 36e5;
-  return [...sessions.entries()].filter(([, s]) => s.ts > cutoff).map(([id, s]) => ({ id, ...s }));
+  return [...sessions.entries()].filter(([id, s]) => s.ts > cutoff && id !== voiceSessions[ASSISTANT]).map(([id, s]) => ({ id, ...s }));
 }
 const stateMsg = () => ({ pet: petView(), sessions: sessionList(), voiceBusy: !!voiceRun, thinking: !!channelWait, settings,
   channels: channelList(), voiceTarget });
 const pushState = () => broadcast('state', stateMsg());
 // session: which Claude Code session a line belongs to, so the phone can show one session's tab at a time.
-const feed = (line, kind = 'tool', project, session) => broadcast('feed', { line, kind, project, session, ts: Date.now() });
+const recentFeed = []; // what the assistant knows about your sessions
+const feed = (line, kind = 'tool', project, session) => {
+  const f = { line, kind, project, session, ts: Date.now() };
+  recentFeed.push(f); if (recentFeed.length > 300) recentFeed.shift();
+  broadcast('feed', f);
+};
 // The hook-side session a lax channel runs in (matched by the claude process pid).
 const channelSession = (c) => c?.sessionPid ? [...sessions.entries()].find(([, s]) => s.pid === c.sessionPid)?.[0] : undefined;
 const proj = (cwd) => (cwd ? path.basename(cwd) : '?');
@@ -169,6 +174,7 @@ function onHook(h) {
   s.ts = Date.now(); s.project = project; if (h.cwd) s.cwd = h.cwd; if (h.lax_where) s.where = h.lax_where; if (h.lax_session_pid) s.pid = h.lax_session_pid;
   sessions.set(sid, s);
   touchDay();
+  const mine = sid && sid === voiceSessions[ASSISTANT]; // Lax's own assistant: talk() already shows what you said and the answer
   if (/^(PostToolUse|PostToolUseFailure|Stop|UserPromptSubmit)$/.test(h.hook_event_name)) clearRelays((c) => c.cwd === h.cwd);
   switch (h.hook_event_name) {
     case 'SessionStart':
@@ -176,7 +182,7 @@ function onHook(h) {
       feed(`● session ${project}`, 'session', project, sid); logEvent(sid, project, 'session', h.source || 'start');
       break;
     case 'UserPromptSubmit':
-      s.status = 'working'; feed(`> ${short(h.prompt, 90)}`, 'prompt', project, sid);
+      s.status = 'working'; if (!mine) feed(`> ${short(h.prompt, 90)}`, 'prompt', project, sid);
       logEvent(sid, project, 'prompt', short(h.prompt, 500));
       break;
     case 'PreToolUse': {
@@ -202,7 +208,7 @@ function onHook(h) {
     case 'Stop': {
       s.status = 'done'; pet.turns++; gainXp(5);
       const msg = h.last_assistant_message || '';
-      feed(`✓ ${project}: ${short(spoken(msg), 90)}`, 'done', project, sid);
+      if (!mine) feed(`✓ ${project}: ${short(spoken(msg), 90)}`, 'done', project, sid);
       logEvent(sid, project, 'done', short(msg, 1000));
       if (!(voiceRun && voiceRun.sessionId === sid)) // voice runs speak their own result
         broadcast('bubble', { id: 'done-' + sid + Date.now(), kind: 'done', text: `${project}: ${spoken(msg) || 'done!'}`, session: sid, speak: false });
@@ -248,7 +254,7 @@ function ask(h) {
 // Each runs channel/lax-channel.mjs, which holds an SSE stream here. Voice goes into that running session;
 // Claude answers with the channel's reply tool; permission dialogs are relayed to the phone.
 const channels = new Map(); // cid -> { res, sessionPid, cwd, project, active }
-let voiceTarget = 'auto';   // 'auto' (most recently active channel) | 'background' | a cid
+let voiceTarget = 'background'; // 'background' (Lax, the assistant) | a live session's cid | 'auto' (most recently active channel)
 let channelWait = null;     // { cid, timer } while a channel session is working on something you said
 const channelList = () => [...channels.entries()].map(([cid, c]) => ({ cid, project: c.project, active: c.active, sessionPid: c.sessionPid }));
 const sendChannel = (cid, event, data) => channels.get(cid)?.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -287,9 +293,23 @@ function channelEvent(b) {
 }
 
 // ---------- voice → Claude Code (headless, uses your Claude subscription login) ----------
+// Voice goes into a live session (a claude-lax tab), or else to Lax itself: an assistant you can ask anything.
+// It's one long-running headless Claude in LAX_WORKDIR that also knows what your sessions are doing.
 let voiceRun = null;
-const VOICE_PROMPT = 'The user is talking to you by voice through Lax, a small pixel companion on their phone. ' +
-  'Start your final reply with ONE short, plain sentence (no markdown, no code) that can be read aloud as the outcome. Details may follow.';
+const ASSISTANT = 'assistant'; // its key in voiceSessions
+const tabLabel = (s) => `${s.project}·${s.where || 'cli'}`;
+function sessionsBrief() {
+  const list = sessionList().filter((s) => s.id !== voiceSessions[ASSISTANT]);
+  if (!list.length) return 'No Claude Code sessions are running right now.';
+  return list.map((s) => {
+    const lines = recentFeed.filter((f) => f.session === s.id).slice(-6).map((f) => '    ' + f.line).join('\n');
+    return `- ${tabLabel(s)} (${s.status}, active ${Math.round((Date.now() - s.ts) / 60000)} min ago, in ${s.cwd || '?'})${lines ? ':\n' + lines : ''}`;
+  }).join('\n');
+}
+const assistantPrompt = () => `You are ${settings.name}, a small pixel companion that lives on the user's phone. They are talking to you by voice. ` +
+  'Answer anything they ask, briefly and warmly, like a friendly assistant. You run on their Mac and can use tools when it really helps. ' +
+  'Start your reply with ONE short, plain sentence (no markdown, no code) that can be read aloud; details may follow.\n\n' +
+  `Their Claude Code sessions right now (tab name, status, latest activity):\n${sessionsBrief()}`;
 function talk(text) {
   const cid = pickChannel();
   if (cid) { // into the running session
@@ -302,15 +322,13 @@ function talk(text) {
     return true;
   }
   if (voiceRun) return false;
-  const recent = sessionList().sort((a, b) => b.ts - a.ts)[0];
-  const cwd = (recent && recent.cwd) || kvGet('voiceCwd', DEFAULT_WORKDIR);
-  kvSet('voiceCwd', cwd);
-  const args = ['-p', text, '--output-format', 'stream-json', '--verbose', '--append-system-prompt', VOICE_PROMPT];
-  if (voiceSessions[cwd]) args.push('--resume', voiceSessions[cwd]);
+  const cwd = DEFAULT_WORKDIR, name = settings.name.toLowerCase();
+  const args = ['-p', text, '--output-format', 'stream-json', '--verbose', '--append-system-prompt', assistantPrompt()];
+  if (voiceSessions[ASSISTANT]) args.push('--resume', voiceSessions[ASSISTANT]);
   pet.voice++; gainXp(3); save();
-  feed(`> ${short(text, 90)}`, 'prompt', proj(cwd), voiceSessions[cwd]);
+  feed(`> ${short(text, 90)}`, 'prompt', name);
   const child = spawn('claude', args, { cwd, env: { ...process.env, LAX_VOICE: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
-  voiceRun = { child, cwd, sessionId: voiceSessions[cwd] || null };
+  voiceRun = { child, cwd, sessionId: voiceSessions[ASSISTANT] || null };
   broadcast('react', { state: 'thinking' }); pushState();
   let buf = '', result = null;
   child.stdout.on('data', (d) => {
@@ -318,7 +336,7 @@ function talk(text) {
     while ((i = buf.indexOf('\n')) >= 0) {
       const line = buf.slice(0, i); buf = buf.slice(i + 1);
       let m; try { m = JSON.parse(line); } catch { continue; }
-      if (m.type === 'system' && m.subtype === 'init') { voiceSessions[cwd] = m.session_id; voiceRun.sessionId = m.session_id; save(); }
+      if (m.type === 'system' && m.subtype === 'init') { voiceSessions[ASSISTANT] = m.session_id; voiceRun.sessionId = m.session_id; save(); }
       if (m.type === 'result') result = m;
     }
   });
@@ -328,7 +346,8 @@ function talk(text) {
     const ok = result && !result.is_error;
     const say = ok ? spoken(result.result) : `Something went wrong. ${short(err || result?.result, 120)}`;
     broadcast('bubble', { id: 'voice' + Date.now(), kind: ok ? 'reply' : 'error', text: say, speak: true });
-    if (!ok) { pet.errors++; if (voiceSessions[cwd] && /session|resume/i.test(err)) delete voiceSessions[cwd]; }
+    feed(`↩ ${short(say, 90)}`, ok ? 'done' : 'error', name);
+    if (!ok) { pet.errors++; if (voiceSessions[ASSISTANT] && /session|resume/i.test(err)) delete voiceSessions[ASSISTANT]; }
     save(); pushState();
   });
   return true;
@@ -384,12 +403,12 @@ http.createServer(async (req, res) => {
       clearInterval(ping); channels.delete(cid); clearRelays(() => false);
       for (const [id, p] of pending) if (p.relay?.cid === cid) p.finish('none');
       if (channelWait?.cid === cid) { clearTimeout(channelWait.timer); channelWait = null; }
-      if (voiceTarget === cid) voiceTarget = 'auto';
+      if (voiceTarget === cid) voiceTarget = 'background';
       feed(`○ live session closed: ${proj(cwd)}`, 'session', proj(cwd)); pushState();
     });
     return;
   }
-  if (url.pathname === '/api/memory') return json(res, { pet: petView(), raw: pet, voiceProject: proj(kvGet('voiceCwd', DEFAULT_WORKDIR)),
+  if (url.pathname === '/api/memory') return json(res, { pet: petView(), raw: pet, voiceProject: pickChannel() ? channels.get(pickChannel()).project : 'assistant',
     milestones: db.prepare('SELECT ts,text FROM milestones ORDER BY id DESC LIMIT 50').all() });
   if (req.method !== 'POST') return json(res, { error: 'method' }, 405);
   const b = await body(req);
@@ -410,7 +429,7 @@ http.createServer(async (req, res) => {
     case '/api/diag': console.log(`[phone ${new Date().toISOString().slice(11, 19)}] ${JSON.stringify(b).slice(0, 600)}`); return json(res, { ok: true });
     case '/api/channel/event': return json(res, { ok: isLocal(req) && channelEvent(b) });
     case '/api/target':
-      voiceTarget = b.target === 'background' || channels.has(b.target) ? b.target : 'auto'; pushState();
+      voiceTarget = b.target === 'auto' || channels.has(b.target) ? b.target : 'background'; pushState();
       return json(res, { ok: true, voiceTarget });
     case '/api/talk': return json(res, { ok: talk(String(b.text || '').slice(0, 2000)) });
     default: return json(res, { error: 'not found' }, 404);

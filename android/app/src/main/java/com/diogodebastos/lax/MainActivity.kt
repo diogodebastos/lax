@@ -22,6 +22,7 @@ import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 
@@ -67,14 +68,37 @@ class MainActivity : Activity() {
             }
         }
         web.webViewClient = object : WebViewClient() {
+            // The Mac is asleep or off (Cloudflare answers 502/530), or there's no network: show Lax asleep.
             override fun onReceivedError(view: WebView, req: WebResourceRequest, err: WebResourceError) {
-                // Offline at launch (or the Mac asleep): keep retrying instead of leaving an error page up.
-                if (req.isForMainFrame) main.postDelayed({ load() }, 5000)
+                if (req.isForMainFrame) sleep()
+            }
+            override fun onReceivedHttpError(view: WebView, req: WebResourceRequest, res: WebResourceResponse) {
+                if (req.isForMainFrame && res.statusCode >= 500) sleep()
             }
         }
         load()
         LaxService.start(this)
         firstRun()
+    }
+
+    @Volatile private var asleep = false
+
+    /** The offline copy of the page, with Lax asleep. Polls the Mac and loads the real page once it answers. */
+    private fun sleep() {
+        if (asleep) return
+        asleep = true
+        web.loadUrl("file:///android_asset/index.html?asleep")
+        Thread({
+            while (asleep && !isDestroyed) {
+                Thread.sleep(10_000)
+                val cfg = Lax.config(this) ?: break
+                val up = try {
+                    val c = Lax.open(cfg, "/api/memory"); c.connectTimeout = 8000; c.readTimeout = 8000
+                    (c.responseCode == 200).also { c.disconnect() }
+                } catch (_: Exception) { false }
+                if (up) main.post { asleep = false; load() }
+            }
+        }, "lax-wake").start()
     }
 
     /** Service-token headers let the first load through Cloudflare Access; the browser login (email PIN) also works and its cookie persists. */

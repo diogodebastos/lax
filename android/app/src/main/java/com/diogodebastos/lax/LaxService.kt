@@ -114,21 +114,22 @@ class LaxService : Service() {
         var backoff = 1000L
         while (running) {
             val cfg = Lax.config(this) ?: break
-            try {
+            // stream() returns why it couldn't link (shown as is), or null when the link dropped.
+            val why = try {
                 stream(cfg) { backoff = 1000L }
             } catch (e: Exception) {
-                Log.i(TAG, "link: ${e.javaClass.simpleName}: ${e.message}")
+                Log.i(TAG, "link: ${e.javaClass.simpleName}: ${e.message}"); null
             }
             conn = null
             linkedAt = 0
             if (!running) break
-            setLink("reconnecting…")
+            setLink(why ?: "reconnecting…")
             synchronized(lock) { lock.wait(backoff) }
             backoff = (backoff * 2).coerceAtMost(30_000L)
         }
     }
 
-    private fun stream(cfg: Lax.Config, onOpen: () -> Unit) {
+    private fun stream(cfg: Lax.Config, onOpen: () -> Unit): String? {
         val c = Lax.open(cfg, "/api/stream?t=" + Uri.encode(cfg.token))
         c.connectTimeout = 15_000
         c.readTimeout = 60_000 // the server pings every 20s
@@ -138,9 +139,12 @@ class LaxService : Service() {
         val type = c.contentType ?: ""
         if (code != 200 || !type.startsWith("text/event-stream")) {
             // Usually Cloudflare Access turning us away (no or wrong service token), or a bad Lax token.
-            setLink(if (code == 401) "bad Lax token, pair again" else "can't link ($code ${type.substringBefore(';')})")
             c.disconnect()
-            return
+            return when {
+                code == 401 -> "bad Lax token, pair again"
+                code in 500..599 -> "your Mac is asleep or off, waiting…" // Cloudflare: tunnel or server down (502 / 530)
+                else -> "can't link ($code ${type.substringBefore(';')})"
+            }
         }
         linkedAt = System.currentTimeMillis()
         onOpen()
@@ -167,6 +171,7 @@ class LaxService : Service() {
                 }
             }
         }
+        return null
     }
 
     private fun dispatch(event: String, data: String) {

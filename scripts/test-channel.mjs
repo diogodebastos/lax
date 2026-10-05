@@ -46,6 +46,9 @@ await sleep(800);
 const state = phone.filter((e) => e.ev === 'state').pop()?.d;
 check('server sees the live session', state?.channels?.length >= 1, JSON.stringify(state?.channels?.map((c) => c.project)));
 
+check('talking goes to Lax\'s assistant by default', state?.voiceTarget === 'background', state?.voiceTarget);
+// Open the live session's tab (as the phone does), so talking goes into it, not to the assistant.
+await post('/api/target', { target: state?.channels?.[0]?.cid });
 await post('/api/talk', { text: 'hello from the phone' });
 await sleep(500);
 const msg = got.find((n) => n.method === 'notifications/claude/channel');
