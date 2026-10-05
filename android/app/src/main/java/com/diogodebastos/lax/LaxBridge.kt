@@ -51,7 +51,10 @@ class LaxBridge(private val act: MainActivity, private val web: WebView) {
     @JavascriptInterface fun isNative() = true
 
     // ---------- speech recognition ----------
+    private var retried = false
+
     @JavascriptInterface fun listen(language: String?) = main.post {
+        retried = false
         lang = language?.takeIf { it.isNotBlank() } ?: "en-US"
         if (act.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             act.requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), MainActivity.REQ_MIC)
@@ -62,10 +65,16 @@ class LaxBridge(private val act: MainActivity, private val web: WebView) {
         start(preferOffline = true)
     }
 
+    /** Bumped per listening session; callbacks from an earlier one are ignored. */
+    private var session = 0
+
     private fun start(preferOffline: Boolean) {
-        recognizer?.destroy()
-        recognizer = SpeechRecognizer.createSpeechRecognizer(act).apply {
-            setRecognitionListener(Listener(preferOffline))
+        // One recognizer, reused. Destroying it per tap made the old one report "service disconnected"
+        // (error 11) into the session that had just started, so every other tap failed at once.
+        val r = recognizer ?: SpeechRecognizer.createSpeechRecognizer(act).also { recognizer = it }
+        r.cancel()
+        r.apply {
+            setRecognitionListener(Listener(++session, preferOffline))
             startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
@@ -81,18 +90,27 @@ class LaxBridge(private val act: MainActivity, private val web: WebView) {
 
     /** Drop it: nothing is sent. */
     @JavascriptInterface fun cancelListening() = main.post {
+        session++ // whatever the old session still reports is ignored
         recognizer?.cancel()
         js("laxOnSpeechError", "'aborted'")
     }
 
-    private inner class Listener(private val preferOffline: Boolean) : RecognitionListener {
+    private inner class Listener(private val id: Int, private val preferOffline: Boolean) : RecognitionListener {
+        private val current get() = id == session
         private fun text(b: Bundle?) = b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
-        override fun onPartialResults(b: Bundle?) { val t = text(b); if (t.isNotEmpty()) js("laxOnSpeech", JSONObject.quote(t), "false") }
+        override fun onPartialResults(b: Bundle?) { val t = text(b); if (current && t.isNotEmpty()) js("laxOnSpeech", JSONObject.quote(t), "false") }
         override fun onResults(b: Bundle?) {
+            if (!current) return
             val t = text(b)
             if (t.isEmpty()) js("laxOnSpeechError", "'no-speech'") else js("laxOnSpeech", JSONObject.quote(t), "true")
         }
         override fun onError(error: Int) {
+            if (!current) return
+            // The speech service dropped its connection (it restarts itself): start over once with a fresh recognizer.
+            if (error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED && !retried) {
+                retried = true
+                main.post { recognizer?.destroy(); recognizer = null; start(preferOffline) }; return
+            }
             // No offline language pack: try again online before giving up.
             if (preferOffline && (error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE || error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED)) {
                 main.post { start(preferOffline = false) }; return
