@@ -198,8 +198,8 @@ function renderHud() {
   const target = routeChannel();
   $('#chips').innerHTML = sessions.slice(0, 8).map((s) => {
     const ch = channels.find((c) => c.sessionPid && c.sessionPid === s.pid);
-    return `<span class="${s.status}${ch ? ' live' : ''}${ch && ch === target ? ' sel' : ''}" data-cid="${ch ? ch.cid : ''}" data-project="${esc(s.project)}">${ch ? '🔗 ' : ''}${esc(s.project)}</span>`;
-  }).join('') + `<span class="bg${voiceTarget === 'background' || (!target && channels.length === 0) ? ' sel' : ''}" data-cid="background">☁</span>`;
+    return `<span class="${s.status}${ch ? ' live' : ''}${ch && ch === target ? ' sel' : ''}" data-cid="${ch ? ch.cid : ''}" data-project="${esc(s.project)}">${esc(s.project)}</span>`;
+  }).join('');
   $('#lvl').textContent = `Lv${pet.level}`;
   $('#xp i').style.width = Math.round(100 * (pet.xp - pet.prevXp) / Math.max(1, pet.nextXp - pet.prevXp)) + '%';
   $('#dots').innerHTML = sessions.slice(0, 6).map((s) => `<b class="${s.status}" title="${s.project}"></b>`).join('');
@@ -438,7 +438,7 @@ async function openLife() {
   if (!DEMO) { try { memory = await fetch('/api/memory', { headers: { 'x-lax-token': TOKEN } }).then((r) => r.json()); } catch {} renderLife(); }
 }
 function renderLife() {
-  $('#sRoute').innerHTML = [['auto', `auto (${channels.length ? 'latest live' : 'background'})`], ...channels.map((c) => [c.cid, '🔗 ' + c.project]), ['background', '☁ background']]
+  $('#sRoute').innerHTML = [['auto', 'auto'], ...channels.map((c) => [c.cid, c.project]), ['background', 'background']]
     .map(([v, l]) => `<button data-v="${esc(v)}" class="${v === voiceTarget ? 'on' : ''}">${esc(l)}</button>`).join('');
   $('#sName').value !== settings.name && document.activeElement !== $('#sName') && ($('#sName').value = settings.name);
   $('#sPitch').value = settings.pitch;

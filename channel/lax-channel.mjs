@@ -14,7 +14,7 @@ import { claudePid, processArgs } from '../lib/claude-pid.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const LAX = process.env.LAX_URL || 'http://127.0.0.1:7777';
-const TOKEN = fs.readFileSync(path.join(ROOT, 'data', 'token'), 'utf8').trim();
+const TOKEN = fs.readFileSync(path.join(process.env.LAX_DATA || path.join(ROOT, 'data'), 'token'), 'utf8').trim();
 const CID = crypto.randomBytes(5).toString('hex');
 const SESSION_PID = claudePid();
 // Registered at user level, so this server starts in every session. Only sessions launched with the lax channel

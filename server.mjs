@@ -10,7 +10,7 @@ import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
-const DATA = path.join(ROOT, 'data');
+const DATA = process.env.LAX_DATA || path.join(ROOT, 'data'); // LAX_DATA: tests run a private Lax
 // Optional local config (gitignored): { LAX_PUBLIC_URL, CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET, ... }
 try { for (const [k, v] of Object.entries(JSON.parse(fs.readFileSync(path.join(DATA, 'env.json'), 'utf8')))) process.env[k] ??= String(v); } catch {}
 const PORT = Number(process.env.LAX_PORT || 7777);
@@ -295,7 +295,7 @@ function talk(text) {
     clearTimeout(channelWait?.timer);
     channelWait = { cid, timer: setTimeout(() => { channelWait = null; pushState(); }, 180000) };
     pet.voice++; gainXp(3); save();
-    feed(`🎙→ ${short(text, 90)}`, 'prompt', c.project); pushState();
+    feed(`> ${short(text, 90)}`, 'prompt', c.project); pushState();
     return true;
   }
   if (voiceRun) return false;
@@ -305,7 +305,7 @@ function talk(text) {
   const args = ['-p', text, '--output-format', 'stream-json', '--verbose', '--append-system-prompt', VOICE_PROMPT];
   if (voiceSessions[cwd]) args.push('--resume', voiceSessions[cwd]);
   pet.voice++; gainXp(3); save();
-  feed(`🎙 ${short(text, 90)}`, 'prompt', proj(cwd));
+  feed(`> ${short(text, 90)}`, 'prompt', proj(cwd));
   const child = spawn('claude', args, { cwd, env: { ...process.env, LAX_VOICE: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
   voiceRun = { child, cwd, sessionId: voiceSessions[cwd] || null };
   broadcast('react', { state: 'thinking' }); pushState();
@@ -372,7 +372,7 @@ http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
     res.write(': linked\n\n');
     channels.set(cid, { res, cwd, project: proj(cwd), sessionPid: Number(q.get('session_pid')) || null, active: Date.now() });
-    feed(`🔗 live session: ${proj(cwd)}`, 'session', proj(cwd)); pushState();
+    feed(`● live session: ${proj(cwd)}`, 'session', proj(cwd)); pushState();
     const ping = setInterval(() => res.write(': ping\n\n'), 20000);
     req.on('close', () => {
       clearInterval(ping); channels.delete(cid); clearRelays(() => false);

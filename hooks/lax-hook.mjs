@@ -8,7 +8,7 @@ import { claudePid } from '../lib/claude-pid.mjs';
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const URL_BASE = process.env.LAX_URL || 'http://127.0.0.1:7777';
 let token;
-try { token = fs.readFileSync(path.join(ROOT, 'data', 'token'), 'utf8').trim(); } catch { process.exit(0); }
+try { token = fs.readFileSync(path.join(process.env.LAX_DATA || path.join(ROOT, 'data'), 'token'), 'utf8').trim(); } catch { process.exit(0); }
 
 let input; try { input = JSON.parse(fs.readFileSync(0, 'utf8') || '{}'); } catch { process.exit(0); }
 const post = (p, body, ms) => fetch(URL_BASE + p, {

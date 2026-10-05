@@ -1,13 +1,22 @@
 // End-to-end check of the lax channel without Claude Code: spawn it over stdio like Claude Code does,
-// then drive the Lax server and assert each hop (talk → channel event, reply → bubble, relay → verdict, hook de-dup).
+// then drive a Lax server and assert each hop (talk → channel event, reply → bubble, relay → verdict, hook de-dup).
+// Runs against a PRIVATE Lax (own port + temp data dir), so your real Lax never sees test sessions, XP or feed lines.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const LAX = 'http://127.0.0.1:7777', TOKEN = fs.readFileSync(path.join(ROOT, 'data', 'token'), 'utf8').trim();
+const PORT = 7798, LAX = `http://127.0.0.1:${PORT}`, DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-test-'));
+const ENV = { ...process.env, LAX_DATA: DATA, LAX_PORT: String(PORT), LAX_URL: LAX, LAX_PUBLIC_URL: '' };
+const server = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server.mjs')], { env: ENV, stdio: 'ignore' });
+const cleanup = () => { server.kill(); fs.rmSync(DATA, { recursive: true, force: true }); };
+process.on('exit', cleanup);
+for (let i = 0; i < 50 && !fs.existsSync(path.join(DATA, 'token')); i++) await new Promise((r) => setTimeout(r, 100));
+await new Promise((r) => setTimeout(r, 300));
+const TOKEN = fs.readFileSync(path.join(DATA, 'token'), 'utf8').trim();
 const H = { 'content-type': 'application/json', 'x-lax-token': TOKEN };
 const post = (p, b) => fetch(LAX + p, { method: 'POST', headers: H, body: JSON.stringify(b) }).then((r) => r.json());
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -29,7 +38,7 @@ const phone = [];
 const got = [];
 const client = new Client({ name: 'fake-claude-code', version: '0' }, { capabilities: {} });
 client.fallbackNotificationHandler = async (n) => { got.push(n); };
-await client.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(ROOT, 'channel', 'lax-channel.mjs')], cwd: ROOT, stderr: 'ignore', env: { ...process.env, LAX_CHANNEL_FORCE: '1' } }));
+await client.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(ROOT, 'channel', 'lax-channel.mjs')], cwd: ROOT, stderr: 'ignore', env: { ...ENV, LAX_CHANNEL_FORCE: '1' } }));
 const caps = client.getServerCapabilities();
 check('channel declares claude/channel + permission relay', !!caps.experimental?.['claude/channel'] && !!caps.experimental?.['claude/channel/permission']);
 check('reply tool listed', (await client.listTools()).tools.some((t) => t.name === 'reply'));
@@ -58,7 +67,7 @@ const verdict = got.find((n) => n.method === 'notifications/claude/channel/permi
 check('✓ on phone → verdict back to the session', verdict?.params?.request_id === 'abcde' && verdict?.params?.behavior === 'allow');
 
 // Same session's PermissionRequest hook must step aside for tool approvals (no duplicate bubble)…
-const hook = (input) => execFileSync(process.execPath, [path.join(ROOT, 'hooks', 'lax-hook.mjs')], { input: JSON.stringify(input), encoding: 'utf8', timeout: 15000 });
+const hook = (input) => execFileSync(process.execPath, [path.join(ROOT, 'hooks', 'lax-hook.mjs')], { input: JSON.stringify(input), encoding: 'utf8', timeout: 15000, env: ENV });
 const t0 = Date.now();
 const out = hook({ hook_event_name: 'PermissionRequest', session_id: 'lax-test', cwd: ROOT, tool_name: 'Bash', tool_input: { command: 'ls' } });
 check('hook steps aside for tool approvals in a channel session', out.trim() === '' && Date.now() - t0 < 3000, `${Date.now() - t0}ms`);
