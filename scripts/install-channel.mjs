@@ -34,7 +34,8 @@ Run it from this session's working directory (the folder the conversation starte
   session so the two don't both write to the same conversation.
 If it couldn't open a terminal, give them the command it printed to run themselves.
 `;
-const SCRIPT = '#!/bin/sh\n# lax channel: a Claude Code session that hears you through Lax\nexec claude --dangerously-load-development-channels server:lax "$@"\n';
+// Unset CLAUDE_CODE_ENTRYPOINT: a terminal opened by the desktop app (/lax) inherits claude-desktop, which would label the tab ·mac.
+const SCRIPT = '#!/bin/sh\n# lax channel: a Claude Code session that hears you through Lax\nunset CLAUDE_CODE_ENTRYPOINT\nexec claude --dangerously-load-development-channels server:lax "$@"\n';
 
 const claude = (...args) => { try { return execFileSync('claude', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); } catch (e) { return e.stdout || e.message; } };
 claude('mcp', 'remove', '--scope', 'user', 'lax');
