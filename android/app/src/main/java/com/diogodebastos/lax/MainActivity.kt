@@ -179,7 +179,10 @@ class MainActivity : Activity() {
     // Fold ↔ unfold and the cover screen: handled here (see configChanges), so the page just gets a resize event.
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        if (::web.isInitialized) immersive()
+        if (::web.isInitialized) {
+            immersive()
+            web.evaluateJavascript("window.laxOnTheme && laxOnTheme()", null) // dark mode may have changed
+        }
     }
 
     @Deprecated("Deprecated in Java")

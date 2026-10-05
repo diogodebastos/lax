@@ -53,6 +53,10 @@ class LaxBridge(private val act: MainActivity, private val web: WebView) {
     /** The camera hole's safe insets in CSS px: {"top":31.3,…}. */
     @JavascriptInterface fun insets(): String = act.cutout
 
+    /** The phone's dark mode, for the page's "system" theme. */
+    @JavascriptInterface fun nightMode(): Boolean =
+        (act.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+
     // ---------- speech recognition ----------
     private var retried = false
 

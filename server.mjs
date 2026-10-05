@@ -50,7 +50,7 @@ if (!kvGet('pet', null)) { milestone('Lax was born'); }
 
 // Life menu settings — live on the Mac, edited from the phone.
 const DEFAULTS = { name: 'Lax', color: '#D97757', voice: true, pitch: 1.6, speakDone: false,
-  phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30) };
+  phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system' };
 let settings = { ...DEFAULTS, ...kvGet('settings', {}) };
 function updateSettings(b) {
   const clean = {};
@@ -59,6 +59,7 @@ function updateSettings(b) {
   for (const k of ['voice', 'speakDone', 'phoneApprovals']) if (typeof b[k] === 'boolean') clean[k] = b[k];
   if (Number.isFinite(b.pitch)) clean.pitch = Math.min(2, Math.max(0.5, b.pitch));
   if ([15, 30, 60, 120].includes(b.askTimeout)) clean.askTimeout = b.askTimeout;
+  if (['system', 'light', 'dark'].includes(b.theme)) clean.theme = b.theme;
   settings = { ...settings, ...clean }; kvSet('settings', settings);
 }
 function rebirth() {

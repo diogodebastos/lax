@@ -50,15 +50,30 @@ addEventListener('error', (e) => diag('js-error', { msg: e.message, at: `${e.fil
 const api = (p, body) => fetch(p, { method: 'POST', headers: { 'content-type': 'application/json', 'x-lax-token': TOKEN }, body: JSON.stringify(body || {}) }).then((r) => r.json());
 
 // ---------- palette ----------
-const C = { ink: '#000', out: '#120c0a', body: '#D97757', hi: '#F2A585', lo: '#A9522F', eye: '#fff8ee', red: '#ff4b3e', band: '#e0302a',
+const C = { bg: '#000', shadow: '#2a2521', ink: '#000', out: '#120c0a', body: '#D97757', hi: '#F2A585', lo: '#A9522F', eye: '#fff8ee', red: '#ff4b3e', band: '#e0302a',
   glass: '#7fd3ff', gold: '#ffd25a', green: '#6fd36f', ground: '#1f1c19', dust: '#5b544b', cape: '#3b4cc0' };
 const SIZES = { sprout: [10, 9], blob: [13, 12], cube: [15, 14], brick: [17, 16], legend: [19, 18] };
 
 // ---------- world state ----------
-let settings = { name: 'Lax', color: '#D97757', voice: true, pitch: 1.6, speakDone: false, phoneApprovals: true, askTimeout: 30 };
+let settings = { name: 'Lax', color: '#D97757', voice: true, pitch: 1.6, speakDone: false, phoneApprovals: true, askTimeout: 30, theme: 'system' };
 const shade = (hex, amt) => { const n = parseInt(hex.slice(1), 16), t = amt < 0 ? 0 : 255, a = Math.abs(amt);
   return '#' + [16, 8, 0].map((sh) => Math.round(((n >> sh) & 255) * (1 - a) + t * a).toString(16).padStart(2, '0')).join(''); };
+// Theme: system (the phone's or computer's dark mode), light or dark. Remembered per device so the page starts right.
+const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+function systemDark() { try { const n = NATIVE?.nightMode?.(); if (typeof n === 'boolean') return n; } catch {} return darkQuery.matches; }
+function applyTheme() {
+  let t = settings.theme || 'system';
+  if (t === 'system') t = systemDark() ? 'dark' : 'light';
+  document.documentElement.dataset.theme = t;
+  const css = getComputedStyle(document.documentElement);
+  C.bg = css.getPropertyValue('--bg').trim(); C.shadow = css.getPropertyValue('--dot').trim();
+  try { localStorage.lax_theme = settings.theme || 'system'; } catch {}
+}
+try { if (localStorage.lax_theme) settings.theme = localStorage.lax_theme; } catch {}
+darkQuery.addEventListener?.('change', applyTheme);
+window.laxOnTheme = applyTheme; // the app calls this when the phone switches dark mode
 function applyLook() {
+  applyTheme();
   C.body = settings.color; C.hi = shade(settings.color, 0.3); C.lo = shade(settings.color, -0.25);
   document.documentElement.style.setProperty('--coral', settings.color);
   $('#nameBtn').textContent = settings.name.toUpperCase(); $('#lifeName').textContent = settings.name.toUpperCase();
@@ -126,7 +141,7 @@ function draw(m, t) {
   if (m === 'talking') s += Math.sin(t / 60) * 0.03;
   const cx = CX + dx, x0 = cx - Math.floor(w / 2), feetH = 2, y0 = GROUND - feetH - h - Math.round(body.y);
   const shadowW = Math.max(4, w - Math.round(body.y / 2));
-  px(cx - shadowW / 2, GROUND + 1, shadowW, 1, '#2a2521');
+  px(cx - shadowW / 2, GROUND + 1, shadowW, 1, C.shadow);
 
   // cape behind
   if (pet.traits.includes('cape')) { const fl = Math.round(Math.sin(t / 120) * 2); px(x0 - 3 + fl, y0 + 3, 3, h - 2, C.cape); px(x0 - 4 + fl * 2, y0 + 5, 2, h - 5, C.cape); }
@@ -142,7 +157,7 @@ function draw(m, t) {
   px(x0, y0 + h - 2, w, 2, C.lo); px(x0 + w - 2, y0, 2, h, C.lo);
   px(x0 + 1, y0 + 1, w - 4, 1, C.hi); px(x0 + 1, y0 + 1, 1, h - 4, C.hi);
   if (pet.stage === 'sprout' || pet.stage === 'blob') { // round the corners
-    for (const [cx2, cy2] of [[x0 - 1, y0 - 1], [x0 + w, y0 - 1], [x0 - 1, y0 + h], [x0 + w, y0 + h]]) px(cx2, cy2, 1, 1, '#000');
+    for (const [cx2, cy2] of [[x0 - 1, y0 - 1], [x0 + w, y0 - 1], [x0 - 1, y0 + h], [x0 + w, y0 + h]]) px(cx2, cy2, 1, 1, C.bg);
     for (const [cx2, cy2] of [[x0, y0], [x0 + w - 1, y0], [x0, y0 + h - 1], [x0 + w - 1, y0 + h - 1]]) px(cx2, cy2, 1, 1, C.out);
   }
   if (pet.traits.includes('scar')) { px(x0 + w - 5, y0 + h - 6, 1, 1, C.out); px(x0 + w - 4, y0 + h - 5, 1, 1, C.out); px(x0 + w - 3, y0 + h - 4, 1, 1, C.out); }
@@ -514,6 +529,7 @@ function renderLife() {
     + `<input type="color" id="sColor" value="${settings.color}" title="custom">`;
   lifeEl.querySelectorAll('.tog').forEach((t) => t.classList.toggle('on', !!settings[t.dataset.k]));
   $('#sWait').querySelectorAll('button').forEach((b) => b.classList.toggle('on', +b.dataset.v === settings.askTimeout));
+  $('#sTheme').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === (settings.theme || 'system')));
   const raw = memory?.raw || {}, p = memory?.pet || pet;
   const days = p.born ? Math.max(0, Math.floor((Date.now() - p.born) / 864e5)) : 0;
   $('#stats').innerHTML = [['level', p.level], ['stage', p.stage], ['xp', p.xp], ['streak', (p.streak || 0) + 'd'], ['age', days + 'd'], ['mood', p.mood],
@@ -533,6 +549,7 @@ $('#swatches').addEventListener('click', (e) => { if (e.target.dataset.c) { save
 $('#swatches').addEventListener('change', (e) => { if (e.target.id === 'sColor') { saveSettings({ color: e.target.value }); hop(1); } });
 lifeEl.querySelectorAll('.tog').forEach((t) => t.addEventListener('click', () => saveSettings({ [t.dataset.k]: !settings[t.dataset.k] })));
 $('#sWait').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ askTimeout: +e.target.dataset.v }));
+$('#sTheme').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ theme: e.target.dataset.v }));
 // Rebirth needs a 2-second hold so it can't happen by accident.
 { const btn = $('#rebirth'), fill = btn.querySelector('i'); let t0, raf;
   const tick = () => { const k = Math.min(1, (performance.now() - t0) / 2000); fill.style.width = k * 100 + '%';
