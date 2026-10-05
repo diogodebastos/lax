@@ -203,8 +203,11 @@ const term = $('#term');
 function feed(line, kind = 'tool', project) {
   const d = document.createElement('div'); d.className = kind;
   if (project && kind !== 'session') { const p = document.createElement('span'); p.className = 'p'; p.textContent = project.slice(0, 8) + ' '; d.append(p); }
+  // Follow new lines only if you're already at the bottom (so scrolling back to read isn't yanked away).
+  const stick = term.scrollHeight - term.scrollTop - term.clientHeight < 40;
   d.append(line); term.insertBefore(d, term.lastElementChild);
-  while (term.children.length > 40) term.firstElementChild.remove();
+  while (term.children.length > 200) term.firstElementChild.remove();
+  if (stick) term.scrollTop = term.scrollHeight;
   if (kind === 'tool') lastWork = performance.now();
 }
 
@@ -342,7 +345,6 @@ function send(text) {
 const topEl = $('#top');
 topEl.addEventListener('click', () => { if (!wakeEl.isConnected && !lifeEl.classList.contains('open')) startListening(); });
 topEl.addEventListener('contextmenu', (e) => e.preventDefault());
-$('#talk').addEventListener('click', startListening);
 // Desktop: hold space to talk.
 addEventListener('keydown', (e) => { if (e.code === 'Space' && !e.repeat && !listening && e.target === document.body) { e.preventDefault(); startListening(); } });
 addEventListener('keyup', (e) => { if (e.code === 'Space') stopListening(); });
@@ -432,10 +434,10 @@ function renderLife() {
     ['traits', (p.traits || []).join(', ') || 'none yet']].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
   const tools = Object.entries(raw.tools || {}).filter(([k]) => !k.startsWith('__')).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const max = tools[0]?.[1] || 1;
-  $('#tools').innerHTML = tools.length ? tools.map(([k, v]) => `<div class="bar"><span>${k}</span><i style="width:${Math.round(100 * v / max)}px"></i>${v}</div>`).join('') : '<div class="bar">nothing yet</div>';
+  $('#tools').innerHTML = tools.length ? tools.map(([k, v]) => `<div class="bar"><span>${esc(k.replace(/^mcp__.*?__/, ''))}</span><div class="track"><i style="width:${Math.round(100 * v / max)}%"></i></div><b>${v}</b></div>`).join('') : '<div class="bar"><span>nothing yet</span></div>';
   $('#miles').innerHTML = (memory?.milestones || []).slice(0, 12).map((m) => `<li>${new Date(m.ts).toLocaleDateString()} ${m.text.replace(/</g, '&lt;')}</li>`).join('') || '<li>…</li>';
 }
-for (const id of ['#nameBtn', '#lifeBtn']) $(id).addEventListener('click', (e) => { e.stopPropagation(); openLife(); });
+$('#nameBtn').addEventListener('click', (e) => { e.stopPropagation(); openLife(); });
 lifeEl.addEventListener('pointerdown', (e) => e.stopPropagation());
 $('#lifeClose').addEventListener('click', () => lifeEl.classList.remove('open'));
 $('#sName').addEventListener('change', (e) => e.target.value.trim() && saveSettings({ name: e.target.value.trim().slice(0, 12) }));
