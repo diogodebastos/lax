@@ -3,6 +3,7 @@
 // Fails fast and silently when Lax isn't running, so Claude Code is never slowed down.
 import fs from 'node:fs';
 import path from 'node:path';
+import { claudePid } from '../lib/claude-pid.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const URL_BASE = process.env.LAX_URL || 'http://127.0.0.1:7777';
@@ -24,7 +25,8 @@ try {
 
   // Interactive sessions: offer the permission prompt on the phone first.
   if (ev === 'PermissionRequest') {
-    const { decision, answers } = await post('/api/ask', input, 600000);
+    // Which session is this? If it has a live lax channel, the channel relays tool approvals instead.
+    const { decision, answers } = await post('/api/ask', { ...input, lax_session_pid: claudePid() }, 600000);
     // A question answered on the phone: allow the tool with the answers filled in, as the terminal UI would.
     if (decision === 'answer') {
       console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest',

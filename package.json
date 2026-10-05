@@ -13,6 +13,12 @@
     "remove-hooks": "node scripts/install-hooks.mjs --remove",
     "install-service": "node scripts/install-launchd.mjs",
     "remove-service": "node scripts/install-launchd.mjs --remove",
-    "logs": "tail -f data/server.log data/tunnel.log"
+    "logs": "tail -f data/server.log data/tunnel.log",
+    "install-channel": "node scripts/install-channel.mjs",
+    "remove-channel": "node scripts/install-channel.mjs --remove"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^4.6.5"
   }
 }

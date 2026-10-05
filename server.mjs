@@ -132,7 +132,8 @@ function sessionList() {
   const cutoff = Date.now() - 6 * 36e5;
   return [...sessions.entries()].filter(([, s]) => s.ts > cutoff).map(([id, s]) => ({ id, ...s }));
 }
-const stateMsg = () => ({ pet: petView(), sessions: sessionList(), voiceBusy: !!voiceRun, settings });
+const stateMsg = () => ({ pet: petView(), sessions: sessionList(), voiceBusy: !!voiceRun, thinking: !!channelWait, settings,
+  channels: channelList(), voiceTarget });
 const pushState = () => broadcast('state', stateMsg());
 const feed = (line, kind = 'tool', project) => broadcast('feed', { line, kind, project, ts: Date.now() });
 const proj = (cwd) => (cwd ? path.basename(cwd) : '?');
@@ -165,6 +166,7 @@ function onHook(h) {
   s.ts = Date.now(); s.project = project; if (h.cwd) s.cwd = h.cwd;
   sessions.set(sid, s);
   touchDay();
+  if (/^(PostToolUse|PostToolUseFailure|Stop|UserPromptSubmit)$/.test(h.hook_event_name)) clearRelays((c) => c.cwd === h.cwd);
   switch (h.hook_event_name) {
     case 'SessionStart':
       pet.sessions++; gainXp(2); s.status = 'idle';
@@ -210,12 +212,14 @@ function onHook(h) {
   save(); pushState();
 }
 
-// A hook is waiting for the human: show the bubble, resolve when the phone taps ✓/✗ (or time out).
 // A hook is waiting for the human: show the bubble, resolve when the phone answers (or time out).
 // Decisions: allow | deny | answer (AskUserQuestion, with answers) | none (fall back to the terminal).
 function ask(h) {
   return new Promise((resolve) => {
     if (clients.size === 0 || !settings.phoneApprovals) return resolve({ decision: 'none' });
+    // Sessions with a live lax channel relay tool approvals themselves (no duplicate bubble); questions still come here.
+    if (h.tool_name !== 'AskUserQuestion' && h.lax_session_pid && [...channels.values()].some((c) => c.sessionPid === h.lax_session_pid))
+      return resolve({ decision: 'none' });
     const id = crypto.randomBytes(6).toString('hex'), project = proj(h.cwd);
     const questions = h.tool_name === 'AskUserQuestion' && Array.isArray(h.tool_input?.questions) ? h.tool_input.questions : null;
     const bubble = questions
@@ -236,11 +240,63 @@ function ask(h) {
   });
 }
 
+// ---------- channels: Claude Code sessions started with `--dangerously-load-development-channels server:lax` ----------
+// Each runs channel/lax-channel.mjs, which holds an SSE stream here. Voice goes into that running session;
+// Claude answers with the channel's reply tool; permission dialogs are relayed to the phone.
+const channels = new Map(); // cid -> { res, sessionPid, cwd, project, active }
+let voiceTarget = 'auto';   // 'auto' (most recently active channel) | 'background' | a cid
+let channelWait = null;     // { cid, timer } while a channel session is working on something you said
+const channelList = () => [...channels.entries()].map(([cid, c]) => ({ cid, project: c.project, active: c.active }));
+const sendChannel = (cid, event, data) => channels.get(cid)?.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+function pickChannel() {
+  if (voiceTarget === 'background') return null;
+  if (channels.has(voiceTarget)) return voiceTarget;
+  return [...channels.entries()].sort((a, b) => b[1].active - a[1].active)[0]?.[0] || null;
+}
+function clearRelays(match) {
+  for (const [id, p] of pending) if (p.relay && match(channels.get(p.relay.cid) || {})) p.finish('none');
+}
+function channelEvent(b) {
+  const c = channels.get(b.cid); if (!c) return false;
+  c.active = Date.now();
+  if (b.type === 'reply') {
+    if (channelWait?.cid === b.cid) { clearTimeout(channelWait.timer); channelWait = null; }
+    const text = String(b.text || '');
+    feed(`↩ ${short(spoken(text), 90)}`, 'done', c.project); logEvent('', c.project, 'reply', short(text, 1000));
+    broadcast('bubble', { id: 'ch' + Date.now(), kind: 'reply', text: short(text.replace(/```[\s\S]*?```/g, ' '), 400), say: spoken(text), speak: true });
+  } else if (b.type === 'permission') {
+    const id = 'relay-' + b.request_id;
+    const bubble = { id, kind: 'permission', actions: true, speak: true, details: String(b.input_preview || ''),
+      text: `${c.project} wants to: ${b.tool_name}${b.description ? ' — ' + short(b.description, 140) : ''}` };
+    pending.set(id, { bubble, relay: { cid: b.cid }, finish(decision) {
+      if (!pending.delete(id)) return;
+      broadcast('clear', { id });
+      if (decision !== 'allow' && decision !== 'deny') return;
+      sendChannel(b.cid, 'verdict', { request_id: b.request_id, behavior: decision });
+      if (decision === 'allow') pet.approvals++; else pet.denials++;
+      feed(`  ${decision === 'allow' ? '✓ approved' : '✗ denied'} from phone`, decision === 'allow' ? 'done' : 'error', c.project); save();
+    } });
+    broadcast('bubble', bubble);
+  }
+  pushState();
+  return true;
+}
+
 // ---------- voice → Claude Code (headless, uses your Claude subscription login) ----------
 let voiceRun = null;
 const VOICE_PROMPT = 'The user is talking to you by voice through Lax, a small pixel companion on their phone. ' +
   'Start your final reply with ONE short, plain sentence (no markdown, no code) that can be read aloud as the outcome. Details may follow.';
 function talk(text) {
+  const cid = pickChannel();
+  if (cid) { // into the running session
+    const c = channels.get(cid);
+    sendChannel(cid, 'message', { chat_id: crypto.randomBytes(3).toString('hex'), text });
+    clearTimeout(channelWait?.timer);
+    channelWait = { cid, timer: setTimeout(() => { channelWait = null; pushState(); }, 180000) };
+    pet.voice++; gainXp(3); save();
+    feed(`🎙→ ${short(text, 90)}`, 'prompt', c.project); pushState();
+    return true;
+  }
   if (voiceRun) return false;
   const recent = sessionList().sort((a, b) => b.ts - a.ts)[0];
   const cwd = (recent && recent.cwd) || kvGet('voiceCwd', DEFAULT_WORKDIR);
@@ -310,6 +366,22 @@ http.createServer(async (req, res) => {
     const ping = setInterval(() => res.write(': ping\n\n'), 20000); req.on('close', () => clearInterval(ping));
     return;
   }
+  if (url.pathname === '/api/channel/stream' && isLocal(req)) {
+    const q = url.searchParams, cid = q.get('cid') || crypto.randomBytes(5).toString('hex'), cwd = q.get('cwd') || '';
+    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
+    res.write(': linked\n\n');
+    channels.set(cid, { res, cwd, project: proj(cwd), sessionPid: Number(q.get('session_pid')) || null, active: Date.now() });
+    feed(`🔗 live session: ${proj(cwd)}`, 'session', proj(cwd)); pushState();
+    const ping = setInterval(() => res.write(': ping\n\n'), 20000);
+    req.on('close', () => {
+      clearInterval(ping); channels.delete(cid); clearRelays(() => false);
+      for (const [id, p] of pending) if (p.relay?.cid === cid) p.finish('none');
+      if (channelWait?.cid === cid) { clearTimeout(channelWait.timer); channelWait = null; }
+      if (voiceTarget === cid) voiceTarget = 'auto';
+      feed(`○ live session closed: ${proj(cwd)}`, 'session', proj(cwd)); pushState();
+    });
+    return;
+  }
   if (url.pathname === '/api/memory') return json(res, { pet: petView(), raw: pet, voiceProject: proj(kvGet('voiceCwd', DEFAULT_WORKDIR)),
     milestones: db.prepare('SELECT ts,text FROM milestones ORDER BY id DESC LIMIT 50').all() });
   if (req.method !== 'POST') return json(res, { error: 'method' }, 405);
@@ -329,6 +401,10 @@ http.createServer(async (req, res) => {
     case '/api/settings': updateSettings(b); pushState(); return json(res, { ok: true, settings });
     case '/api/rebirth': rebirth(); broadcast('reborn', {}); pushState(); return json(res, { ok: true });
     case '/api/diag': console.log(`[phone ${new Date().toISOString().slice(11, 19)}] ${JSON.stringify(b).slice(0, 600)}`); return json(res, { ok: true });
+    case '/api/channel/event': return json(res, { ok: isLocal(req) && channelEvent(b) });
+    case '/api/target':
+      voiceTarget = b.target === 'background' || channels.has(b.target) ? b.target : 'auto'; pushState();
+      return json(res, { ok: true, voiceTarget });
     case '/api/talk': return json(res, { ok: talk(String(b.text || '').slice(0, 2000)) });
     default: return json(res, { error: 'not found' }, 404);
   }

@@ -54,7 +54,7 @@ function applyLook() {
   $('#nameBtn').textContent = settings.name.toUpperCase(); $('#lifeName').textContent = settings.name.toUpperCase();
 }
 let pet = { name: 'Lax', level: 1, stage: 'sprout', traits: [], mood: 'happy', xp: 0, prevXp: 0, nextXp: 10 };
-let sessions = [], voiceBusy = false, lastWork = 0;
+let sessions = [], voiceBusy = false, thinking = false, lastWork = 0, channels = [], voiceTarget = 'auto';
 let listening = false, speaking = false, react = null, reactUntil = 0;
 const body = { y: 0, vy: 0, s: 0, sv: 0, look: 0, blinkAt: 0, nextHop: 3 };
 const parts = [];
@@ -64,7 +64,7 @@ function mode(now) {
   if (listening) return 'listening';
   if (speaking) return 'talking';
   if (react && now < reactUntil) return react;
-  if (voiceBusy) return 'thinking';
+  if (voiceBusy || thinking) return 'thinking';
   if (now - lastWork < 5000) return 'working';
   if (pet.mood === 'sleepy' || pet.mood === 'dusty') return 'sleep';
   return 'idle';
@@ -221,7 +221,7 @@ function showBubble(b) {
   else if (b.kind === 'levelup') { sfx([523, 659, 784, 1046]); setReact('happy', 2500); }
   else if (b.kind === 'done') { sfx([784, 1046]); setReact('happy'); }
   else if (b.kind === 'error') { sfx([220, 160]); setReact('error'); }
-  if (b.speak || (b.kind === 'done' && settings.speakDone)) speak(b.kind === 'permission' ? 'I need you. ' + b.text : b.kind === 'question' ? 'Question. ' + b.questions[0].question : b.text);
+  if (b.speak || (b.kind === 'done' && settings.speakDone)) speak(b.kind === 'permission' ? 'I need you. ' + b.text : b.kind === 'question' ? 'Question. ' + b.questions[0].question : b.say || b.text);
 }
 function clearBubble(id) { bubbles = bubbles.filter((x) => x.id !== id); renderBubble(); }
 function renderBubble() {
@@ -232,6 +232,8 @@ function renderBubble() {
   elB.className = 'show ' + b.kind; elB.dataset.id = b.id;
   if (b.kind !== 'question') elB.querySelector('.tag').textContent = TAGS[b.kind] || '';
   elB.querySelector('.actions').style.display = b.actions ? 'flex' : 'none';
+  elB.querySelector('.more').style.display = b.details ? '' : 'none';
+  const det = elB.querySelector('.det'); det.textContent = b.details || ''; det.style.display = b.details && b.showDetails ? 'block' : 'none';
   if (b.kind !== 'question') { elB.querySelector('.text').textContent = b.text; elB.dataset.key = ''; return; }
   // Question: one at a time; only rebuild when something changed (the 1s refresh would wipe selections).
   b.qi ??= 0; b.answers ??= {}; b.picked ??= [];
@@ -258,6 +260,7 @@ elB.addEventListener('pointerdown', (e) => e.stopPropagation());
 elB.addEventListener('click', (e) => {
   e.stopPropagation();
   const id = elB.dataset.id, b = bubbles.find((x) => x.id === id); if (!b) return;
+  if (e.target.matches('.more')) { b.showDetails = !b.showDetails; renderBubble(); return; }
   if (e.target.matches('.yes, .no')) { const decision = e.target.matches('.yes') ? 'allow' : 'deny';
     clearBubble(id); sfx(decision === 'allow' ? [880, 1175] : [300, 200]); if (decision === 'allow') setReact('happy'); if (!DEMO) api('/api/decide', { id, decision }); }
   else if (b.kind === 'question') {
@@ -299,7 +302,14 @@ function speak(text) {
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const isBrave = !!navigator.brave;
 let rec, heard = '', cancelled = false;
-const hint = $('#hint'), IDLE_HINT = 'tap Lax to talk';
+const hint = $('#hint');
+let IDLE_HINT = 'tap Lax to talk';
+// Where talking goes: a live Claude Code session (lax channel) or the background session.
+function talkRoute() {
+  const live = voiceTarget === 'background' ? null : channels.find((c) => c.cid === voiceTarget) || [...channels].sort((a, b) => b.active - a.active)[0];
+  return live ? `🔗 ${live.project}` : '☁ background';
+}
+function updateHint() { IDLE_HINT = `tap Lax to talk → ${talkRoute()}`; if (!listening && SR && !isBrave) hint.textContent = IDLE_HINT; }
 const MIC_ERRORS = {
   'not-allowed': 'Mic is blocked. Tap the icon left of the address → Permissions → Microphone → Allow, then reload.',
   'service-not-allowed': 'This browser has no speech recognition. Use Chrome.',
@@ -357,7 +367,7 @@ wakeEl.addEventListener('click', async () => {
 });
 
 // ---------- live link ----------
-function applyState(s) { pet = s.pet; sessions = s.sessions; voiceBusy = s.voiceBusy; if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
+function applyState(s) { pet = s.pet; sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
 if (DEMO) demo();
 else if (!TOKEN) feed('no token — open the URL printed by `npm start`', 'error');
 else {
@@ -407,6 +417,8 @@ async function openLife() {
   if (!DEMO) { try { memory = await fetch('/api/memory', { headers: { 'x-lax-token': TOKEN } }).then((r) => r.json()); } catch {} renderLife(); }
 }
 function renderLife() {
+  $('#sRoute').innerHTML = [['auto', `auto (${channels.length ? 'latest live' : 'background'})`], ...channels.map((c) => [c.cid, '🔗 ' + c.project]), ['background', '☁ background']]
+    .map(([v, l]) => `<button data-v="${esc(v)}" class="${v === voiceTarget ? 'on' : ''}">${esc(l)}</button>`).join('');
   $('#sName').value !== settings.name && document.activeElement !== $('#sName') && ($('#sName').value = settings.name);
   $('#sPitch').value = settings.pitch;
   $('#swatches').innerHTML = COLORS.map((c) => `<button style="background:${c}" data-c="${c}" class="${c === settings.color ? 'on' : ''}"></button>`).join('')
@@ -440,3 +452,5 @@ $('#sWait').addEventListener('click', (e) => e.target.dataset.v && saveSettings(
   btn.addEventListener('pointerdown', () => { t0 = performance.now(); tick(); });
   btn.addEventListener('pointerup', cancel); btn.addEventListener('pointerleave', cancel); }
 applyLook(); fit();
+
+$('#sRoute').addEventListener('click', (e) => { const v = e.target.dataset.v; if (!v) return; voiceTarget = v; updateHint(); renderLife(); if (!DEMO) api('/api/target', { target: v }); });

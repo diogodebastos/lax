@@ -94,8 +94,25 @@ On power, turn on System Settings → Battery → Options → *Prevent automatic
 ## Phone
 
 1. Open `http://localhost:7777/pair` on the Mac and scan the QR code with the phone. Open it in **Chrome**; Brave has no speech recognition.
-2. Log in once with the email PIN. Tap "wake", then hold to talk.
+2. Log in once with the email PIN. Tap "wake", then tap Lax to talk.
 3. Cover screen and background notifications: see the Android app (phase 2) and the cover-screen setup (phase 3) issues.
+
+## Talk into your running session (channel)
+
+Lax is also a Claude Code **channel**: what you say to Lax goes into a running terminal session, and Claude answers back through Lax.
+
+```bash
+npm run install-channel   # user-level MCP server `lax` + `claude-lax` alias (remove-channel undoes)
+claude-lax                # = claude --dangerously-load-development-channels server:lax
+```
+
+- The first time, accept the development-channel warning and the MCP prompt. The startup notice reads "Channels (experimental) … server:lax".
+- Tap Lax and speak. It arrives in that session as `← lax: …`. Claude does the work and calls the `reply` tool, and Lax reads the first sentence aloud.
+- Tool approvals in that session are **relayed** to the phone (✓/✗, plus ⋯ for the full command), in parallel with the terminal dialog; whichever answers first wins. Questions (`AskUserQuestion`) still use the options UI.
+- **Life menu → talk goes to** picks the target: *auto* (most recently active live session), a specific `🔗 project`, or *☁ background* (a separate `claude -p` session, the fallback when no live session is open).
+- The lax MCP server starts in every session but stays dormant (no tools, no link) unless the session was launched with the lax channel.
+- Research preview: terminal sessions only (not the Desktop app), and the flag may change.
+- `node scripts/test-channel.mjs` runs an end-to-end check with a fake Claude Code.
 
 ## Behaviour notes
 

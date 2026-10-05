@@ -125,6 +125,12 @@
   body.big #bubble .choices button.opt { font-size:22px; line-height:20px; padding:7px 10px; } body.big #bubble .choices button.opt small { font-size:17px; line-height:16px; }
   body.big #bubble .choices .row button { font-size:20px; padding:6px 0; } body.big #bubble .choices { max-height:340px; }
 
+  #bubble .actions .more { flex:0 0 40px; background:#14110f; }
+  #bubble .det { display:none; margin-top:6px; max-height:110px; overflow:auto; background:#14110f; color:#7CFC9A; font:13px/14px ui-monospace,monospace;
+    padding:5px 6px; white-space:pre-wrap; word-break:break-all; }
+  body.big #bubble .det { font-size:15px; line-height:17px; max-height:220px; }
+  #sRoute button { border:2px solid #2c2824; }
+
   #wake { position:fixed; inset:0; z-index:10; background:#000; display:grid; place-items:center; text-align:center; color:var(--coral); font-size:22px; cursor:pointer; }
   #wake small { display:block; color:var(--dim); font-size:15px; margin-top:6px; }
 </style>
@@ -134,7 +140,7 @@
   <div id="top">
     <canvas id="stage" width="52" height="51"></canvas>
     <div id="hud"><span class="name" id="nameBtn">LAX</span><span id="lvl">Lv1</span><div id="xp"><i></i></div><div id="dots"></div></div>
-    <div id="bubble"><span class="tag"></span><div class="text"></div><div class="choices"></div><div class="actions"><button class="yes">✓ yes</button><button class="no">✗ no</button></div></div>
+    <div id="bubble"><span class="tag"></span><div class="text"></div><div class="choices"></div><pre class="det"></pre><div class="actions"><button class="yes">✓ yes</button><button class="no">✗ no</button><button class="more">⋯</button></div></div>
     <div id="hint">tap Lax to talk</div>
   </div>
   <div id="bottom">
@@ -152,6 +158,8 @@
     <label>speaks out loud <button class="tog" data-k="voice"></button></label>
     <label>pitch <input type="range" id="sPitch" min="0.5" max="2" step="0.1"></label>
     <label>reads every "done" <button class="tog" data-k="speakDone"></button></label>
+    <h3>talk goes to</h3>
+    <div class="seg" id="sRoute" style="flex-wrap:wrap;gap:4px"></div>
     <h3>approvals</h3>
     <label>ask me on the phone <button class="tog" data-k="phoneApprovals"></button></label>
     <label>wait before terminal <span class="seg" id="sWait"><button data-v="15">15s</button><button data-v="30">30s</button><button data-v="60">60s</button><button data-v="120">2m</button></span></label>
@@ -166,6 +174,6 @@
   </div>
 </div>
 <div id="wake"><div>tap to wake Lax<small>(unlocks sound + mic)</small></div></div>
-<script src="lax.js?v=6"></script>
+<script src="lax.js?v=7"></script>
 </body>
 </html>
