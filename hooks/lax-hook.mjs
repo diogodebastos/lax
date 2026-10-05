@@ -21,6 +21,9 @@ const SAFE = /^(Read|Glob|Grep|LS|TodoWrite|WebSearch|WebFetch|Task|Agent)$/;
 const ev = input.hook_event_name;
 
 try {
+  // Tie the session to its claude process (rare events only; ps costs a few ms) so the phone can match
+  // session chips to live lax-channel sessions.
+  if (ev === 'SessionStart' || ev === 'UserPromptSubmit' || ev === 'Stop') input.lax_session_pid = claudePid();
   await post('/api/hook', input, 400).catch(() => {});
 
   // Interactive sessions: offer the permission prompt on the phone first.

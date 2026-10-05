@@ -163,7 +163,7 @@ const spoken = (text) => {
 function onHook(h) {
   const sid = h.session_id, project = proj(h.cwd);
   const s = sessions.get(sid) || { project, status: 'idle', ts: 0 };
-  s.ts = Date.now(); s.project = project; if (h.cwd) s.cwd = h.cwd;
+  s.ts = Date.now(); s.project = project; if (h.cwd) s.cwd = h.cwd; if (h.lax_session_pid) s.pid = h.lax_session_pid;
   sessions.set(sid, s);
   touchDay();
   if (/^(PostToolUse|PostToolUseFailure|Stop|UserPromptSubmit)$/.test(h.hook_event_name)) clearRelays((c) => c.cwd === h.cwd);
@@ -247,7 +247,7 @@ function ask(h) {
 const channels = new Map(); // cid -> { res, sessionPid, cwd, project, active }
 let voiceTarget = 'auto';   // 'auto' (most recently active channel) | 'background' | a cid
 let channelWait = null;     // { cid, timer } while a channel session is working on something you said
-const channelList = () => [...channels.entries()].map(([cid, c]) => ({ cid, project: c.project, active: c.active }));
+const channelList = () => [...channels.entries()].map(([cid, c]) => ({ cid, project: c.project, active: c.active, sessionPid: c.sessionPid }));
 const sendChannel = (cid, event, data) => channels.get(cid)?.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 function pickChannel() {
   if (voiceTarget === 'background') return null;

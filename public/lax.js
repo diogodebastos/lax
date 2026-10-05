@@ -194,7 +194,12 @@ requestAnimationFrame(loop);
 
 // ---------- HUD + feed ----------
 function renderHud() {
-  $('#chips').innerHTML = sessions.slice(0, 8).map((s) => `<span class="${s.status}">${s.project}</span>`).join('');
+  // Chips = sessions. Live ones (started with claude-lax) can be tapped to choose where your voice goes.
+  const target = routeChannel();
+  $('#chips').innerHTML = sessions.slice(0, 8).map((s) => {
+    const ch = channels.find((c) => c.sessionPid && c.sessionPid === s.pid);
+    return `<span class="${s.status}${ch ? ' live' : ''}${ch && ch === target ? ' sel' : ''}" data-cid="${ch ? ch.cid : ''}" data-project="${esc(s.project)}">${ch ? '🔗 ' : ''}${esc(s.project)}</span>`;
+  }).join('') + `<span class="bg${voiceTarget === 'background' || (!target && channels.length === 0) ? ' sel' : ''}" data-cid="background">☁</span>`;
   $('#lvl').textContent = `Lv${pet.level}`;
   $('#xp i').style.width = Math.round(100 * (pet.xp - pet.prevXp) / Math.max(1, pet.nextXp - pet.prevXp)) + '%';
   $('#dots').innerHTML = sessions.slice(0, 6).map((s) => `<b class="${s.status}" title="${s.project}"></b>`).join('');
@@ -308,10 +313,11 @@ let rec, heard = '', cancelled = false;
 const hint = $('#hint');
 let IDLE_HINT = 'tap Lax to talk';
 // Where talking goes: a live Claude Code session (lax channel) or the background session.
-function talkRoute() {
-  const live = voiceTarget === 'background' ? null : channels.find((c) => c.cid === voiceTarget) || [...channels].sort((a, b) => b.active - a.active)[0];
-  return live ? `🔗 ${live.project}` : '☁ background';
+function routeChannel() {
+  return voiceTarget === 'background' ? null : channels.find((c) => c.cid === voiceTarget) || [...channels].sort((a, b) => b.active - a.active)[0] || null;
 }
+function talkRoute() { const live = routeChannel(); return live ? `🔗 ${live.project}` : '☁ background'; }
+function setTarget(v) { voiceTarget = v; updateHint(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); if (!DEMO) api('/api/target', { target: v }); }
 function updateHint() { IDLE_HINT = `tap Lax to talk → ${talkRoute()}`; if (!listening && SR && !isBrave) hint.textContent = IDLE_HINT; }
 const MIC_ERRORS = {
   'not-allowed': 'Mic is blocked. Tap the icon left of the address → Permissions → Microphone → Allow, then reload.',
@@ -455,4 +461,9 @@ $('#sWait').addEventListener('click', (e) => e.target.dataset.v && saveSettings(
   btn.addEventListener('pointerup', cancel); btn.addEventListener('pointerleave', cancel); }
 applyLook(); fit();
 
-$('#sRoute').addEventListener('click', (e) => { const v = e.target.dataset.v; if (!v) return; voiceTarget = v; updateHint(); renderLife(); if (!DEMO) api('/api/target', { target: v }); });
+$('#sRoute').addEventListener('click', (e) => { const v = e.target.dataset.v; if (v) setTarget(v); });
+$('#chips').addEventListener('click', (e) => {
+  const chip = e.target.closest('span'); if (!chip) return;
+  if (chip.dataset.cid) { setTarget(chip.dataset.cid); sfx([660, 880]); hop(0.8); return; }
+  showBubble({ id: 'notlive', kind: 'reply', text: `${chip.dataset.project} can't hear me. Start it with claude-lax to talk to it.` });
+});
