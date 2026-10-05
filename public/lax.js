@@ -320,7 +320,7 @@ function routeChannel() {
 }
 function talkRoute() { const live = routeChannel(); return live ? `🔗 ${live.project}` : '☁ background'; }
 function setTarget(v) { voiceTarget = v; updateHint(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); if (!DEMO) api('/api/target', { target: v }); }
-function updateHint() { IDLE_HINT = `${voiceBroken ? 'tap Lax to type' : 'tap Lax to talk'} → ${talkRoute()}`; if (!listening) hint.textContent = IDLE_HINT; }
+function updateHint() { IDLE_HINT = voiceBroken ? 'tap Lax to type' : 'tap Lax to talk'; if (!listening) hint.textContent = IDLE_HINT; }
 const MIC_ERRORS = {
   'not-allowed': 'Mic is blocked. Tap the icon left of the address → Permissions → Microphone → Allow, then reload.',
   'service-not-allowed': 'This browser has no speech recognition. Use Chrome.',
