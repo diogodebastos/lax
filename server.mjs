@@ -289,7 +289,8 @@ http.createServer(async (req, res) => {
   if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
     const f = path.join(ROOT, 'public', url.pathname === '/' ? 'index.html' : path.normalize(url.pathname));
     if (!f.startsWith(path.join(ROOT, 'public')) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
-    res.writeHead(200, { 'content-type': MIME[path.extname(f)] || 'application/octet-stream' });
+    // no-store: Cloudflare would otherwise cache .js/.css at the edge and serve stale bodies to the phone.
+    res.writeHead(200, { 'content-type': MIME[path.extname(f)] || 'application/octet-stream', 'cache-control': 'no-store' });
     return fs.createReadStream(f).pipe(res);
   }
   if (!authed) return json(res, { error: 'bad token' }, 401);

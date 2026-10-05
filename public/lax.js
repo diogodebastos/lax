@@ -231,6 +231,7 @@ function renderBubble() {
 setInterval(renderBubble, 1000);
 elB.addEventListener('pointerdown', (e) => e.stopPropagation());
 elB.addEventListener('click', (e) => {
+  e.stopPropagation();
   const id = elB.dataset.id, b = bubbles.find((x) => x.id === id); if (!b) return;
   if (e.target.matches('.yes, .no')) { const decision = e.target.matches('.yes') ? 'allow' : 'deny';
     clearBubble(id); sfx(decision === 'allow' ? [880, 1175] : [300, 200]); if (decision === 'allow') setReact('happy'); if (!DEMO) api('/api/decide', { id, decision }); }
@@ -257,32 +258,45 @@ function speak(text) {
   speechSynthesis.speak(u);
 }
 
-// ---------- push-to-talk ----------
+// ---------- tap-to-talk ----------
+// Tap once, speak, Lax sends when you pause (tap again to cancel). Hold-to-talk fought Android Chrome:
+// the mic permission prompt cancels the touch, and continuous recognition is flaky there.
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec, heard = '';
-const hint = $('#hint');
-if (!SR) hint.textContent = isSecureContext ? 'no speech recognition here — tap to type' : 'mic needs https/localhost — tap to type';
+const isBrave = !!navigator.brave;
+let rec, heard = '', cancelled = false;
+const hint = $('#hint'), IDLE_HINT = 'tap Lax to talk';
+const MIC_ERRORS = {
+  'not-allowed': 'Mic is blocked. Tap the icon left of the address → Permissions → Microphone → Allow, then reload.',
+  'service-not-allowed': 'This browser has no speech recognition. Use Chrome.',
+  'network': isBrave ? 'Brave has no speech recognition. Open Lax in Chrome.' : 'Speech service unreachable. Check your connection.',
+  'audio-capture': 'No microphone found.',
+  'no-speech': 'I didn\'t hear anything. Tap me and talk.',
+};
+hint.textContent = !SR || isBrave ? 'no voice in this browser: tap to type' : IDLE_HINT;
 function startListening() {
+  if (listening) { cancelled = true; rec?.abort(); return; }
   if (voiceBusy) { showBubble({ id: 'busy', kind: 'reply', text: 'Still working on the last one…' }); return; }
-  if (!SR) { const text = prompt('Talk to Lax:'); if (text) send(text); return; }
-  speechSynthesis?.cancel(); heard = ''; listening = true; hint.textContent = 'listening…'; sfx([440]);
-  rec = new SR(); rec.lang = navigator.language || 'en-US'; rec.interimResults = true; rec.continuous = true;
-  rec.onresult = (e) => { heard = [...e.results].map((r) => r[0].transcript).join(' '); hint.textContent = heard.slice(-40); };
-  rec.onerror = (e) => { hint.textContent = 'mic: ' + e.error; };
-  rec.onend = () => { listening = false; hint.textContent = 'hold to talk'; if (heard.trim()) send(heard.trim()); heard = ''; };
-  rec.start();
+  if (!SR || isBrave) { const text = prompt('Talk to Lax:'); if (text) send(text); return; }
+  speechSynthesis?.cancel(); heard = ''; cancelled = false; listening = true; hint.textContent = 'listening… (tap to cancel)'; sfx([440]);
+  rec = new SR(); rec.lang = navigator.language || 'en-US'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+  rec.onresult = (e) => { heard = [...e.results].map((r) => r[0].transcript).join(''); hint.textContent = heard.slice(-40); };
+  rec.onerror = (e) => { if (e.error !== 'aborted') showBubble({ id: 'mic', kind: 'error', text: MIC_ERRORS[e.error] || 'Mic error: ' + e.error }); };
+  rec.onend = () => { listening = false; hint.textContent = IDLE_HINT; if (!cancelled && heard.trim()) { sfx([330]); send(heard.trim()); } heard = ''; };
+  try { rec.start(); } catch (err) { listening = false; hint.textContent = IDLE_HINT; showBubble({ id: 'mic', kind: 'error', text: 'Mic error: ' + err.message }); }
 }
-function stopListening() { if (rec && listening) { sfx([330]); rec.stop(); } }
+function stopListening() { if (rec && listening) rec.stop(); }
 function send(text) {
   showBubble({ id: 'you' + Date.now(), kind: 'you', text: '“' + text + '”' });
   if (DEMO) { voiceBusy = true; setTimeout(() => { voiceBusy = false; showBubble({ id: 'r' + Date.now(), kind: 'reply', text: 'Demo mode — I heard you!', speak: true }); }, 1800); return; }
-  api('/api/talk', { text }).then((r) => { if (!r.ok) showBubble({ id: 'busy', kind: 'error', text: 'I\'m busy, try again in a sec.' }); });
+  api('/api/talk', { text }).then((r) => { if (!r.ok) showBubble({ id: 'busy', kind: 'error', text: 'I\'m busy, try again in a sec.' }); })
+    .catch(() => showBubble({ id: 'net', kind: 'error', text: 'Couldn\'t reach your Mac.' }));
 }
 const topEl = $('#top');
-topEl.addEventListener('pointerdown', (e) => { if (!wakeEl.isConnected && !lifeEl.classList.contains('open')) { e.preventDefault(); startListening(); } });
-$('#talk').addEventListener('pointerdown', (e) => { e.preventDefault(); startListening(); });
-addEventListener('pointerup', stopListening); addEventListener('pointercancel', stopListening);
-addEventListener('keydown', (e) => { if (e.code === 'Space' && !e.repeat && !listening) startListening(); });
+topEl.addEventListener('click', () => { if (!wakeEl.isConnected && !lifeEl.classList.contains('open')) startListening(); });
+topEl.addEventListener('contextmenu', (e) => e.preventDefault());
+$('#talk').addEventListener('click', startListening);
+// Desktop: hold space to talk.
+addEventListener('keydown', (e) => { if (e.code === 'Space' && !e.repeat && !listening && e.target === document.body) { e.preventDefault(); startListening(); } });
 addEventListener('keyup', (e) => { if (e.code === 'Space') stopListening(); });
 
 // ---------- wake (audio unlock, fullscreen, keep screen on) ----------
@@ -291,6 +305,7 @@ if (qs.has('awake')) wakeEl.remove();
 wakeEl.addEventListener('click', async () => {
   wakeEl.remove(); sfx([523, 784]); hop(1.4);
   try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch {}
+  if (SR && !isBrave) navigator.mediaDevices?.getUserMedia({ audio: true }).then((st) => st.getTracks().forEach((t) => t.stop())).catch(() => {});
   try { await document.documentElement.requestFullscreen?.(); } catch {}
   const lock = async () => { try { await navigator.wakeLock?.request('screen'); } catch {} };
   lock(); document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && lock());
@@ -363,7 +378,7 @@ function renderLife() {
   $('#tools').innerHTML = tools.length ? tools.map(([k, v]) => `<div class="bar"><span>${k}</span><i style="width:${Math.round(100 * v / max)}px"></i>${v}</div>`).join('') : '<div class="bar">nothing yet</div>';
   $('#miles').innerHTML = (memory?.milestones || []).slice(0, 12).map((m) => `<li>${new Date(m.ts).toLocaleDateString()} ${m.text.replace(/</g, '&lt;')}</li>`).join('') || '<li>…</li>';
 }
-for (const id of ['#nameBtn', '#lifeBtn']) { $(id).addEventListener('pointerdown', (e) => e.stopPropagation()); $(id).addEventListener('click', openLife); }
+for (const id of ['#nameBtn', '#lifeBtn']) $(id).addEventListener('click', (e) => { e.stopPropagation(); openLife(); });
 lifeEl.addEventListener('pointerdown', (e) => e.stopPropagation());
 $('#lifeClose').addEventListener('click', () => lifeEl.classList.remove('open'));
 $('#sName').addEventListener('change', (e) => e.target.value.trim() && saveSettings({ name: e.target.value.trim().slice(0, 12) }));
