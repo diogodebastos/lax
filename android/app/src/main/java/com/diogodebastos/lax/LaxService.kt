@@ -142,7 +142,7 @@ class LaxService : Service() {
             c.disconnect()
             return when {
                 code == 401 -> "bad Lax token, pair again"
-                code in 500..599 -> "your Mac is asleep or off, waiting…" // Cloudflare: tunnel or server down (502 / 530)
+                code in 500..599 -> "Lax is asleep, waiting…" // Cloudflare: tunnel or server down (502 / 530)
                 else -> "can't link ($code ${type.substringBefore(';')})"
             }
         }

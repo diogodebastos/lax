@@ -45,7 +45,9 @@
   #bubble button:active { box-shadow: inset 3px 3px 0 rgba(0,0,0,.35), 0 0 0 2px #000; }
   @keyframes pop { 0% { transform:scale(.6) } 100% { transform:scale(1) } }
 
-  #hint { position:absolute; bottom:4px; width:100%; text-align:center; font-size:13px; color:var(--dim); z-index:2; }
+  /* The hint sits on Lax's ground: a dotted line on both sides of the text, never behind it. */
+  #hint { position:absolute; bottom:4px; left:0; right:0; padding:0 4px; display:flex; align-items:center; gap:6px; font-size:13px; color:var(--dim); z-index:2; white-space:nowrap; }
+  #hint::before, #hint::after { content:''; flex:1; min-width:8px; height:2px; background:repeating-linear-gradient(90deg, #2a2521 0 2px, transparent 2px 6px); }
 
   /* Terminal feed */
   #term { flex:1; min-height:0; border-top:2px solid #1f1c19; padding:5px 6px; font-size:14px; line-height:13px; overflow-y:auto; overscroll-behavior:contain; display:flex; flex-direction:column; -webkit-overflow-scrolling:touch; }
@@ -93,7 +95,8 @@
   body.big #hud { font-size:22px; top:10px; left:14px; right:14px; gap:10px; } body.big #xp { height:8px; } body.big #dots b { width:10px; height:10px; }
   body.big #bubble { font-size:24px; line-height:21px; top:44px; left:18px; right:20px; padding:8px 12px 10px; }
   body.big #bubble .tag { font-size:17px; } body.big #bubble .text { max-height:88px; } body.big #bubble button { font-size:24px; }
-  body.big #hint { font-size:18px; bottom:10px; }
+  body.big #hint { font-size:18px; bottom:10px; padding:0 10px; gap:10px; }
+  body.big #hint::before, body.big #hint::after { height:4px; background:repeating-linear-gradient(90deg, #2a2521 0 4px, transparent 4px 12px); }
   body.big #term { font-size:19px; line-height:18px; padding:10px 14px; }
   body.big #life { font-size:22px; padding:14px 18px; } body.big #life h3 { font-size:18px; } body.big #life header { font-size:28px; }
   /* Session chips are tabs: they sit on the terminal's top line; the selected one opens into it ("brought to the front"). */

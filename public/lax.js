@@ -108,8 +108,7 @@ function step(dt, m, t) {
 const px = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
 function draw(m, t) {
   g.clearRect(0, 0, W, H);
-  // ground: dotted line + shadow
-  for (let x = 2; x < W - 2; x += 3) px(x, GROUND + 2, 1, 1, C.ground);
+  // ground: the dotted line is the hint's line in the page (#hint), so text never sits on it
   const [bw, bh] = SIZES[pet.stage] || SIZES.cube;
   let s = body.s;
   if (m === 'sleep') s += Math.sin(t / 700) * 0.04;
@@ -343,7 +342,7 @@ function routeChannel() {
   return voiceTarget === 'background' ? null : channels.find((c) => c.cid === voiceTarget) || [...channels].sort((a, b) => b.active - a.active)[0] || null;
 }
 function setTarget(v) { voiceTarget = v; updateHint(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); if (!DEMO) api('/api/target', { target: v }); }
-function updateHint() { IDLE_HINT = macAsleep ? 'zzz… your mac is asleep' : voiceBroken ? 'tap Lax to type' : 'tap Lax to talk'; if (!listening) hint.textContent = IDLE_HINT; }
+function updateHint() { IDLE_HINT = macAsleep ? `zzz… ${settings.name.toLowerCase()} is asleep` : voiceBroken ? 'tap Lax to type' : 'tap Lax to talk'; if (!listening) hint.textContent = IDLE_HINT; }
 const MIC_ERRORS = {
   'not-allowed': 'Mic is blocked. Tap the icon left of the address → Permissions → Microphone → Allow, then reload.',
   'service-not-allowed': 'This browser has no speech recognition. Use Chrome.',
@@ -357,7 +356,7 @@ updateHint();
 (async () => { let mic = 'unknown'; try { mic = (await navigator.permissions.query({ name: 'microphone' })).state; } catch {}
   diag('load', { v: VERSION, native: !!NATIVE, ua: navigator.userAgent, secure: isSecureContext, sr: !!SR, brave: isBrave, mediaDevices: !!navigator.mediaDevices, mic, w: innerWidth, h: innerHeight, dpr: devicePixelRatio }); })();
 function startListening() {
-  if (macAsleep) { hop(0.5); showBubble({ id: 'asleep', kind: 'reply', text: 'Zzz… your Mac is asleep or off. I\'ll wake up when it does.' }); return; }
+  if (macAsleep) { hop(0.5); showBubble({ id: 'asleep', kind: 'reply', text: 'Zzz… I\'m asleep right now. I\'ll wake up on my own.' }); return; }
   if (listening) { cancelled = true; NATIVE ? NATIVE.cancelListening() : rec?.abort(); return; }
   if (voiceBusy && !answerHook) { showBubble({ id: 'busy', kind: 'reply', text: 'Still working on the last one…' }); return; }
   if (voiceBroken) return typeInstead();
@@ -452,7 +451,7 @@ function connect() {
   es.addEventListener('react', (e) => { const r = JSON.parse(e.data); if (r.state === 'thinking') voiceBusy = true; else setReact(r.state); });
   es.onopen = () => { if (macAsleep) { setAsleep(false); hop(1.4); } feed('linked to mac ✓', 'session', undefined, '*'); };
   es.onerror = () => {
-    if (!macAsleep) feed('mac unreachable, sleeping until it wakes…', 'error', undefined, '*');
+    if (!macAsleep) feed(`${settings.name.toLowerCase()} fell asleep. zzz…`, 'session', undefined, '*');
     setAsleep(true);
     // Cloudflare answers for a sleeping Mac with an error page, which ends EventSource for good: retry by hand.
     if (es.readyState === EventSource.CLOSED) setTimeout(connect, 10000);
@@ -462,8 +461,8 @@ function connect() {
 function asleep() {
   try { const m = JSON.parse(NATIVE?.recall() || 'null'); if (m) { pet = m.pet || pet; settings = m.settings || settings; } } catch {}
   applyLook(); renderHud(); updateHint();
-  feed('your mac is asleep or off', 'session', undefined, '*');
-  feed('lax wakes up when it does. zzz…', 'session', undefined, '*');
+  feed(`${settings.name.toLowerCase()} is asleep. zzz…`, 'session', undefined, '*');
+  feed('it wakes up on its own.', 'session', undefined, '*');
 }
 
 // ---------- demo mode (?demo) — cycles every state without a server ----------
