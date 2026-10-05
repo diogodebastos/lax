@@ -211,27 +211,47 @@ function feed(line, kind = 'tool', project) {
 // ---------- bubble ----------
 let bubbles = []; // newest last; the one with actions wins
 const elB = $('#bubble');
-const TAGS = { permission: 'needs you', waiting: 'waiting', done: 'done', reply: 'lax', error: 'uh oh', levelup: '★ level up', you: 'you' };
+const TAGS = { question: 'question', permission: 'needs you', waiting: 'waiting', done: 'done', reply: 'lax', error: 'uh oh', levelup: '★ level up', you: 'you' };
 function showBubble(b) {
   bubbles = bubbles.filter((x) => x.id !== b.id); bubbles.push(b);
-  if (!b.actions) b.expires = performance.now() + (b.kind === 'reply' ? 15000 : 9000);
+  b.sticky = b.actions || b.kind === 'question';
+  if (!b.sticky) b.expires = performance.now() + (b.kind === 'reply' ? 15000 : 9000);
   renderBubble();
-  if (b.kind === 'permission') { sfx([660, 880, 660]); navigator.vibrate?.([80, 60, 80]); }
+  if (b.kind === 'permission' || b.kind === 'question') { sfx([660, 880, 660]); navigator.vibrate?.([80, 60, 80]); }
   else if (b.kind === 'levelup') { sfx([523, 659, 784, 1046]); setReact('happy', 2500); }
   else if (b.kind === 'done') { sfx([784, 1046]); setReact('happy'); }
   else if (b.kind === 'error') { sfx([220, 160]); setReact('error'); }
-  if (b.speak || (b.kind === 'done' && settings.speakDone)) speak(b.kind === 'permission' ? 'I need you. ' + b.text : b.text);
+  if (b.speak || (b.kind === 'done' && settings.speakDone)) speak(b.kind === 'permission' ? 'I need you. ' + b.text : b.kind === 'question' ? 'Question. ' + b.questions[0].question : b.text);
 }
 function clearBubble(id) { bubbles = bubbles.filter((x) => x.id !== id); renderBubble(); }
 function renderBubble() {
   const now = performance.now();
   bubbles = bubbles.filter((b) => !b.expires || b.expires > now);
-  const b = bubbles.find((x) => x.actions) || bubbles[bubbles.length - 1];
-  if (!b) { elB.className = ''; return; }
+  const b = bubbles.find((x) => x.sticky) || bubbles[bubbles.length - 1];
+  if (!b) { elB.className = ''; elB.dataset.key = ''; return; }
   elB.className = 'show ' + b.kind; elB.dataset.id = b.id;
-  elB.querySelector('.tag').textContent = TAGS[b.kind] || '';
-  elB.querySelector('.text').textContent = b.text;
+  if (b.kind !== 'question') elB.querySelector('.tag').textContent = TAGS[b.kind] || '';
   elB.querySelector('.actions').style.display = b.actions ? 'flex' : 'none';
+  if (b.kind !== 'question') { elB.querySelector('.text').textContent = b.text; elB.dataset.key = ''; return; }
+  // Question: one at a time; only rebuild when something changed (the 1s refresh would wipe selections).
+  b.qi ??= 0; b.answers ??= {}; b.picked ??= [];
+  const q = b.questions[b.qi], key = `${b.id}:${b.qi}:${b.picked.join('|')}:${answerHook ? 1 : 0}`;
+  if (elB.dataset.key === key) return;
+  elB.dataset.key = key;
+  elB.querySelector('.tag').innerHTML = `${esc(q.header || 'question')} · ${esc(b.project || '')}` + (b.questions.length > 1 ? `<span class="qstep">${b.qi + 1}/${b.questions.length}</span>` : '');
+  elB.querySelector('.text').textContent = q.question;
+  elB.querySelector('.choices').innerHTML = (q.options || []).map((o, i) =>
+    `<button class="opt${b.picked.includes(o.label) ? ' on' : ''}" data-i="${i}">${esc(o.label)}${o.description ? `<small>${esc(o.description)}</small>` : ''}</button>`).join('')
+    + `<div class="row">${q.multiSelect ? '<button class="send">send ▶</button>' : ''}<button class="other">${answerHook ? '🎙 listening…' : '🎙 other'}</button><button class="pass">⌨ terminal</button></div>`;
+}
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+let answerHook = null; // when set, the next thing heard answers the open question instead of going to /api/talk
+function answerQuestion(b, answer) {
+  const q = b.questions[b.qi];
+  b.answers[q.question] = answer; b.picked = []; b.qi++;
+  if (b.qi < b.questions.length) { elB.dataset.key = ''; renderBubble(); speak(b.questions[b.qi].question); return; }
+  clearBubble(b.id); sfx([880, 1175]); setReact('happy');
+  if (!DEMO) api('/api/decide', { id: b.id, decision: 'answer', answers: b.answers });
 }
 setInterval(renderBubble, 1000);
 elB.addEventListener('pointerdown', (e) => e.stopPropagation());
@@ -240,6 +260,16 @@ elB.addEventListener('click', (e) => {
   const id = elB.dataset.id, b = bubbles.find((x) => x.id === id); if (!b) return;
   if (e.target.matches('.yes, .no')) { const decision = e.target.matches('.yes') ? 'allow' : 'deny';
     clearBubble(id); sfx(decision === 'allow' ? [880, 1175] : [300, 200]); if (decision === 'allow') setReact('happy'); if (!DEMO) api('/api/decide', { id, decision }); }
+  else if (b.kind === 'question') {
+    const q = b.questions[b.qi], t = e.target.closest('button'); if (!t) return;
+    if (t.matches('.opt')) {
+      const label = q.options[+t.dataset.i].label;
+      if (!q.multiSelect) return answerQuestion(b, label);
+      b.picked = b.picked.includes(label) ? b.picked.filter((l) => l !== label) : [...b.picked, label]; renderBubble();
+    } else if (t.matches('.send') && b.picked.length) answerQuestion(b, b.picked.join(', '));
+    else if (t.matches('.other')) { answerHook = (text) => answerQuestion(b, text); renderBubble(); startListening(); }
+    else if (t.matches('.pass')) { clearBubble(id); if (!DEMO) api('/api/decide', { id, decision: 'pass' }); }
+  }
   else if (!b.actions) clearBubble(id);
 });
 
@@ -282,14 +312,14 @@ hint.textContent = !SR || isBrave ? 'no voice in this browser: tap to type' : ID
   diag('load', { v: VERSION, ua: navigator.userAgent, secure: isSecureContext, sr: !!SR, brave: isBrave, mediaDevices: !!navigator.mediaDevices, mic, w: innerWidth, h: innerHeight, dpr: devicePixelRatio }); })();
 function startListening() {
   if (listening) { cancelled = true; rec?.abort(); return; }
-  if (voiceBusy) { showBubble({ id: 'busy', kind: 'reply', text: 'Still working on the last one…' }); return; }
-  if (!SR || isBrave) { const text = prompt('Talk to Lax:'); if (text) send(text); return; }
+  if (voiceBusy && !answerHook) { showBubble({ id: 'busy', kind: 'reply', text: 'Still working on the last one…' }); return; }
+  if (!SR || isBrave) { const h = answerHook; answerHook = null; const text = prompt(h ? 'Your answer:' : 'Talk to Lax:'); if (text) (h ? h(text) : send(text)); else if (h) renderBubble(); return; }
   speechSynthesis?.cancel(); heard = ''; cancelled = false; listening = true; hint.textContent = 'listening… (tap to cancel)'; sfx([440]);
   rec = new SR(); rec.lang = navigator.language || 'en-US'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
   ['start', 'audiostart', 'soundstart', 'speechstart', 'speechend', 'audioend', 'nomatch'].forEach((ev) => rec.addEventListener(ev, () => diag('sr-' + ev)));
   rec.onresult = (e) => { heard = [...e.results].map((r) => r[0].transcript).join(''); hint.textContent = heard.slice(-40); };
   rec.onerror = (e) => { diag('sr-error', { error: e.error, message: e.message }); if (e.error !== 'aborted') showBubble({ id: 'mic', kind: 'error', text: MIC_ERRORS[e.error] || 'Mic error: ' + e.error }); };
-  rec.onend = () => { diag('sr-end', { heard: heard.slice(0, 80), cancelled }); listening = false; hint.textContent = IDLE_HINT; if (!cancelled && heard.trim()) { sfx([330]); send(heard.trim()); } heard = ''; };
+  rec.onend = () => { diag('sr-end', { heard: heard.slice(0, 80), cancelled }); listening = false; hint.textContent = IDLE_HINT; const h = answerHook; answerHook = null; if (!cancelled && heard.trim()) { sfx([330]); h ? h(heard.trim()) : send(heard.trim()); } else if (h) renderBubble(); heard = ''; };
   diag('talk-tap'); try { rec.start(); } catch (err) { diag('sr-start-throw', { msg: err.message }); listening = false; hint.textContent = IDLE_HINT; showBubble({ id: 'mic', kind: 'error', text: 'Mic error: ' + err.message }); }
 }
 function stopListening() { if (rec && listening) rec.stop(); }

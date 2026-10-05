@@ -211,17 +211,24 @@ function onHook(h) {
 }
 
 // A hook is waiting for the human: show the bubble, resolve when the phone taps ✓/✗ (or time out).
+// A hook is waiting for the human: show the bubble, resolve when the phone answers (or time out).
+// Decisions: allow | deny | answer (AskUserQuestion, with answers) | none (fall back to the terminal).
 function ask(h) {
   return new Promise((resolve) => {
     if (clients.size === 0 || !settings.phoneApprovals) return resolve({ decision: 'none' });
     const id = crypto.randomBytes(6).toString('hex'), project = proj(h.cwd);
-    const bubble = { id, kind: 'permission', session: h.session_id, text: `${project} wants to: ${describeTool(h.tool_name, h.tool_input)}`, speak: true, actions: true };
-    const timer = setTimeout(() => finish('none'), settings.askTimeout * 1000);
-    function finish(decision) {
+    const questions = h.tool_name === 'AskUserQuestion' && Array.isArray(h.tool_input?.questions) ? h.tool_input.questions : null;
+    const bubble = questions
+      ? { id, kind: 'question', session: h.session_id, project, questions, text: `${project}: ${questions[0].question}`, speak: true }
+      : { id, kind: 'permission', session: h.session_id, text: `${project} wants to: ${describeTool(h.tool_name, h.tool_input)}`, speak: true, actions: true };
+    // Questions are worth waiting longer for: they need reading.
+    const timer = setTimeout(() => finish('none'), Math.min(600, settings.askTimeout * (questions ? 4 : 1)) * 1000);
+    function finish(decision, answers) {
       clearTimeout(timer); pending.delete(id); broadcast('clear', { id });
-      if (decision === 'allow') pet.approvals++; else if (decision === 'deny') pet.denials++;
-      if (decision !== 'none') { feed(`  ${decision === 'allow' ? '✓ approved' : '✗ denied'} from phone`, decision === 'allow' ? 'done' : 'error', project); save(); }
-      resolve({ decision });
+      if (decision === 'allow' || decision === 'answer') pet.approvals++; else if (decision === 'deny') pet.denials++;
+      const line = { allow: '✓ approved from phone', deny: '✗ denied from phone', answer: '✓ answered from phone' }[decision];
+      if (line) { feed(`  ${line}`, decision === 'deny' ? 'error' : 'done', project); save(); }
+      resolve(answers ? { decision, answers } : { decision });
     }
     pending.set(id, { finish, bubble });
     const s = sessions.get(h.session_id); if (s) { s.status = 'waiting'; pushState(); }
@@ -310,7 +317,15 @@ http.createServer(async (req, res) => {
   switch (url.pathname) {
     case '/api/hook': onHook(b); return json(res, { ok: true });
     case '/api/ask': return json(res, await ask(b));
-    case '/api/decide': { const p = pending.get(b.id); if (p) p.finish(b.decision === 'allow' ? 'allow' : 'deny'); return json(res, { ok: !!p }); }
+    case '/api/decide': {
+      const p = pending.get(b.id);
+      if (p) {
+        if (b.decision === 'answer' && b.answers && typeof b.answers === 'object')
+          p.finish('answer', Object.fromEntries(Object.entries(b.answers).map(([q, a]) => [String(q), String(a).slice(0, 2000)])));
+        else p.finish({ allow: 'allow', deny: 'deny', pass: 'none' }[b.decision] || 'deny');
+      }
+      return json(res, { ok: !!p });
+    }
     case '/api/settings': updateSettings(b); pushState(); return json(res, { ok: true, settings });
     case '/api/rebirth': rebirth(); broadcast('reborn', {}); pushState(); return json(res, { ok: true });
     case '/api/diag': console.log(`[phone ${new Date().toISOString().slice(11, 19)}] ${JSON.stringify(b).slice(0, 600)}`); return json(res, { ok: true });

@@ -109,6 +109,22 @@
   body.wide #bubble { position:relative; left:auto; right:auto; top:auto; margin:10px 12px 4px 14px; flex:none; }
   body.wide #bubble::after { left:-9px; bottom:auto; top:12px; border-right:0; border-left:3px solid #000; }
 
+  /* Question bubble (AskUserQuestion): real options instead of yes/no. */
+  #bubble.question { background:#dff1ff; }
+  #bubble .choices { display:none; flex-direction:column; gap:4px; margin-top:6px; max-height:170px; overflow-y:auto; }
+  #bubble.question .choices { display:flex; }
+  #bubble .choices button.opt { font:inherit; font-size:17px; line-height:15px; text-align:left; background:#fff; color:#14110f; border:0; padding:4px 7px 5px;
+    box-shadow:0 0 0 2px #000, inset -2px -2px 0 rgba(0,0,0,.15); cursor:pointer; }
+  #bubble .choices button.opt small { display:block; font-size:14px; color:#5b544b; line-height:13px; margin-top:1px; }
+  #bubble .choices button.opt.on { background:#2f9e57; color:#fff; } #bubble .choices button.opt.on small { color:#d6f5e0; }
+  #bubble .choices .row { display:flex; gap:6px; margin-top:2px; }
+  #bubble .choices .row button { flex:1; font:inherit; font-size:15px; padding:3px 0; border:0; background:#14110f; color:#e8e2d6; cursor:pointer; box-shadow:0 0 0 2px #000; }
+  #bubble .choices .row button.send { background:#2f9e57; color:#fff; }
+  #bubble .qstep { float:right; opacity:.6; }
+  body.wide #bubble .choices { max-height:120px; } body.wide #bubble.question .text { max-height:32px; }
+  body.big #bubble .choices button.opt { font-size:22px; line-height:20px; padding:7px 10px; } body.big #bubble .choices button.opt small { font-size:17px; line-height:16px; }
+  body.big #bubble .choices .row button { font-size:20px; padding:6px 0; } body.big #bubble .choices { max-height:340px; }
+
   #wake { position:fixed; inset:0; z-index:10; background:#000; display:grid; place-items:center; text-align:center; color:var(--coral); font-size:22px; cursor:pointer; }
   #wake small { display:block; color:var(--dim); font-size:15px; margin-top:6px; }
 </style>
@@ -118,7 +134,7 @@
   <div id="top">
     <canvas id="stage" width="52" height="51"></canvas>
     <div id="hud"><span class="name" id="nameBtn">LAX</span><span id="lvl">Lv1</span><div id="xp"><i></i></div><div id="dots"></div></div>
-    <div id="bubble"><span class="tag"></span><div class="text"></div><div class="actions"><button class="yes">✓ yes</button><button class="no">✗ no</button></div></div>
+    <div id="bubble"><span class="tag"></span><div class="text"></div><div class="choices"></div><div class="actions"><button class="yes">✓ yes</button><button class="no">✗ no</button></div></div>
     <div id="hint">tap Lax to talk</div>
   </div>
   <div id="bottom">
@@ -150,6 +166,6 @@
   </div>
 </div>
 <div id="wake"><div>tap to wake Lax<small>(unlocks sound + mic)</small></div></div>
-<script src="lax.js?v=5"></script>
+<script src="lax.js?v=6"></script>
 </body>
 </html>

@@ -24,8 +24,12 @@ try {
 
   // Interactive sessions: offer the permission prompt on the phone first.
   if (ev === 'PermissionRequest') {
-    const { decision } = await post('/api/ask', input, 120000);
-    if (decision === 'allow' || decision === 'deny') {
+    const { decision, answers } = await post('/api/ask', input, 600000);
+    // A question answered on the phone: allow the tool with the answers filled in, as the terminal UI would.
+    if (decision === 'answer') {
+      console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest',
+        decision: { behavior: 'allow', updatedInput: { ...input.tool_input, answers } } } }));
+    } else if (decision === 'allow' || decision === 'deny') {
       console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest',
         decision: decision === 'allow' ? { behavior: 'allow' } : { behavior: 'deny', message: 'Denied from Lax (phone).' } } }));
     }

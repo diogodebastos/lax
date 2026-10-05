@@ -6,7 +6,7 @@ import path from 'node:path';
 const file = path.join(os.homedir(), '.claude', 'settings.json');
 const hook = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'hooks', 'lax-hook.mjs');
 const command = `node "${hook}"`;
-const EVENTS = { SessionStart: 5, UserPromptSubmit: 5, PreToolUse: 130, PostToolUse: 5, Notification: 5, PermissionRequest: 130, Stop: 5, SessionEnd: 2 };
+const EVENTS = { SessionStart: 5, UserPromptSubmit: 5, PreToolUse: 130, PostToolUse: 5, Notification: 5, PermissionRequest: 610, Stop: 5, SessionEnd: 2 };
 
 const settings = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
 fs.writeFileSync(file + '.bak-lax', JSON.stringify(settings, null, 2));
