@@ -10,7 +10,7 @@ import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { ensureHome, commitMind, syncMindName, addMemoryLayout, addToolsAdvice } from './lib/home.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS, secret, ensureDirs, readEnv } from './lib/paths.mjs';
-import { MAX_LEVEL, STAGES, levelOf, stageIdx, barFor } from './lib/levels.mjs';
+import { MAX_LEVEL, STAGES, levelOf as levelOn, stageIdx, barFor as barOn, curveOf } from './lib/levels.mjs';
 import { createBrain, ensureBrain, brief } from './lib/brain.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
@@ -88,6 +88,9 @@ function rebirth() {
 }
 
 // ---------- evolution (pure rules, no AI) ----------
+// Lax's colour picks its growth curve (lib/levels.mjs), so changing colour can move its level.
+const levelOf = (xp) => levelOn(xp, curveOf(settings.color));
+const barFor = (xp) => barOn(xp, curveOf(settings.color));
 // Never de-evolve: a stage, once reached, is kept (pet.stageReached), even if the curve ever changes again.
 const stageOf = (lvl) => STAGES[Math.max(stageIdx(lvl), pet.stageReached || 0)][1];
 // Traits (headband, glasses, cape…) show from level 10: a young Lax is just itself.
