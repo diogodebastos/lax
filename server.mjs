@@ -327,23 +327,23 @@ function channelEvent(b) {
     if (channelWait?.cid === b.cid) { clearTimeout(channelWait.timer); channelWait = null; }
     const text = String(b.text || '');
     feed(`↩ ${clip(text)}`, 'done', c.project, channelSession(c)); logEvent(channelSession(c) || '', c.project, 'reply', short(text, 1000));
-    broadcast('bubble', { id: 'ch' + Date.now(), kind: 'reply', text: short(text.replace(/```[\s\S]*?```/g, ' '), 400), say: spoken(text), speak: true });
+    broadcast('bubble', { id: 'ch' + Date.now(), kind: 'reply', session: channelSession(c), text: short(text.replace(/```[\s\S]*?```/g, ' '), 400), say: spoken(text), speak: true });
   } else if (b.type === 'share') {
     feed(String(b.line || '').slice(0, 200), 'tool', c.project, channelSession(c));
     if (b.ready) askShare(b.cid, String(b.ready.what || 'it'), String(b.ready.who || 'them'));
   } else if (b.type === 'pick') {
     askPick(b.cid, String(b.id || ''), String(b.question || 'Which one?'), (Array.isArray(b.options) ? b.options : []).map(String).slice(0, 6));
   } else if (b.type === 'say') {
-    broadcast('bubble', { id: 'sh' + Date.now(), kind: 'reply', text: short(String(b.text || ''), 400), speak: true });
+    broadcast('bubble', { id: 'sh' + Date.now(), kind: 'reply', session: channelSession(c), text: short(String(b.text || ''), 400), speak: true });
   } else if (b.type === 'shared') {
     const who = b.who && String(b.who); // set for WhatsApp; the share sheet doesn't say where it went
     const [line, ok] = b.failed ? [`couldn't share it (${short(b.failed, 80)})`, false] : b.sent ? [who ? `sent to ${who}` : 'shared', true] : ['not sent', false];
     feed(`  ${ok ? '✓' : '✗'} ${line}`, ok ? 'done' : 'error', c.project, channelSession(c));
-    if (b.failed) broadcast('bubble', { id: 'sh' + Date.now(), kind: 'error', speak: true,
+    if (b.failed) broadcast('bubble', { id: 'sh' + Date.now(), kind: 'error', session: channelSession(c), speak: true,
       text: who ? `I couldn't send it. It's still waiting in ${who}'s chat on the Mac.` : `I couldn't share it: ${short(b.failed, 120)}` });
   } else if (b.type === 'permission') {
     const id = 'relay-' + b.request_id;
-    const bubble = { id, kind: 'permission', actions: true, speak: true, details: String(b.input_preview || ''),
+    const bubble = { id, kind: 'permission', session: channelSession(c), actions: true, speak: true, details: String(b.input_preview || ''),
       text: `${c.project} wants to: ${b.tool_name}${b.description ? ' — ' + short(b.description, 140) : ''}` };
     pending.set(id, { bubble, relay: { cid: b.cid, settles: true }, finish(decision) {
       if (!pending.delete(id)) return;
@@ -388,7 +388,7 @@ function quickAction(cid, action) {
   const c = channels.get(cid); if (!c?.pty || !action) return false;
   c.active = Date.now(); pet.voice++; gainXp(1); save();
   feed(`> ${action}`, 'prompt', c.project, channelSession(c)); pushState();
-  const sid = channelSession(c), say = (text, kind = 'reply') => broadcast('bubble', { id: 'act' + Date.now(), kind, text, speak: true });
+  const sid = channelSession(c), say = (text, kind = 'reply') => broadcast('bubble', { id: 'act' + Date.now(), kind, session: sid, text, speak: true });
   sendAction(c.pty, action).then((r) => {
     if (!r.ok) {
       feed(`  ${action} didn't reach the terminal`, 'error', c.project, sid);
@@ -408,7 +408,7 @@ function askMenu(cid, menu) {
   const c = channels.get(cid); if (!c) return;
   const id = 'menu-' + crypto.randomBytes(4).toString('hex'), labels = menu.options.slice(0, 9);
   const questions = [{ question: menu.question, header: c.project, options: labels.map((label, i) => ({ label, description: i ? '' : menu.detail })) }];
-  const bubble = { id, kind: 'question', project: c.project, questions, text: `${c.project}: ${menu.question}`, speak: true };
+  const bubble = { id, kind: 'question', session: channelSession(c), project: c.project, questions, text: `${c.project}: ${menu.question}`, speak: true };
   pending.set(id, { bubble, relay: { cid, settles: true }, finish(decision, answers) {
     if (!pending.delete(id)) return;
     broadcast('clear', { id });
@@ -424,7 +424,7 @@ function askShare(cid, what, who) {
   const id = 'share-' + crypto.randomBytes(4).toString('hex');
   const questions = [{ question: `Send ${what} to ${who}?`, header: 'WhatsApp',
     options: [{ label: 'Send', description: `Presses Enter in ${who}'s chat on the Mac` }, { label: 'Cancel', description: 'Leaves it unsent' }] }];
-  const bubble = { id, kind: 'question', project: c.project, questions, text: questions[0].question, speak: true };
+  const bubble = { id, kind: 'question', session: channelSession(c), project: c.project, questions, text: questions[0].question, speak: true };
   const timer = setTimeout(() => pending.get(id)?.finish('none'), 600000); // left waiting: it stays in the chat for Enter
   pending.set(id, { bubble, relay: { cid }, finish(decision, answers) {
     if (!pending.delete(id)) return;
@@ -440,7 +440,7 @@ function askPick(cid, pickId, question, labels) {
   const c = channels.get(cid); if (!c || !labels.length) return;
   const id = 'pick-' + crypto.randomBytes(4).toString('hex');
   const questions = [{ question, header: 'WhatsApp', options: labels.map((label) => ({ label, description: '' })) }];
-  const bubble = { id, kind: 'question', project: c.project, questions, text: question, speak: true };
+  const bubble = { id, kind: 'question', session: channelSession(c), project: c.project, questions, text: question, speak: true };
   const timer = setTimeout(() => pending.get(id)?.finish('none'), 600000);
   pending.set(id, { bubble, relay: { cid }, finish(decision, answers) {
     if (!pending.delete(id)) return;

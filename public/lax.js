@@ -303,12 +303,13 @@ function tabLabels(list) {
   return list.map((s) => { const base = `${s.project}·${s.where || 'cli'}`; seen[base] = (seen[base] || 0) + 1; return seen[base] > 1 ? `${base} ${seen[base]}` : base; });
 }
 function renderHud() {
-  // Tabs: Lax's own (its name: everything, and talking goes to Lax itself), then one per session. The open tab filters the terminal; a live one (claude-lax) also hears your voice.
+  // Tabs: Lax's own (its name: just your talk with Lax, outside any session), then one per session. The open tab filters the terminal; a live one (claude-lax) also hears your voice.
   const shown = sessions.slice(0, 8), labels = tabLabels(shown);
   if (view !== 'all' && !shown.some((s) => s.id === view)) setView('all');
   $('#chips').innerHTML = `<span class="all${view === 'all' ? ' sel' : ''}" data-view="all">${esc(settings.name.toLowerCase())}</span>` + shown.map((s, i) => {
     const ch = channels.find((c) => c.sessionPid && c.sessionPid === s.pid), open = s.id === view;
-    return `<span class="${s.status}${ch ? ' live' : ''}${open ? (ch ? ' sel' : ' front') : ''}" data-view="${esc(s.id)}" data-cid="${ch ? ch.cid : ''}" data-label="${esc(labels[i])}">${esc(labels[i])}</span>`;
+    const badge = open ? '' : bubbles.some((b) => b.session === s.id && needsYou(b)) ? ' ask' : unseen.has(s.id) ? ' new' : '';
+    return `<span class="${s.status}${ch ? ' live' : ''}${open ? (ch ? ' sel' : ' front') : ''}${badge}" data-view="${esc(s.id)}" data-cid="${ch ? ch.cid : ''}" data-label="${esc(labels[i])}">${esc(labels[i])}</span>`;
   }).join('');
   $('#lvl').textContent = `Lv${pet.level}`;
   $('#xp i').style.width = Math.round(100 * (pet.xp - pet.prevXp) / Math.max(1, pet.nextXp - pet.prevXp)) + '%';
@@ -317,17 +318,25 @@ function renderHud() {
 const term = $('#term');
 // Which tab is open: 'all' or a session id. Per device, so it lives here, not on the Mac.
 let view = 'all'; try { view = localStorage.lax_view || 'all'; } catch {}
-// session: the line's session id; none = shown under "all" only; '*' = shown in every tab (local link messages).
-const visible = (d) => view === 'all' || d.dataset.s === '*' || d.dataset.s === view;
+// Tabs only show on the open phone; the cover screen has none, so there everything is shown and every bubble is "here".
+const tabbed = () => document.body.classList.contains('big');
+// session: the line's session id; none = Lax's own (shown in Lax's tab only); '*' = shown in every tab (local link messages).
+const visible = (d) => !tabbed() || d.dataset.s === '*' || d.dataset.s === (view === 'all' ? '' : view);
+// A bubble belongs to another tab when it carries a session that has a tab and that tab isn't open. Those never show
+// their buttons or speak (so you can't approve one session's request while talking in another): a needs-you one shows
+// a small "<tab> needs you" notice that takes you there, anything else only marks the tab.
+const unseen = new Set(); // tabs with something new you haven't opened yet
+const needsYou = (b) => b.kind === 'permission' || b.kind === 'question';
+const elsewhere = (b) => tabbed() && b.session && b.session !== view && sessions.slice(0, 8).some((s) => s.id === b.session);
 function setView(v) {
   view = v; try { localStorage.lax_view = v; } catch {}
-  document.body.classList.toggle('view-all', v === 'all');
+  unseen.delete(v);
   for (const d of term.children) if (d.dataset.s !== undefined) d.hidden = !visible(d);
   term.scrollTop = term.scrollHeight;
+  renderBubble(); renderHud();
 }
 function feed(line, kind = 'tool', project, session = '') {
   const d = document.createElement('div'); d.className = kind; d.dataset.s = session; d.hidden = !visible(d);
-  if (project && kind !== 'session') { const p = document.createElement('span'); p.className = 'p'; p.textContent = project.slice(0, 8) + ' '; d.append(p); }
   // Follow new lines only if you're already at the bottom (so scrolling back to read isn't yanked away).
   const stick = term.scrollHeight - term.scrollTop - term.clientHeight < 40;
   d.append(line); term.insertBefore(d, term.lastElementChild);
@@ -345,6 +354,10 @@ function showBubble(b) {
   b.sticky = b.actions || b.kind === 'question' || b.kind === 'listening';
   if (!b.sticky) b.expires = performance.now() + (b.kind === 'reply' ? 15000 : 9000);
   renderBubble();
+  if (elsewhere(b)) { // another tab's: a short buzz if it needs you, otherwise just a mark on its tab
+    if (needsYou(b)) { sfx([660]); buzz([60]); } else unseen.add(b.session);
+    return renderHud();
+  }
   if (b.kind === 'permission' || b.kind === 'question') { sfx([660, 880, 660]); buzz([80, 60, 80]); }
   else if (b.kind === 'levelup') { sfx([523, 659, 784, 1046]); setReact('happy', 2500); }
   else if (b.kind === 'done') { sfx([784, 1046]); setReact('happy'); }
@@ -352,11 +365,21 @@ function showBubble(b) {
   else if (b.kind === 'error') { sfx([220, 160]); setReact('error'); }
   if (b.speak || (b.kind === 'done' && settings.speakDone)) speak(b.kind === 'permission' ? 'I need you. ' + b.text : b.kind === 'question' ? 'Question. ' + b.questions[0].question : b.say || b.text);
 }
-function clearBubble(id) { bubbles = bubbles.filter((x) => x.id !== id); renderBubble(); }
+function clearBubble(id) { const had = bubbles.find((x) => x.id === id); bubbles = bubbles.filter((x) => x.id !== id); renderBubble(); if (had?.session) renderHud(); }
 function renderBubble() {
   const now = performance.now();
   bubbles = bubbles.filter((b) => !b.expires || b.expires > now);
-  const b = bubbles.find((x) => x.kind === 'listening') || bubbles.find((x) => x.sticky) || bubbles[bubbles.length - 1]; // your words while talking win
+  const here = bubbles.filter((x) => !elsewhere(x)), away = bubbles.find((x) => elsewhere(x) && needsYou(x));
+  const b = here.find((x) => x.kind === 'listening') || here.find((x) => x.sticky) || here[here.length - 1]; // your words while talking win
+  elB.dataset.away = '';
+  if (!b && away) { // another tab needs you: say which, no buttons; tapping it opens that tab
+    const i = sessions.slice(0, 8).findIndex((s) => s.id === away.session), label = tabLabels(sessions.slice(0, 8))[i];
+    elB.className = 'show away'; elB.dataset.id = away.id; elB.dataset.away = away.session; elB.dataset.key = '';
+    elB.querySelector('.tag').textContent = 'elsewhere';
+    elB.querySelector('.text').textContent = `${label} needs you. Tap to go there.`;
+    elB.querySelector('.actions').style.display = 'none'; elB.querySelector('.det').style.display = 'none';
+    return;
+  }
   if (!b) { elB.className = ''; elB.dataset.key = ''; return; }
   elB.className = 'show ' + b.kind; elB.dataset.id = b.id;
   if (b.kind !== 'question') elB.querySelector('.tag').textContent = (b.kind === 'reply' ? settings.name.toLowerCase() : TAGS[b.kind]) || '';
@@ -398,13 +421,14 @@ let swiped = false;
     if (!down) return; down = false;
     const b = bubbles.find((x) => x.id === elB.dataset.id);
     elB.style.transform = ''; elB.style.opacity = '';
-    if (Math.abs(dx) > 70) { swiped = true; if (b?.kind === 'listening') cancelListening(); else if (b && !b.actions && b.kind !== 'question') clearBubble(b.id); }
+    if (Math.abs(dx) > 70) { swiped = true; if (elB.dataset.away) return; if (b?.kind === 'listening') cancelListening(); else if (b && !b.actions && b.kind !== 'question') clearBubble(b.id); }
   };
   elB.addEventListener('pointerup', end); elB.addEventListener('pointercancel', end);
 }
 elB.addEventListener('click', (e) => {
   e.stopPropagation();
   if (swiped) { swiped = false; return; } // the end of a swipe isn't a tap
+  if (elB.dataset.away) return $('#chips').querySelector(`[data-view="${CSS.escape(elB.dataset.away)}"]`)?.click();
   const id = elB.dataset.id, b = bubbles.find((x) => x.id === id); if (!b) return;
   if (b.kind === 'listening') return cancelListening();
   if (e.target.matches('.more')) { b.showDetails = !b.showDetails; renderBubble(); return; }
@@ -660,14 +684,14 @@ function demo() {
   pet = { name: 'Lax', level: 7, stage: 'cube', traits: ['headband'], mood: 'happy', xp: 400, prevXp: 360, nextXp: 490, streak: 4 };
   sessions = [{ id: 'd1', project: 'api', where: 'mac', status: 'working' }, { id: 'd2', project: 'web', where: 'cli', status: 'done' }]; applyLook(); renderHud();
   const steps = [
-    () => feed('> fix the flaky auth test', 'prompt', 'api'),
-    () => feed('Read auth.test.ts', 'tool', 'api'), () => feed('Grep "refreshToken"', 'tool', 'api'),
-    () => feed('Edit auth.ts', 'tool', 'api'), () => feed('$ npm test -- auth', 'tool', 'api'),
-    () => feed('  ✗ Bash failed', 'error', 'api') || setReact('error'),
-    () => feed('Edit auth.ts', 'tool', 'api'),
+    () => feed('> fix the flaky auth test', 'prompt', 'api', 'd1'),
+    () => feed('Read auth.test.ts', 'tool', 'api', 'd1'), () => feed('Grep "refreshToken"', 'tool', 'api', 'd1'),
+    () => feed('Edit auth.ts', 'tool', 'api', 'd1'), () => feed('$ npm test -- auth', 'tool', 'api', 'd1'),
+    () => feed('  ✗ Bash failed', 'error', 'api', 'd1') || setReact('error'),
+    () => feed('Edit auth.ts', 'tool', 'api', 'd1'),
     () => showBubble({ id: 'perm', kind: 'permission', text: 'api wants to: $ rm -rf dist && npm run build', actions: true }),
-    () => {}, () => {}, () => clearBubble('perm') || feed('  ✓ approved from phone', 'done', 'api'),
-    () => feed('$ npm run build', 'tool', 'api'),
+    () => {}, () => {}, () => clearBubble('perm') || feed('  ✓ approved from phone', 'done', 'api', 'd1'),
+    () => feed('$ npm run build', 'tool', 'api', 'd1'),
     () => feed('✓ api: Fixed the race in token refresh; all 42 tests pass.', 'done', 'api') || showBubble({ id: 'd', kind: 'done', text: 'api: Fixed the race in token refresh; all 42 tests pass.' }),
     () => showBubble({ id: 'lv', kind: 'levelup', text: 'Lax reached level 8!' }),
     () => {}, () => { voiceBusy = true; }, () => {}, () => { voiceBusy = false; pet = { ...pet, mood: 'sleepy' }; },
@@ -739,4 +763,4 @@ $('#chips').addEventListener('click', (e) => {
   if (voiceTarget !== 'background') setTarget('background'); else renderHud();
   if (chip.dataset.view !== 'all') showBubble({ id: 'notlive', kind: 'reply', text: `${chip.dataset.label} can't hear me, so I'll answer you myself. Start it with "lax" to talk to it.` });
 });
-setView(view);
+setView(view); addEventListener('resize', () => setView(view)); // folding the phone shows or hides the tabs
