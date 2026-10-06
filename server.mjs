@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { ensureHome, commitMind, syncMindName, addMemoryLayout, addToolsAdvice } from './lib/home.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS, secret, ensureDirs, readEnv } from './lib/paths.mjs';
+import { grantKey } from './lib/allow.mjs';
 import { MAX_LEVEL, STAGES, levelOf as levelOn, stageIdx, barFor as barOn, curveOf } from './lib/levels.mjs';
 import { createBrain, ensureBrain, brief } from './lib/brain.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus } from './lib/actions.mjs';
@@ -229,6 +230,7 @@ function onHook(h) {
   touchDay();
   const mine = sid && sid === voiceSessions[ASSISTANT]; // Lax's own assistant: talk() already shows what you said and the answer
   if (/^(PostToolUse|PostToolUseFailure|Stop|UserPromptSubmit)$/.test(h.hook_event_name)) clearRelays((c) => c.cwd === h.cwd);
+  if (/^(Stop|SessionEnd)$/.test(h.hook_event_name)) grants.delete(sid); // the answer is done: your yeses were for that one
   brain.onEvent(sid, h.hook_event_name); // a quiet session after real work → Lax reflects on it
   switch (h.hook_event_name) {
     case 'SessionStart':
@@ -280,9 +282,18 @@ function onHook(h) {
   save(); pushState();
 }
 
+// Lax's assistant, while it answers you: what your yeses on the phone already cover (lib/allow.mjs grantKey):
+// edits anywhere in a repo you let it edit, a command you let it run. Forgotten when it finishes (Stop).
+const grants = new Map(); // session id -> Set of grant keys
+
 // A hook is waiting for the human: show the bubble, resolve when the phone answers (or time out).
 // Decisions: allow | deny | answer (AskUserQuestion, with answers) | none (fall back to the terminal).
 function ask(h) {
+  const grant = h.lax_voice ? grantKey(h.tool_name, h.tool_input || {}, h.cwd) : null;
+  if (grant && grants.get(h.session_id)?.has(grant)) {
+    feed(`  ✓ covered by your yes`, 'done', proj(h.cwd), h.session_id);
+    return Promise.resolve({ decision: 'allow' });
+  }
   return new Promise((resolve) => {
     // Lax's own assistant (h.lax_voice) has no terminal: its requests always come to the phone, whatever "ask me on the phone"
     // (which is about your terminal sessions) says. If it can't be asked, say why.
@@ -295,13 +306,15 @@ function ask(h) {
     const questions = h.tool_name === 'AskUserQuestion' && Array.isArray(h.tool_input?.questions) ? h.tool_input.questions : null;
     const bubble = questions
       ? { id, kind: 'question', session: h.session_id, project, questions, text: `${project}: ${questions[0].question}`, speak: true }
-      : { id, kind: 'permission', session: h.session_id, text: `${project} wants to: ${describeTool(h.tool_name, h.tool_input)}`, speak: true, actions: true };
+      : { id, kind: 'permission', session: h.session_id, text: `${project} wants to: ${describeTool(h.tool_name, h.tool_input)}`, speak: true, actions: true,
+        ...(grant?.startsWith('edit:') && { details: `A yes also lets it edit the rest of ${path.basename(grant.slice(5))} until it finishes this answer.` }) };
     // Questions are worth waiting longer for: they need reading.
     const timer = setTimeout(() => finish('none'), Math.min(600, settings.askTimeout * (questions ? 4 : 1)) * 1000);
     function finish(decision, answers) {
       clearTimeout(timer); pending.delete(id); broadcast('clear', { id });
       const ss = sessions.get(h.session_id); if (ss?.status === 'waiting') { ss.status = 'working'; pushState(); }
       if (decision === 'allow' || decision === 'answer') pet.approvals++; else if (decision === 'deny') pet.denials++;
+      if (decision === 'allow' && grant) grants.set(h.session_id, (grants.get(h.session_id) || new Set()).add(grant));
       const line = { allow: '✓ approved from phone', deny: '✗ denied from phone', answer: '✓ answered from phone' }[decision];
       if (line) { feed(`  ${line}`, decision === 'deny' ? 'error' : 'done', project, h.session_id); save(); }
       resolve(answers ? { decision, answers } : { decision });
@@ -325,8 +338,10 @@ function pickChannel() {
   if (channels.has(voiceTarget)) return voiceTarget;
   return [...channels.entries()].sort((a, b) => b[1].active - a[1].active)[0]?.[0] || null;
 }
+// A permission prompt or terminal menu relayed from a session is settled once that session moves on (answered at the
+// terminal). Sharing's questions ("Which Vera?", "Send it?") stay: the session keeps working while they wait.
 function clearRelays(match) {
-  for (const [id, p] of pending) if (p.relay && match(channels.get(p.relay.cid) || {})) p.finish('none');
+  for (const [id, p] of pending) if (p.relay?.settles && match(channels.get(p.relay.cid) || {})) p.finish('none');
 }
 function channelEvent(b) {
   const c = channels.get(b.cid); if (!c) return false;
@@ -335,20 +350,25 @@ function channelEvent(b) {
     if (channelWait?.cid === b.cid) { clearTimeout(channelWait.timer); channelWait = null; }
     const text = String(b.text || '');
     feed(`↩ ${clip(text)}`, 'done', c.project, channelSession(c)); logEvent(channelSession(c) || '', c.project, 'reply', short(text, 1000));
-    broadcast('bubble', { id: 'ch' + Date.now(), kind: 'reply', text: short(text.replace(/```[\s\S]*?```/g, ' '), 400), say: spoken(text), speak: true });
+    broadcast('bubble', { id: 'ch' + Date.now(), kind: 'reply', session: channelSession(c), text: short(text.replace(/```[\s\S]*?```/g, ' '), 400), say: spoken(text), speak: true });
   } else if (b.type === 'share') {
     feed(String(b.line || '').slice(0, 200), 'tool', c.project, channelSession(c));
     if (b.ready) askShare(b.cid, String(b.ready.what || 'it'), String(b.ready.who || 'them'));
+  } else if (b.type === 'pick') {
+    askPick(b.cid, String(b.id || ''), String(b.question || 'Which one?'), (Array.isArray(b.options) ? b.options : []).map(String).slice(0, 6));
+  } else if (b.type === 'say') {
+    broadcast('bubble', { id: 'sh' + Date.now(), kind: 'reply', session: channelSession(c), text: short(String(b.text || ''), 400), speak: true });
   } else if (b.type === 'shared') {
-    const who = String(b.who || 'them');
-    const [line, ok] = b.failed ? [`couldn't press it in WhatsApp (${short(b.failed, 80)})`, false] : b.sent ? [`sent to ${who}`, true] : ['not sent', false];
+    const who = b.who && String(b.who); // set for WhatsApp; the share sheet doesn't say where it went
+    const [line, ok] = b.failed ? [`couldn't share it (${short(b.failed, 80)})`, false] : b.sent ? [who ? `sent to ${who}` : 'shared', true] : ['not sent', false];
     feed(`  ${ok ? '✓' : '✗'} ${line}`, ok ? 'done' : 'error', c.project, channelSession(c));
-    if (b.failed) broadcast('bubble', { id: 'sh' + Date.now(), kind: 'error', text: `I couldn't send it. It's still waiting in ${who}'s chat on the Mac.`, speak: true });
+    if (b.failed) broadcast('bubble', { id: 'sh' + Date.now(), kind: 'error', session: channelSession(c), speak: true,
+      text: who ? `I couldn't send it. It's still waiting in ${who}'s chat on the Mac.` : `I couldn't share it: ${short(b.failed, 120)}` });
   } else if (b.type === 'permission') {
     const id = 'relay-' + b.request_id;
-    const bubble = { id, kind: 'permission', actions: true, speak: true, details: String(b.input_preview || ''),
+    const bubble = { id, kind: 'permission', session: channelSession(c), actions: true, speak: true, details: String(b.input_preview || ''),
       text: `${c.project} wants to: ${b.tool_name}${b.description ? ' — ' + short(b.description, 140) : ''}` };
-    pending.set(id, { bubble, relay: { cid: b.cid }, finish(decision) {
+    pending.set(id, { bubble, relay: { cid: b.cid, settles: true }, finish(decision) {
       if (!pending.delete(id)) return;
       broadcast('clear', { id });
       if (decision !== 'allow' && decision !== 'deny') return;
@@ -392,7 +412,7 @@ function quickAction(cid, action) {
   const c = channels.get(cid); if (!c?.pty || !action) return false;
   c.active = Date.now(); pet.voice++; gainXp(1); save();
   feed(`> ${action}`, 'prompt', c.project, channelSession(c)); pushState();
-  const sid = channelSession(c), say = (text, kind = 'reply') => broadcast('bubble', { id: 'act' + Date.now(), kind, text, speak: true });
+  const sid = channelSession(c), say = (text, kind = 'reply') => broadcast('bubble', { id: 'act' + Date.now(), kind, session: sid, text, speak: true });
   sendAction(c.pty, action).then((r) => {
     if (!r.ok) {
       feed(`  ${action} didn't reach the terminal`, 'error', c.project, sid);
@@ -412,8 +432,8 @@ function askMenu(cid, menu) {
   const c = channels.get(cid); if (!c) return;
   const id = 'menu-' + crypto.randomBytes(4).toString('hex'), labels = menu.options.slice(0, 9);
   const questions = [{ question: menu.question, header: c.project, options: labels.map((label, i) => ({ label, description: i ? '' : menu.detail })) }];
-  const bubble = { id, kind: 'question', project: c.project, questions, text: `${c.project}: ${menu.question}`, speak: true };
-  pending.set(id, { bubble, relay: { cid }, finish(decision, answers) {
+  const bubble = { id, kind: 'question', session: channelSession(c), project: c.project, questions, text: `${c.project}: ${menu.question}`, speak: true };
+  pending.set(id, { bubble, relay: { cid, settles: true }, finish(decision, answers) {
     if (!pending.delete(id)) return;
     broadcast('clear', { id });
     const a = String(Object.values(answers || {})[0] || '').trim().toLowerCase(); // a tapped label, or said ("yes", "no, go back")
@@ -428,7 +448,7 @@ function askShare(cid, what, who) {
   const id = 'share-' + crypto.randomBytes(4).toString('hex');
   const questions = [{ question: `Send ${what} to ${who}?`, header: 'WhatsApp',
     options: [{ label: 'Send', description: `Presses Enter in ${who}'s chat on the Mac` }, { label: 'Cancel', description: 'Leaves it unsent' }] }];
-  const bubble = { id, kind: 'question', project: c.project, questions, text: questions[0].question, speak: true };
+  const bubble = { id, kind: 'question', session: channelSession(c), project: c.project, questions, text: questions[0].question, speak: true };
   const timer = setTimeout(() => pending.get(id)?.finish('none'), 600000); // left waiting: it stays in the chat for Enter
   pending.set(id, { bubble, relay: { cid }, finish(decision, answers) {
     if (!pending.delete(id)) return;
@@ -436,6 +456,20 @@ function askShare(cid, what, who) {
     if (decision !== 'answer') return;
     const a = String(Object.values(answers || {})[0] || '').trim().toLowerCase(); // tapped, or said ("send it", "yes", "cancel")
     sendChannel(cid, 'share', { send: /^(send|yes|yeah|yep|sure|ok|okay|go)\b/.test(a), who });
+  } });
+  broadcast('bubble', bubble);
+}
+// Several contacts match: "Which Vera?" on the phone. The answer (tapped or said) goes back to the channel, which shares on.
+function askPick(cid, pickId, question, labels) {
+  const c = channels.get(cid); if (!c || !labels.length) return;
+  const id = 'pick-' + crypto.randomBytes(4).toString('hex');
+  const questions = [{ question, header: 'WhatsApp', options: labels.map((label) => ({ label, description: '' })) }];
+  const bubble = { id, kind: 'question', session: channelSession(c), project: c.project, questions, text: question, speak: true };
+  const timer = setTimeout(() => pending.get(id)?.finish('none'), 600000);
+  pending.set(id, { bubble, relay: { cid }, finish(decision, answers) {
+    if (!pending.delete(id)) return;
+    clearTimeout(timer); broadcast('clear', { id });
+    sendChannel(cid, 'pick', { id: pickId, answer: decision === 'answer' ? String(Object.values(answers || {})[0] || '') : '' });
   } });
   broadcast('bubble', bubble);
 }

@@ -41,6 +41,7 @@
   #bubble.permission { background:#ffe7a8; }
   #bubble.error { background:#ffc9c4; }
   #bubble.learned { background:#e9e0ff; }
+  #bubble.away { background:#ffe7a8; opacity:.85; cursor:pointer; } /* another tab needs you: no buttons here */
   #bubble { touch-action:pan-y; } /* horizontal drags are ours: swipe to dismiss */
   #bubble .tag { font-size:13px; opacity:.6; display:block; margin-bottom:1px; }
   #bubble .text { max-height:62px; overflow:hidden; word-break:break-word; }
@@ -62,7 +63,7 @@
   body.big #term div { white-space:pre-wrap; word-break:break-word; margin-bottom:3px; }
   #term .prompt { color:var(--fg); } #term .done { color:var(--green); } #term .error { color:var(--red); }
   #term .session { color:var(--dim); } #term .out { color:var(--dim); white-space:pre; overflow-x:auto; } #term .tool::before { content:''; }
-  #term .p { color:var(--coral); } body:not(.view-all) #term .p { display:none; } #term div[hidden] { display:none; }
+  #term div[hidden] { display:none; }
   #cursor { display:inline-block; width:6px; height:10px; background:var(--green); animation:blink 1s steps(2) infinite; vertical-align:-1px; }
 
   /* Life menu */
@@ -127,6 +128,8 @@
   #chips .all::before { content:'≡ '; }
   #chips .front { border-color:#6b6459; border-bottom-color:var(--bg); background:var(--bg); color:var(--fg); padding-top:4px; }
   #chips .working::before { color:var(--blue); } #chips .waiting::before { color:var(--amber); } #chips .done::before { color:var(--green); }
+  /* Another tab has something: blinking amber when it needs you, a dot when there's news you haven't opened. */
+  #chips .ask { border-color:var(--amber); animation:blink .5s steps(2) infinite; } #chips .new::after { content:' •'; color:var(--coral); }
   #bottom { flex:1; display:flex; flex-direction:column; min-height:0; }
 
   /* Closed phone, held upright: the Flip 3 cover screen is a 512×260 landscape strip → Lax left, bubble + terminal right. */
