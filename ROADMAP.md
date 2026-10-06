@@ -61,10 +61,9 @@ The smallest learning loop that runs without you, so Lax starts learning now (Ph
 - "Plan mode", "auto mode", "accept edits", "manual mode" switch modes by reading the footer; "context", "usage" and "model" are read back aloud, details in the feed; "sonnet", "opus", "haiku" or "fable" switch the model.
 - A closed list of actions only. Your terminal feels exactly the same.
 
-### Phase 3.6: share via WhatsApp [diogodebastos/lax#12](https://github.com/diogodebastos/lax/issues/12)
-- "Share the card via WhatsApp to Veralicious": on the Mac (the default), WhatsApp Desktop opens that chat with the image pasted in. You press Enter.
-- Text opens the chat with the message typed in; with `app: any`, the macOS share sheet.
-- "…on my phone": the Lax app does the same on the phone.
+### Phase 3.6: share via WhatsApp ✅ [diogodebastos/lax#12](https://github.com/diogodebastos/lax/issues/12)
+- "Share the card via WhatsApp to Veralicious": Lax finds the contact (nicknames and near misses too; asks which one by voice if several match), WhatsApp Desktop opens that chat with the image pasted in or the text typed in, and nothing is sent without your yes.
+- Or the macOS share menu, or straight to AirDrop, Messages or Mail.
 
 ### Phase 3.7: easter egg 🥚 ✅ [diogodebastos/lax#14](https://github.com/diogodebastos/lax/issues/14)
 - Lax levels up to 100 on a familiar fire-starter's curve (Medium Slow), and evolves at 16 and 36, then 50 and 100.
@@ -151,6 +150,7 @@ The Mac stays the brain; Cloudflare becomes the always-on link and Lax's public 
 - Package the channel as a plugin once channels leave research preview (no development flag).
 
 **Phone and home**
+- Share on the phone ("…on my phone"): the Lax app receives the file and opens WhatsApp or the share sheet there. Split from Phase 3.6, which shares on the Mac.
 - A Flex-mode desk-buddy pose: a bigger Lax with ambient animations while you code.
 - Quiet hours and do-not-disturb (no voice, only a buzz for approvals).
 - Battery-friendly always-on mode (dim AMOLED-black scene, charging kept at 85%).
