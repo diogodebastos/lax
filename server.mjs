@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { ensureHome, commitMind, syncMindName, addMemoryLayout, addToolsAdvice } from './lib/home.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS, secret, ensureDirs, readEnv } from './lib/paths.mjs';
+import { grantKey } from './lib/allow.mjs';
 import { MAX_LEVEL, STAGES, levelOf as levelOn, stageIdx, barFor as barOn, curveOf } from './lib/levels.mjs';
 import { createBrain, ensureBrain, brief } from './lib/brain.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus } from './lib/actions.mjs';
@@ -219,6 +220,7 @@ function onHook(h) {
   touchDay();
   const mine = sid && sid === voiceSessions[ASSISTANT]; // Lax's own assistant: talk() already shows what you said and the answer
   if (/^(PostToolUse|PostToolUseFailure|Stop|UserPromptSubmit)$/.test(h.hook_event_name)) clearRelays((c) => c.cwd === h.cwd);
+  if (/^(Stop|SessionEnd)$/.test(h.hook_event_name)) grants.delete(sid); // the answer is done: your yeses were for that one
   brain.onEvent(sid, h.hook_event_name); // a quiet session after real work → Lax reflects on it
   switch (h.hook_event_name) {
     case 'SessionStart':
@@ -270,9 +272,18 @@ function onHook(h) {
   save(); pushState();
 }
 
+// Lax's assistant, while it answers you: what your yeses on the phone already cover (lib/allow.mjs grantKey):
+// edits anywhere in a repo you let it edit, a command you let it run. Forgotten when it finishes (Stop).
+const grants = new Map(); // session id -> Set of grant keys
+
 // A hook is waiting for the human: show the bubble, resolve when the phone answers (or time out).
 // Decisions: allow | deny | answer (AskUserQuestion, with answers) | none (fall back to the terminal).
 function ask(h) {
+  const grant = h.lax_voice ? grantKey(h.tool_name, h.tool_input || {}, h.cwd) : null;
+  if (grant && grants.get(h.session_id)?.has(grant)) {
+    feed(`  ✓ covered by your yes`, 'done', proj(h.cwd), h.session_id);
+    return Promise.resolve({ decision: 'allow' });
+  }
   return new Promise((resolve) => {
     // Lax's own assistant (h.lax_voice) has no terminal: its requests always come to the phone, whatever "ask me on the phone"
     // (which is about your terminal sessions) says. If it can't be asked, say why.
@@ -285,13 +296,15 @@ function ask(h) {
     const questions = h.tool_name === 'AskUserQuestion' && Array.isArray(h.tool_input?.questions) ? h.tool_input.questions : null;
     const bubble = questions
       ? { id, kind: 'question', session: h.session_id, project, questions, text: `${project}: ${questions[0].question}`, speak: true }
-      : { id, kind: 'permission', session: h.session_id, text: `${project} wants to: ${describeTool(h.tool_name, h.tool_input)}`, speak: true, actions: true };
+      : { id, kind: 'permission', session: h.session_id, text: `${project} wants to: ${describeTool(h.tool_name, h.tool_input)}`, speak: true, actions: true,
+        ...(grant?.startsWith('edit:') && { details: `A yes also lets it edit the rest of ${path.basename(grant.slice(5))} until it finishes this answer.` }) };
     // Questions are worth waiting longer for: they need reading.
     const timer = setTimeout(() => finish('none'), Math.min(600, settings.askTimeout * (questions ? 4 : 1)) * 1000);
     function finish(decision, answers) {
       clearTimeout(timer); pending.delete(id); broadcast('clear', { id });
       const ss = sessions.get(h.session_id); if (ss?.status === 'waiting') { ss.status = 'working'; pushState(); }
       if (decision === 'allow' || decision === 'answer') pet.approvals++; else if (decision === 'deny') pet.denials++;
+      if (decision === 'allow' && grant) grants.set(h.session_id, (grants.get(h.session_id) || new Set()).add(grant));
       const line = { allow: '✓ approved from phone', deny: '✗ denied from phone', answer: '✓ answered from phone' }[decision];
       if (line) { feed(`  ${line}`, decision === 'deny' ? 'error' : 'done', project, h.session_id); save(); }
       resolve(answers ? { decision, answers } : { decision });
