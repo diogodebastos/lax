@@ -12,6 +12,7 @@ import { ensureHome, commitMind, syncMindName, addMemoryLayout, addToolsAdvice }
 import { HOME, MIND, DB, OLD_DB, SETTINGS, secret, ensureDirs, readEnv } from './lib/paths.mjs';
 import { MAX_LEVEL, STAGES, levelOf as levelOn, stageIdx, barFor as barOn, curveOf } from './lib/levels.mjs';
 import { createBrain, ensureBrain, brief } from './lib/brain.mjs';
+import { voiceAction, sendAction } from './lib/actions.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 // Lax itself lives in ~/.lax (lib/paths.mjs): memory, secrets, mind, logs. This repo is only its body.
@@ -367,8 +368,17 @@ function sessionsBrief() {
 const assistantPrompt = () =>
   'The user is talking to you by voice: start with ONE short, plain sentence that can be read aloud.\n\n' +
   `Their Claude Code sessions right now (tab name, status, latest activity):\n${sessionsBrief()}`;
+// Quick actions by voice: a closed list typed into a live `lax` session's terminal (lib/actions.mjs).
+function quickAction(cid, action) {
+  const c = channels.get(cid); if (!c?.pty || !action) return false;
+  c.active = Date.now(); pet.voice++; gainXp(1); save();
+  feed(`⚡ ${action}`, 'prompt', c.project, channelSession(c)); pushState();
+  sendAction(c.pty, action).then((ok) => { if (!ok) feed(`  ⚡ ${action} didn't reach the terminal`, 'error', c.project, channelSession(c)); });
+  return true;
+}
 function talk(text) {
   const cid = pickChannel();
+  if (cid && quickAction(cid, voiceAction(text))) return true; // "clear", "stop"… (anything longer is a message)
   if (cid) { // into the running session
     const c = channels.get(cid);
     sendChannel(cid, 'message', { chat_id: crypto.randomBytes(3).toString('hex'), text });
@@ -455,7 +465,9 @@ http.createServer(async (req, res) => {
     const q = url.searchParams, cid = q.get('cid') || crypto.randomBytes(5).toString('hex'), cwd = q.get('cwd') || '';
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
     res.write(': linked\n\n');
-    channels.set(cid, { res, cwd, project: proj(cwd), sessionPid: Number(q.get('session_pid')) || null, active: Date.now() });
+    const pty = q.get('pty') || ''; // a `lax` wrapper's socket (quick actions); only ever one of ours, in ~/.lax/run
+    channels.set(cid, { res, cwd, project: proj(cwd), sessionPid: Number(q.get('session_pid')) || null, active: Date.now(),
+      pty: path.dirname(pty) === path.join(HOME, 'run') ? pty : null });
     feed(`● live session: ${proj(cwd)}`, 'session', proj(cwd)); pushState();
     const ping = setInterval(() => res.write(': ping\n\n'), 20000);
     req.on('close', () => {
@@ -492,6 +504,7 @@ http.createServer(async (req, res) => {
     case '/api/target':
       voiceTarget = b.target === 'auto' || channels.has(b.target) ? b.target : 'background'; pushState();
       return json(res, { ok: true, voiceTarget });
+    case '/api/action': return json(res, { ok: quickAction(String(b.cid || ''), voiceAction(b.action)) });
     case '/api/talk': return json(res, { ok: talk(String(b.text || '').slice(0, 2000)) });
     default: return json(res, { error: 'not found' }, 404);
   }

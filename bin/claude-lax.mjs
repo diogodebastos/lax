@@ -1,0 +1,61 @@
+#!/usr/bin/env node
+// `lax` / `claude-lax`: Claude Code with the Lax channel, inside a small pseudo-terminal so Lax can type a few
+// quick actions into it by voice ("clear", "compact", "stop", "continue"). Your terminal feels the same: raw keys,
+// colours, resize and the exit code all pass straight through.
+// Lax reaches it over a private Unix socket (its path is in LAX_PTY, which the channel reports to the server).
+// The socket takes action NAMES only, from the closed list in lib/actions.mjs, never free text.
+// If node-pty can't load (or there's no terminal), this runs plain `claude` instead: no quick actions, all else the same.
+import fs from 'node:fs';
+import os from 'node:os';
+import net from 'node:net';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { HOME } from '../lib/paths.mjs';
+import { ACTIONS } from '../lib/actions.mjs';
+
+const CLAUDE = process.env.LAX_CLAUDE || 'claude';
+const args = ['--dangerously-load-development-channels', 'server:lax', ...process.argv.slice(2)];
+const env = { ...process.env };
+delete env.CLAUDE_CODE_ENTRYPOINT; // a terminal opened by the desktop app (/lax) would label the tab ·mac
+
+let pty = null;
+try { pty = createRequire(import.meta.url)('node-pty'); } catch {}
+
+if (!pty || !process.stdin.isTTY || !process.stdout.isTTY) {
+  for (const s of ['SIGINT', 'SIGQUIT']) process.on(s, () => {}); // Claude gets them from the terminal itself
+  const child = spawn(CLAUDE, args, { stdio: 'inherit', env });
+  child.on('exit', (code, sig) => process.exit(sig ? 128 + (os.constants.signals[sig] || 1) : code ?? 0));
+} else {
+  const dir = path.join(HOME, 'run'); fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const SOCK = path.join(dir, `pty-${process.pid}.sock`); fs.rmSync(SOCK, { force: true });
+  const term = pty.spawn(CLAUDE, args, { name: process.env.TERM || 'xterm-256color', cwd: process.cwd(),
+    cols: process.stdout.columns || 80, rows: process.stdout.rows || 24, env: { ...env, LAX_PTY: SOCK } });
+
+  process.stdin.setRawMode(true); process.stdin.setEncoding('utf8'); process.stdin.resume();
+  process.stdin.on('data', (d) => term.write(d));
+  term.onData((d) => process.stdout.write(d));
+  process.stdout.on('resize', () => term.resize(process.stdout.columns, process.stdout.rows));
+
+  const act = (name) => {
+    const a = Object.hasOwn(ACTIONS, name) ? ACTIONS[name] : null; if (!a) return false;
+    if (a.keys) term.write(a.keys); else { term.write(a.text); setTimeout(() => term.write('\r'), 150); }
+    return true;
+  };
+  const server = net.createServer((sock) => {
+    let buf = '';
+    sock.setEncoding('utf8'); sock.on('error', () => {});
+    sock.on('data', (d) => {
+      buf += d; if (buf.length > 64) return sock.destroy();
+      const i = buf.indexOf('\n'); if (i >= 0) sock.end(act(buf.slice(0, i).trim()) ? 'ok\n' : 'no\n');
+    });
+  }).on('error', () => {}) // no socket (e.g. path too long): Claude runs as usual, just without quick actions
+    .listen(SOCK, () => fs.chmodSync(SOCK, 0o600));
+
+  const cleanup = () => { try { server.close(); fs.rmSync(SOCK, { force: true }); } catch {} };
+  term.onExit(({ exitCode, signal }) => {
+    cleanup(); try { process.stdin.setRawMode(false); } catch {}
+    process.exit(signal ? 128 + signal : exitCode);
+  });
+  for (const s of ['SIGTERM', 'SIGHUP']) process.on(s, () => { try { term.kill(s); } catch {} cleanup(); process.exit(128 + os.constants.signals[s]); });
+}
