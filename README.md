@@ -60,12 +60,10 @@ These files are created on first use and never overwritten.
 
 ## Life menu
 
-Tap **LAX ≡** (or **♥ life** when the phone is open) to:
-- rename Lax and pick its color (8 presets or a custom color)
-- change voice on/off and pitch, and choose whether it reads every "done"
-- turn phone approvals on/off and set the wait time
-- browse its memory (stats, favorite tools, milestones)
-- **rebirth** it: hold for 2s to wipe its memory and start over
+Tap **LAX ≡** to open Lax's life. It reads top to bottom:
+- **Life** (read-only, what Lax has lived): stats (level, stage, XP, streak, mood, traits…), favorite tools, milestones
+- **Settings** (yours to change): name, color, theme (system / light / dark), voice and pitch, whether it reads every "done", where talk goes, phone approvals and the wait time
+- **Rebirth**: hold for 2s to start a new life. Its life (`life.db`) is wiped; your settings stay
 
 ## Reaching Lax from anywhere (Cloudflare Tunnel + Access)
 
