@@ -326,6 +326,14 @@ function channelEvent(b) {
     const text = String(b.text || '');
     feed(`↩ ${clip(text)}`, 'done', c.project, channelSession(c)); logEvent(channelSession(c) || '', c.project, 'reply', short(text, 1000));
     broadcast('bubble', { id: 'ch' + Date.now(), kind: 'reply', text: short(text.replace(/```[\s\S]*?```/g, ' '), 400), say: spoken(text), speak: true });
+  } else if (b.type === 'share') {
+    feed(String(b.line || '').slice(0, 200), 'tool', c.project, channelSession(c));
+    if (b.ready) askShare(b.cid, String(b.ready.what || 'it'), String(b.ready.who || 'them'));
+  } else if (b.type === 'shared') {
+    const who = String(b.who || 'them');
+    const [line, ok] = b.failed ? [`couldn't press it in WhatsApp (${short(b.failed, 80)})`, false] : b.sent ? [`sent to ${who}`, true] : ['not sent', false];
+    feed(`  ${ok ? '✓' : '✗'} ${line}`, ok ? 'done' : 'error', c.project, channelSession(c));
+    if (b.failed) broadcast('bubble', { id: 'sh' + Date.now(), kind: 'error', text: `I couldn't send it. It's still waiting in ${who}'s chat on the Mac.`, speak: true });
   } else if (b.type === 'permission') {
     const id = 'relay-' + b.request_id;
     const bubble = { id, kind: 'permission', actions: true, speak: true, details: String(b.input_preview || ''),
@@ -400,6 +408,23 @@ function askMenu(cid, menu) {
     const a = String(Object.values(answers || {})[0] || '').trim().toLowerCase(); // a tapped label, or said ("yes", "no, go back")
     const n = decision !== 'answer' || !a ? 0 : labels.findIndex((l) => l.toLowerCase() === a || l.toLowerCase().startsWith(a.split(/[ ,.!]/)[0])) + 1;
     if (n >= 1 && n <= 2) quickAction(cid, `pick ${n}`);
+  } });
+  broadcast('bubble', bubble);
+}
+// A share waiting in a WhatsApp chat on the Mac: "Send it?" on the phone. The channel presses Enter (send) or Escape.
+function askShare(cid, what, who) {
+  const c = channels.get(cid); if (!c) return;
+  const id = 'share-' + crypto.randomBytes(4).toString('hex');
+  const questions = [{ question: `Send ${what} to ${who}?`, header: 'WhatsApp',
+    options: [{ label: 'Send', description: `Presses Enter in ${who}'s chat on the Mac` }, { label: 'Cancel', description: 'Leaves it unsent' }] }];
+  const bubble = { id, kind: 'question', project: c.project, questions, text: questions[0].question, speak: true };
+  const timer = setTimeout(() => pending.get(id)?.finish('none'), 600000); // left waiting: it stays in the chat for Enter
+  pending.set(id, { bubble, relay: { cid }, finish(decision, answers) {
+    if (!pending.delete(id)) return;
+    clearTimeout(timer); broadcast('clear', { id });
+    if (decision !== 'answer') return;
+    const a = String(Object.values(answers || {})[0] || '').trim().toLowerCase(); // tapped, or said ("send it", "yes", "cancel")
+    sendChannel(cid, 'share', { send: /^(send|yes|yeah|yep|sure|ok|okay|go)\b/.test(a), who });
   } });
   broadcast('bubble', bubble);
 }
