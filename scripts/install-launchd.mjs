@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { LOGS, secret, ensureDirs } from '../lib/paths.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const AGENTS = path.join(os.homedir(), 'Library', 'LaunchAgents');
@@ -32,24 +33,24 @@ const plist = (label, args, log) => `<?xml version="1.0" encoding="UTF-8"?>
 `;
 
 const agents = [
-  { label: 'com.diogodebastos.lax', args: [NODE, '--no-warnings', path.join(ROOT, 'server.mjs')], log: path.join(ROOT, 'data', 'server.log') },
+  { label: 'com.diogodebastos.lax', args: [NODE, '--no-warnings', path.join(ROOT, 'server.mjs')], log: path.join(LOGS, 'server.log') },
 ];
-// Remotely-managed tunnel (scripts/cf-setup.mjs) → data/tunnel-token; or a locally-managed one in ~/.cloudflared.
-const tokenFile = path.join(ROOT, 'data', 'tunnel-token');
+// Remotely-managed tunnel (scripts/cf-setup.mjs) → ~/.lax/secrets/tunnel-token; or a locally-managed one in ~/.cloudflared.
+const tokenFile = secret('tunnel-token');
 const tunnelArgs = fs.existsSync(tokenFile) ? ['tunnel', '--no-autoupdate', 'run', '--token-file', tokenFile]
   : fs.existsSync(path.join(os.homedir(), '.cloudflared', 'config.yml')) ? ['tunnel', '--no-autoupdate', 'run', 'lax'] : null;
 if (CLOUDFLARED && tunnelArgs) {
-  agents.push({ label: 'com.diogodebastos.lax-tunnel', args: [CLOUDFLARED, ...tunnelArgs], log: path.join(ROOT, 'data', 'tunnel.log') });
+  agents.push({ label: 'com.diogodebastos.lax-tunnel', args: [CLOUDFLARED, ...tunnelArgs], log: path.join(LOGS, 'tunnel.log') });
 } else if (!remove) {
   console.log('(tunnel agent skipped: run scripts/cf-setup.mjs first)');
 }
 
-fs.mkdirSync(path.join(ROOT, 'data'), { recursive: true });
+ensureDirs();
 for (const { label, args, log } of remove ? [...agents, { label: 'com.diogodebastos.lax-tunnel' }] : agents) {
   const file = path.join(AGENTS, `${label}.plist`);
   try { execFileSync('launchctl', ['bootout', `${DOMAIN}/${label}`], { stdio: 'ignore' }); } catch {}
   if (remove) { fs.rmSync(file, { force: true }); console.log(`removed ${label}`); continue; }
   fs.writeFileSync(file, plist(label, args, log));
   execFileSync('launchctl', ['bootstrap', DOMAIN, file]);
-  console.log(`running ${label}  (log: ${path.relative(ROOT, log)})`);
+  console.log(`running ${label}  (log: ${log})`);
 }

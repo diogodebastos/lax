@@ -8,28 +8,27 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { ensureHome } from './lib/home.mjs';
+import { ensureHome, commitMind } from './lib/home.mjs';
+import { HOME, MIND, DB, secret, ensureDirs, readEnv } from './lib/paths.mjs';
 import { MAX_LEVEL, STAGES, levelOf, stageIdx, barFor } from './lib/levels.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
-const DATA = process.env.LAX_DATA || path.join(ROOT, 'data'); // LAX_DATA: tests run a private Lax
-// Optional local config (gitignored): { LAX_PUBLIC_URL, CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET, ... }
-try { for (const [k, v] of Object.entries(JSON.parse(fs.readFileSync(path.join(DATA, 'env.json'), 'utf8')))) process.env[k] ??= String(v); } catch {}
+// Lax itself lives in ~/.lax (lib/paths.mjs): memory, secrets, mind, logs. This repo is only its body.
+ensureDirs();
+// Local config, a secret: { LAX_PUBLIC_URL, CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET, ... }
+for (const [k, v] of Object.entries(readEnv())) process.env[k] ??= String(v);
 const PORT = Number(process.env.LAX_PORT || 7777);
 // Tunnel only by default: nothing on the LAN can reach Lax, cloudflared connects over loopback.
 const HOST = process.env.LAX_HOST || '127.0.0.1';
 const PUBLIC_URL = (process.env.LAX_PUBLIC_URL || '').replace(/\/$/, '');
 const DEFAULT_WORKDIR = process.env.LAX_WORKDIR || path.join(os.homedir(), 'REPOS');
-// Lax's own home: the assistant runs there, with its CLAUDE.md (who it is + notes about you). Your repos are readable from it.
-const LAX_HOME = process.env.LAX_HOME || path.join(os.homedir(), '.lax');
 
-fs.mkdirSync(DATA, { recursive: true });
-const tokenFile = path.join(DATA, 'token');
+const tokenFile = secret('token');
 if (!fs.existsSync(tokenFile)) fs.writeFileSync(tokenFile, crypto.randomBytes(12).toString('hex'), { mode: 0o600 });
 const TOKEN = fs.readFileSync(tokenFile, 'utf8').trim();
 
 // ---------- memory ----------
-const db = new DatabaseSync(path.join(DATA, 'lax.db'));
+const db = new DatabaseSync(DB);
 db.exec(`
   CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, ts INTEGER, session TEXT, project TEXT, kind TEXT, text TEXT);
   CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
@@ -308,7 +307,7 @@ function channelEvent(b) {
 // Voice goes into a live session (a tab started with `lax`), or else to Lax itself: an assistant you can ask anything.
 // It's one long-running headless Claude in LAX_WORKDIR that also knows what your sessions are doing.
 let voiceRun = null;
-const ASSISTANT = 'assistant:' + LAX_HOME; // its key in voiceSessions (a conversation only resumes in the folder it started in)
+const ASSISTANT = 'assistant:' + MIND; // its key in voiceSessions (a conversation only resumes in the folder it started in)
 const tabLabel = (s) => `${s.project}·${s.where || 'cli'}`;
 function sessionsBrief() {
   const list = sessionList().filter((s) => s.id !== voiceSessions[ASSISTANT]);
@@ -318,7 +317,7 @@ function sessionsBrief() {
     return `- ${tabLabel(s)} (${s.status}, active ${Math.round((Date.now() - s.ts) / 60000)} min ago, in ${s.cwd || '?'})${lines ? ':\n' + lines : ''}`;
   }).join('\n');
 }
-// Who Lax is lives in LAX_HOME/CLAUDE.md; this adds what changes per message.
+// Who Lax is lives in its mind (~/.lax/mind/CLAUDE.md); this adds what changes per message.
 const assistantPrompt = () => (settings.name !== 'Lax' ? `Your name is now ${settings.name}.\n` : '') +
   'The user is talking to you by voice: start with ONE short, plain sentence that can be read aloud.\n\n' +
   `Their Claude Code sessions right now (tab name, status, latest activity):\n${sessionsBrief()}`;
@@ -334,13 +333,13 @@ function talk(text) {
     return true;
   }
   if (voiceRun) return false;
-  const cwd = LAX_HOME, name = settings.name.toLowerCase();
-  ensureHome(LAX_HOME, DEFAULT_WORKDIR);
+  const cwd = MIND, name = settings.name.toLowerCase();
+  ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT });
   const args = ['-p', text, '--output-format', 'stream-json', '--verbose', '--add-dir', DEFAULT_WORKDIR, '--append-system-prompt', assistantPrompt()];
   if (voiceSessions[ASSISTANT]) args.push('--resume', voiceSessions[ASSISTANT]);
   pet.voice++; gainXp(3); save();
   feed(`> ${short(text, 90)}`, 'prompt', name);
-  const child = spawn('claude', args, { cwd, env: { ...process.env, LAX_VOICE: '1', LAX_HOME }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn('claude', args, { cwd, env: { ...process.env, LAX_VOICE: '1', LAX_HOME: HOME }, stdio: ['ignore', 'pipe', 'pipe'] });
   voiceRun = { child, cwd, sessionId: voiceSessions[ASSISTANT] || null };
   broadcast('react', { state: 'thinking' }); pushState();
   let buf = '', result = null;
@@ -355,6 +354,7 @@ function talk(text) {
   });
   let err = ''; child.stderr.on('data', (d) => { err += d; });
   child.on('close', (code) => {
+    commitMind(`after: ${short(text, 120)}`); // whatever Lax learned or changed in its mind, with history
     voiceRun = null;
     const ok = result && !result.is_error;
     const say = ok ? spoken(result.result) : `Something went wrong. ${short(err || result?.result, 120)}`;

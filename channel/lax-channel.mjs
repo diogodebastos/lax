@@ -11,10 +11,12 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { claudePid, processArgs } from '../lib/claude-pid.mjs';
+import { readToken } from '../lib/paths.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const LAX = process.env.LAX_URL || 'http://127.0.0.1:7777';
-const TOKEN = fs.readFileSync(path.join(process.env.LAX_DATA || path.join(ROOT, 'data'), 'token'), 'utf8').trim();
+const TOKEN = readToken();
+if (!TOKEN) { process.stderr.write('[lax-channel] no Lax token yet (start Lax first)\n'); process.exit(0); }
 const CID = crypto.randomBytes(5).toString('hex');
 const SESSION_PID = claudePid();
 // Registered at user level, so this server starts in every session. Only sessions launched with the lax channel
