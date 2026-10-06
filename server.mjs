@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { ensureHome } from './lib/home.mjs';
+import { MAX_LEVEL, STAGES, levelOf, stageIdx, barFor } from './lib/levels.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const DATA = process.env.LAX_DATA || path.join(ROOT, 'data'); // LAX_DATA: tests run a private Lax
@@ -69,9 +70,8 @@ function rebirth() {
 }
 
 // ---------- evolution (pure rules, no AI) ----------
-const STAGES = [[1, 'sprout'], [3, 'blob'], [6, 'cube'], [10, 'brick'], [15, 'legend']];
-const levelOf = (xp) => Math.floor(Math.sqrt(xp / 10)) + 1;
-const stageOf = (lvl) => STAGES.filter(([l]) => lvl >= l).pop()[1];
+// Never de-evolve: a stage, once reached, is kept (pet.stageReached), even if the curve ever changes again.
+const stageOf = (lvl) => STAGES[Math.max(stageIdx(lvl), pet.stageReached || 0)][1];
 function traits(p) {
   const t = [];
   const top = Object.entries(p.tools).sort((a, b) => b[1] - a[1])[0];
@@ -100,8 +100,11 @@ function gainXp(n) {
   pet.xp += n;
   const after = levelOf(pet.xp);
   if (after > before) {
-    const st = stageOf(after), grew = st !== stageOf(before);
-    const text = grew ? `${settings.name} evolved into a ${st}!` : `${settings.name} reached level ${after}!`;
+    const grew = stageIdx(after) > Math.max(stageIdx(before), pet.stageReached || 0);
+    pet.stageReached = Math.max(pet.stageReached || 0, stageIdx(after));
+    const st = stageOf(after);
+    const text = after === MAX_LEVEL ? `${settings.name} reached level 100! A legend.`
+      : grew ? `${settings.name} evolved into a ${st}!` : `${settings.name} reached level ${after}!`;
     milestone(text);
     broadcast('bubble', { id: 'lvl' + Date.now(), kind: 'levelup', text, speak: true });
   }
@@ -117,8 +120,8 @@ function touchDay() {
   pet.lastSeen = Date.now();
 }
 function petView() {
-  const level = levelOf(pet.xp), next = 10 * level * level;
-  return { name: settings.name, born: pet.born, level, stage: stageOf(level), xp: pet.xp, prevXp: 10 * (level - 1) ** 2, nextXp: next,
+  const level = levelOf(pet.xp), [prevXp, nextXp] = barFor(pet.xp);
+  return { name: settings.name, born: pet.born, level, stage: stageOf(level), xp: pet.xp, prevXp, nextXp,
     traits: traits(pet), mood: mood(pet), streak: pet.streak };
 }
 let saveTimer;
