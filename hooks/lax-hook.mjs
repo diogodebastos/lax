@@ -51,7 +51,7 @@ try {
   const within = (dir) => !!file && (path.resolve(file) + path.sep).startsWith(dir + path.sep);
   const cmd = String(ti.command || '');
   const privateHit = within(SECRETS) || (!!file && path.resolve(file) === DB)
-    || [SECRETS, DB, '.lax/secrets', 'lax.db'].some((p) => cmd.includes(p));
+    || [SECRETS, DB, '.lax/secrets', 'life.db', 'lax.db'].some((p) => cmd.includes(p));
   const decide = (permissionDecision, permissionDecisionReason) =>
     console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision, permissionDecisionReason } }));
   if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && privateHit) {
