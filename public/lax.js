@@ -31,7 +31,7 @@ function fit() {
   // 'side' is 'big' turned sideways: same sizes, two halves side by side.
   document.body.classList.toggle('big', l === 'big' || l === 'side'); document.body.classList.toggle('side', l === 'side');
   document.body.classList.toggle('wide', l === 'wide');
-  const b = $('#bubble'), want = l === 'wide' || l === 'side' ? $('#bottom') : $('#top');
+  const b = $('#bubble'), want = l === 'wide' ? $('#bottom') : $('#top'); // open phone, either way up: above Lax
   if (b.parentElement !== want) want.insertBefore(b, want.firstElementChild);
   cv.style.cssText = '';
   if (l === 'wide') { app.style.transform = `scale(${Math.min(innerWidth / 512, innerHeight / 260)})`; return; }

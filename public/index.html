@@ -61,7 +61,7 @@
   #term div { flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--text2); }
   body.big #term div { white-space:pre-wrap; word-break:break-word; margin-bottom:3px; }
   #term .prompt { color:var(--fg); } #term .done { color:var(--green); } #term .error { color:var(--red); }
-  #term .session { color:var(--dim); } #term .tool::before { content:''; }
+  #term .session { color:var(--dim); } #term .out { color:var(--dim); white-space:pre; overflow-x:auto; } #term .tool::before { content:''; }
   #term .p { color:var(--coral); } body:not(.view-all) #term .p { display:none; } #term div[hidden] { display:none; }
   #cursor { display:inline-block; width:6px; height:10px; background:var(--green); animation:blink 1s steps(2) infinite; vertical-align:-1px; }
 
@@ -138,8 +138,6 @@
   body.side #top { width:50%; height:100%; }
   body.side #bottom { width:50%; border-left:2px solid var(--line); }
   body.side #chips { padding-top:10px; }
-  body.side #bubble { position:relative; left:auto; right:auto; top:auto; margin:12px 16px 2px 18px; flex:none; }
-  body.side #bubble::after { left:-9px; bottom:auto; top:14px; border-right:0; border-left:3px solid #000; }
 
   /* Question bubble (AskUserQuestion): real options instead of yes/no. */
   #bubble.question { background:#dff1ff; }
