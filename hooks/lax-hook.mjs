@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { claudePid } from '../lib/claude-pid.mjs';
 import { MIND, SECRETS, DB, readToken } from '../lib/paths.mjs';
-import { readOnlyBash } from '../lib/readonly.mjs';
+import { bashKind } from '../lib/allow.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const URL_BASE = process.env.LAX_URL || 'http://127.0.0.1:7777';
@@ -79,8 +79,8 @@ try {
     decide('deny', 'Off limits: Lax\'s secrets and database are never touched by the assistant.');
   } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && /^(Edit|Write|MultiEdit)$/.test(input.tool_name) && within(MIND)) {
     decide('allow', 'Lax\'s own mind.');
-  } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && input.tool_name === 'Bash' && readOnlyBash(cmd)) {
-    decide('allow', 'Only looking (read-only command).');
+  } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && input.tool_name === 'Bash' && bashKind(cmd, input.cwd)) {
+    decide('allow', bashKind(cmd, input.cwd) === 'read' ? 'Only looking (read-only command).' : 'A local step you can undo.');
   } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && !SAFE.test(input.tool_name)) {
     const { decision, why } = await post('/api/ask', { ...input, lax_voice: true }, 120000);
     console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse',

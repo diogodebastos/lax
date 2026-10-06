@@ -108,6 +108,23 @@ check('approvals off: Lax\'s own request still asks the phone', !!ask);
 if (ask) await post('/api/decide', { id: ask.d.id, decision: 'allow' });
 await new Promise((r) => voiceHook.on('close', r));
 check('…and your yes gets back to it', /"permissionDecision":"allow"/.test(voiceOut));
+// One yes covers the same step until the assistant finishes answering; then it asks again.
+const runVoiceHook = (ev) => new Promise((resolve) => {
+  const p = spawn(process.execPath, [path.join(ROOT, 'hooks', 'lax-hook.mjs')], { env: { ...ENV, LAX_VOICE: '1' }, stdio: ['pipe', 'pipe', 'ignore'] });
+  let out = ''; p.stdout.on('data', (d) => (out += d)); p.on('close', () => resolve(out));
+  p.stdin.end(JSON.stringify({ session_id: 'assistant-x', cwd: '/tmp', ...ev }));
+});
+const asksBefore = phone.filter((e) => e.ev === 'bubble' && e.d.kind === 'permission').length;
+const again = await runVoiceHook({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'touch notes.md' } });
+check('the same step again in that answer: no new question', /"permissionDecision":"allow"/.test(again)
+  && phone.filter((e) => e.ev === 'bubble' && e.d.kind === 'permission').length === asksBefore);
+await runVoiceHook({ hook_event_name: 'Stop' });
+const fresh = runVoiceHook({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'touch notes.md' } });
+let reask; for (let i = 0; i < 40 && !reask; i++) { await sleep(100); reask = phone.filter((e) => e.ev === 'bubble' && e.d.kind === 'permission').length > asksBefore; }
+check('after it finishes answering, it asks again', !!reask);
+const last = phone.filter((e) => e.ev === 'bubble' && e.d.kind === 'permission').pop();
+if (last) await post('/api/decide', { id: last.d.id, decision: 'deny' });
+await fresh;
 await post('/api/settings', { phoneApprovals: true });
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nall channel checks passed');
