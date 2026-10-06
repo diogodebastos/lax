@@ -10,12 +10,15 @@ import { spawn, execFileSync } from 'node:child_process';
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const PORT = 7797, LAX = `http://127.0.0.1:${PORT}`, HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-brain-'));
 const MIND = path.join(HOME, 'mind');
+// A real project folder with a README, which the reflection should get to read.
+const PROJ = path.join(HOME, 'demo-proj'); fs.mkdirSync(PROJ);
+fs.writeFileSync(path.join(PROJ, 'README.md'), '# demo-proj\nA tiny platformer written in Godot 4.\n');
 
 // A fake `claude`: when asked to reflect, writes a project note and a user note, then answers like `claude -p --output-format json`.
 const FAKE = path.join(HOME, 'fake-claude.mjs');
 fs.writeFileSync(FAKE, `#!${process.execPath}
 import fs from 'node:fs'; import path from 'node:path';
-const prompt = process.argv[process.argv.indexOf('-p') + 1] || '';
+const prompt = process.argv[process.argv.indexOf('-p') + 1] || '';\nfs.writeFileSync(${JSON.stringify(path.join(HOME, 'last-prompt.txt'))}, prompt);\nfs.writeFileSync(${JSON.stringify(path.join(HOME, 'last-model.txt'))}, process.argv[process.argv.indexOf('--model') + 1] || '');
 const file = (prompt.match(/projects\\/([^\\s]+\\.md)/) || [])[1];
 if (file) {
   fs.mkdirSync('projects', { recursive: true });
@@ -46,7 +49,7 @@ const phone = [];
     while ((i = buf.indexOf('\n\n')) >= 0) { const blk = buf.slice(0, i); buf = buf.slice(i + 2);
       const ev = /^event: (.*)$/m.exec(blk)?.[1], d = /^data: (.*)$/m.exec(blk)?.[1]; if (ev && d) phone.push({ ev, d: JSON.parse(d) }); } }
 })();
-const hook = (h) => post('/api/hook', { cwd: '/tmp/demo-proj', ...h });
+const hook = (h) => post('/api/hook', { cwd: PROJ, ...h });
 const learnedBubbles = () => phone.filter((e) => e.ev === 'bubble' && e.d.kind === 'learned');
 
 // A trivial session: one question, then quiet → no reflection.
@@ -68,11 +71,14 @@ check('the bubble lists what was learned', /pixel-art game/.test(b?.d.details ||
 check('project notes land in the mind', fs.existsSync(path.join(MIND, 'projects', 'demo-proj.md')));
 const log = execFileSync('git', ['-C', MIND, 'log', '--oneline'], { encoding: 'utf8' });
 check('…and are committed to its history', /learned from demo-proj/.test(log));
+const sent = fs.readFileSync(path.join(HOME, 'last-prompt.txt'), 'utf8');
+check('the reflection gets the project\'s README', /<README.md>[\s\S]*Godot 4/.test(sent));
+check('the reflection uses the stronger model (sonnet)', fs.readFileSync(path.join(HOME, 'last-model.txt'), 'utf8') === 'sonnet');
 check('learning.md (how it learns) lives in the mind', fs.existsSync(path.join(MIND, 'learning.md')));
 
 // The next session in that project starts with Lax's brief (through the real hook).
 const out = execFileSync(process.execPath, [path.join(ROOT, 'hooks', 'lax-hook.mjs')], { env: ENV, encoding: 'utf8',
-  input: JSON.stringify({ hook_event_name: 'SessionStart', session_id: 's-next', cwd: '/tmp/demo-proj' }) });
+  input: JSON.stringify({ hook_event_name: 'SessionStart', session_id: 's-next', cwd: PROJ }) });
 const ctx = (() => { try { return JSON.parse(out.trim().split('\n')[0]).hookSpecificOutput.additionalContext; } catch { return ''; } })();
 check('a new session in that project gets Lax\'s brief', /pixel-art game/.test(ctx) && /short answers/.test(ctx));
 

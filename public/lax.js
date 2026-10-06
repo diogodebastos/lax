@@ -315,8 +315,25 @@ function answerQuestion(b, answer) {
 }
 setInterval(renderBubble, 1000);
 elB.addEventListener('pointerdown', (e) => e.stopPropagation());
+// Swipe a bubble sideways to dismiss it (like tapping). Bubbles that need an answer (✓/✗, questions) snap back.
+let swiped = false;
+{ let sx = 0, sy = 0, dx = 0, down = false;
+  elB.addEventListener('pointerdown', (e) => { sx = e.clientX; sy = e.clientY; dx = 0; down = true; });
+  elB.addEventListener('pointermove', (e) => {
+    if (!down) return; dx = e.clientX - sx;
+    if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(e.clientY - sy)) { elB.style.transform = `translateX(${dx}px)`; elB.style.opacity = String(1 - Math.min(0.8, Math.abs(dx) / 220)); }
+  });
+  const end = () => {
+    if (!down) return; down = false;
+    const b = bubbles.find((x) => x.id === elB.dataset.id);
+    elB.style.transform = ''; elB.style.opacity = '';
+    if (Math.abs(dx) > 70) { swiped = true; if (b && !b.actions && b.kind !== 'question') clearBubble(b.id); }
+  };
+  elB.addEventListener('pointerup', end); elB.addEventListener('pointercancel', end);
+}
 elB.addEventListener('click', (e) => {
   e.stopPropagation();
+  if (swiped) { swiped = false; return; } // the end of a swipe isn't a tap
   const id = elB.dataset.id, b = bubbles.find((x) => x.id === id); if (!b) return;
   if (e.target.matches('.more')) { b.showDetails = !b.showDetails; renderBubble(); return; }
   if (e.target.matches('.yes, .no')) { const decision = e.target.matches('.yes') ? 'allow' : 'deny';
