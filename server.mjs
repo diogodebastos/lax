@@ -315,8 +315,10 @@ function pickChannel() {
   if (channels.has(voiceTarget)) return voiceTarget;
   return [...channels.entries()].sort((a, b) => b[1].active - a[1].active)[0]?.[0] || null;
 }
+// A permission prompt or terminal menu relayed from a session is settled once that session moves on (answered at the
+// terminal). Sharing's questions ("Which Rita?", "Send it?") stay: the session keeps working while they wait.
 function clearRelays(match) {
-  for (const [id, p] of pending) if (p.relay && match(channels.get(p.relay.cid) || {})) p.finish('none');
+  for (const [id, p] of pending) if (p.relay?.settles && match(channels.get(p.relay.cid) || {})) p.finish('none');
 }
 function channelEvent(b) {
   const c = channels.get(b.cid); if (!c) return false;
@@ -329,16 +331,21 @@ function channelEvent(b) {
   } else if (b.type === 'share') {
     feed(String(b.line || '').slice(0, 200), 'tool', c.project, channelSession(c));
     if (b.ready) askShare(b.cid, String(b.ready.what || 'it'), String(b.ready.who || 'them'));
+  } else if (b.type === 'pick') {
+    askPick(b.cid, String(b.id || ''), String(b.question || 'Which one?'), (Array.isArray(b.options) ? b.options : []).map(String).slice(0, 6));
+  } else if (b.type === 'say') {
+    broadcast('bubble', { id: 'sh' + Date.now(), kind: 'reply', text: short(String(b.text || ''), 400), speak: true });
   } else if (b.type === 'shared') {
-    const who = String(b.who || 'them');
-    const [line, ok] = b.failed ? [`couldn't press it in WhatsApp (${short(b.failed, 80)})`, false] : b.sent ? [`sent to ${who}`, true] : ['not sent', false];
+    const who = b.who && String(b.who); // set for WhatsApp; the share sheet doesn't say where it went
+    const [line, ok] = b.failed ? [`couldn't share it (${short(b.failed, 80)})`, false] : b.sent ? [who ? `sent to ${who}` : 'shared', true] : ['not sent', false];
     feed(`  ${ok ? '✓' : '✗'} ${line}`, ok ? 'done' : 'error', c.project, channelSession(c));
-    if (b.failed) broadcast('bubble', { id: 'sh' + Date.now(), kind: 'error', text: `I couldn't send it. It's still waiting in ${who}'s chat on the Mac.`, speak: true });
+    if (b.failed) broadcast('bubble', { id: 'sh' + Date.now(), kind: 'error', speak: true,
+      text: who ? `I couldn't send it. It's still waiting in ${who}'s chat on the Mac.` : `I couldn't share it: ${short(b.failed, 120)}` });
   } else if (b.type === 'permission') {
     const id = 'relay-' + b.request_id;
     const bubble = { id, kind: 'permission', actions: true, speak: true, details: String(b.input_preview || ''),
       text: `${c.project} wants to: ${b.tool_name}${b.description ? ' — ' + short(b.description, 140) : ''}` };
-    pending.set(id, { bubble, relay: { cid: b.cid }, finish(decision) {
+    pending.set(id, { bubble, relay: { cid: b.cid, settles: true }, finish(decision) {
       if (!pending.delete(id)) return;
       broadcast('clear', { id });
       if (decision !== 'allow' && decision !== 'deny') return;
@@ -402,7 +409,7 @@ function askMenu(cid, menu) {
   const id = 'menu-' + crypto.randomBytes(4).toString('hex'), labels = menu.options.slice(0, 9);
   const questions = [{ question: menu.question, header: c.project, options: labels.map((label, i) => ({ label, description: i ? '' : menu.detail })) }];
   const bubble = { id, kind: 'question', project: c.project, questions, text: `${c.project}: ${menu.question}`, speak: true };
-  pending.set(id, { bubble, relay: { cid }, finish(decision, answers) {
+  pending.set(id, { bubble, relay: { cid, settles: true }, finish(decision, answers) {
     if (!pending.delete(id)) return;
     broadcast('clear', { id });
     const a = String(Object.values(answers || {})[0] || '').trim().toLowerCase(); // a tapped label, or said ("yes", "no, go back")
@@ -425,6 +432,20 @@ function askShare(cid, what, who) {
     if (decision !== 'answer') return;
     const a = String(Object.values(answers || {})[0] || '').trim().toLowerCase(); // tapped, or said ("send it", "yes", "cancel")
     sendChannel(cid, 'share', { send: /^(send|yes|yeah|yep|sure|ok|okay|go)\b/.test(a), who });
+  } });
+  broadcast('bubble', bubble);
+}
+// Several contacts match: "Which Rita?" on the phone. The answer (tapped or said) goes back to the channel, which shares on.
+function askPick(cid, pickId, question, labels) {
+  const c = channels.get(cid); if (!c || !labels.length) return;
+  const id = 'pick-' + crypto.randomBytes(4).toString('hex');
+  const questions = [{ question, header: 'WhatsApp', options: labels.map((label) => ({ label, description: '' })) }];
+  const bubble = { id, kind: 'question', project: c.project, questions, text: question, speak: true };
+  const timer = setTimeout(() => pending.get(id)?.finish('none'), 600000);
+  pending.set(id, { bubble, relay: { cid }, finish(decision, answers) {
+    if (!pending.delete(id)) return;
+    clearTimeout(timer); broadcast('clear', { id });
+    sendChannel(cid, 'pick', { id: pickId, answer: decision === 'answer' ? String(Object.values(answers || {})[0] || '') : '' });
   } });
   broadcast('bubble', bubble);
 }
