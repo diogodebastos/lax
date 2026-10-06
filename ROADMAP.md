@@ -59,20 +59,20 @@ Pixel Lax (squash and stretch, Super Meat Boy energy) with idle / working / wait
 - Text opens the chat with the message typed in; with `app: any`, the macOS share sheet.
 - "…on my phone": the Lax app does the same on the phone.
 
-### Phase 3.7: Lax learns what it couldn't do [diogodebastos/lax#13](https://github.com/diogodebastos/lax/issues/13)
-When a session that hears you has to say "I can't", Lax learns from it instead of you pasting it into another session.
-- **Notice:** sessions and Lax's assistant report the gap (what you asked, why not, an idea) to a wish list in `~/.lax`. Repeats merge.
-- **Propose, by voice:** "You asked me to share to WhatsApp. I can learn it like this. Want me to?" Answer yes, no, later, or correct it.
-- **On yes:** a GitHub issue, then Lax builds it on a branch (worktree, tests on a throwaway Lax) and opens a PR. **You merge**, by voice or on GitHub.
-- Guardrails in code: never auth, tokens, the tunnel or itself; never `main` without your yes.
-
 ### Phase 4: Lax on the cover screen [diogodebastos/lax#3](https://github.com/diogodebastos/lax/issues/3)
 This is the product: glance, don't open.
 - Run the app full-screen on the Flip 3's cover strip, through Good Lock MultiStar or CoverScreen OS.
 - Tune the `wide` layout at the real density.
 - Survive fold ↔ unfold without losing the link.
 
-### Phase 5: Lax remembers [diogodebastos/lax#6](https://github.com/diogodebastos/lax/issues/6)
+### Phase 5: Lax learns [diogodebastos/lax#13](https://github.com/diogodebastos/lax/issues/13)
+What makes Lax a personal agent. Everything it learns lives in `~/.lax`, and you approve each step.
+- **What it couldn't do.** When a session that hears you has to say "I can't", it reports the gap. Lax keeps a wish list, proposes by voice ("you asked me to share to WhatsApp; I can learn it like this. Want me to?"), opens an issue on your yes, builds it on a branch with tests, and **you merge**.
+- **From every project you launch it in.** `lax` in edge-cava, your CV, a side-project experiment…: Lax builds an understanding of you across them (projects, goals, how you work), connects them, and briefs new sessions. Ask "what do you know about me?"; say "forget that".
+- **How it learns.** It reviews its own record (declined wishes, corrected proposals, wrong notes) and proposes better ways to learn, through the same branch → merge flow.
+- Guardrails in code: never auth, tokens, the tunnel or the guardrails; never `main` without your yes.
+
+### Phase 6: Lax remembers [diogodebastos/lax#6](https://github.com/diogodebastos/lax/issues/6)
 Lax learns your projects, auto-generates skills, and never forgets how a problem was solved.
 - When a session ends, a background `claude -p` distills it into project notes, "problem → fix" solutions, and skill candidates.
 - Repeated workflows become draft skills. You approve them on the phone, and they're installed for every Claude Code session.
@@ -80,37 +80,37 @@ Lax learns your projects, auto-generates skills, and never forgets how a problem
 - A "what Lax knows" view on the phone, where you can edit or forget each item. Learning gives XP, so the looks follow the brain.
 - Builds on Claude Code's own memory where it can; what Lax adds is how it reaches you.
 
-### Phase 6: Lax schedules [diogodebastos/lax#7](https://github.com/diogodebastos/lax/issues/7)
+### Phase 7: Lax schedules [diogodebastos/lax#7](https://github.com/diogodebastos/lax/issues/7)
 Focused automation: natural-language scheduling for reports, backups and briefings, running unattended through the Mac.
 - "Every weekday at 8:30, brief me on open PRs" becomes a job you confirm before it's saved.
-- Each run is a fresh, focused `claude -p` with its own cwd, tool allowlist and budget, plus Phase 5 memory.
+- Each run is a fresh, focused `claude -p` with its own cwd, tool allowlist and budget, plus Phase 6 memory.
 - Anything outside the allowlist pauses and asks on the phone; results arrive as a spoken summary, a notification, and a run log.
 
-### Phase 7: Lax improves itself [diogodebastos/lax#8](https://github.com/diogodebastos/lax/issues/8)
-The personal-agent loop: notice friction → fix its own code → ask → ship safely. Builds on Phase 3.7 (#13), which handles what you *asked for*; this phase adds what Lax notices by itself.
+### Phase 8: Lax improves itself [diogodebastos/lax#8](https://github.com/diogodebastos/lax/issues/8)
+The personal-agent loop: notice friction → fix its own code → ask → ship safely. Builds on Phase 5, which learns what you *asked for*; this phase is the unprompted part: what Lax notices by itself.
 - Logs friction: sessions started without Lax, approvals answered on the laptop, timeouts, failed voice, "Lax, that was annoying".
-- A nightly Phase 6 job works in a git worktree of the Lax repo: one small fix on a branch, tests on the throwaway Lax.
+- A nightly Phase 7 job works in a git worktree of the Lax repo: one small fix on a branch, tests on the throwaway Lax.
 - In the morning Lax tells you what it saw and what it changed; you approve, reject, or say how to do it instead.
 - Approved → merge, restart, health check, automatic rollback if it fails. Auth, tokens, the tunnel and the guardrails themselves are off limits, enforced in code.
 - Later, opt-in: offer generic fixes upstream as PRs.
 
-### Phase 8: open-source release [diogodebastos/lax#4](https://github.com/diogodebastos/lax/issues/4)
+### Phase 9: open-source release [diogodebastos/lax#4](https://github.com/diogodebastos/lax/issues/4)
 Once Lax passes the one-week bar.
 - A README from zero, led by the personal-agent story and the honest privacy note.
-- `npm run doctor` health check (also used by Phase 7's rollback).
+- `npm run doctor` health check (also used by Phase 8's rollback).
 - Token rotation with re-pairing.
 - Remove the leftover LAN bits.
 - Tag `v0.2.0`.
 
-### Phase 9: viral release [diogodebastos/lax#9](https://github.com/diogodebastos/lax/issues/9)
-The best possible Lax, built to be shared. Phase 8 makes the repo presentable; this makes it spread.
+### Phase 10: viral release [diogodebastos/lax#9](https://github.com/diogodebastos/lax/issues/9)
+The best possible Lax, built to be shared. Phase 9 makes the repo presentable; this makes it spread.
 - Filmable moments: Lax waking on the closed phone and fixing failing tests by voice; the morning it changed itself; an evolution timelapse; "how did we fix that?"
 - A share card (stage, level, traits, skills learned, problems solved) and a timelapse export.
 - `npx lax`: zero to talking in under 5 minutes, on any Android phone or browser, with the Flip 3 as the hero.
 - Hand-drawn sprites and chiptune sound, promoted from *Later*.
 - Write-ups: how Lax uses every Claude Code extension point; Lax on Cloudflare; an agent that rewrites itself for one person. Then Show HN, r/ClaudeAI and the clips.
 
-### Phase 10: Cloudflare-native relay [diogodebastos/lax#10](https://github.com/diogodebastos/lax/issues/10)
+### Phase 11: Cloudflare-native relay [diogodebastos/lax#10](https://github.com/diogodebastos/lax/issues/10)
 The Mac stays the brain; Cloudflare becomes the always-on link and Lax's public face.
 - A Worker + Durable Object relay: the phone and the Mac both connect over hibernatable WebSockets; messages queue while either side is offline.
 - With the Mac asleep, the phone shows "Mac asleep" and the last state; on wake, pending approvals arrive in order, exactly once.
