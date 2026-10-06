@@ -372,13 +372,13 @@ const assistantPrompt = () =>
 function quickAction(cid, action) {
   const c = channels.get(cid); if (!c?.pty || !action) return false;
   c.active = Date.now(); pet.voice++; gainXp(1); save();
-  feed(`⚡ ${action}`, 'prompt', c.project, channelSession(c)); pushState();
+  feed(`> ${action}`, 'prompt', c.project, channelSession(c)); pushState();
   const sid = channelSession(c), say = (text, kind = 'reply') => broadcast('bubble', { id: 'act' + Date.now(), kind, text, speak: true });
   sendAction(c.pty, action).then((r) => {
     if (!r.ok) {
-      feed(`  ⚡ ${action} didn't reach the terminal`, 'error', c.project, sid);
+      feed(`  ${action} didn't reach the terminal`, 'error', c.project, sid);
       if (ACTIONS[action].mode || ACTIONS[action].read) say(`I couldn't do ${action} in ${c.project}.`, 'error');
-    } else if (ACTIONS[action].mode) say(`${c.project} is in ${action} now.`);
+    } else if (ACTIONS[action].mode) say(`${c.project} is in ${ACTIONS[action].mode} mode now.`.replace('accept edits mode', 'accept-edits mode'));
     else if (ACTIONS[action].read) { // status: read it out, details in the feed
       const st = readStatus(action, r.screen);
       if (st.text) feed(`↩ ${st.text}`, 'done', c.project, sid);

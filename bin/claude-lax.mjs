@@ -53,15 +53,19 @@ if (!pty || !process.stdin.isTTY || !process.stdout.isTTY) {
     const a = Object.hasOwn(ACTIONS, name) ? ACTIONS[name] : null;
     if (!a || ((a.mode || a.read) && !vt)) return { ok: false };
     if (a.keys) { term.write(a.keys); return { ok: true }; }
-    if (a.mode) { // Shift+Tab through the modes until the footer shows it (a full cycle at most)
-      for (let i = 0; i < 6 && screenMode(screen()) !== a.mode; i++) { term.write('\x1b[Z'); await sleep(400); }
+    if (a.mode) { // Shift+Tab through the modes until the footer shows it; a mode that isn't there stops a full cycle later
+      const start = screenMode(screen());
+      for (let i = 0; i < 8 && screenMode(screen()) !== a.mode; i++) {
+        term.write('\x1b[Z'); await sleep(400);
+        if (start && screenMode(screen()) === start) break;
+      }
       return { ok: screenMode(screen()) === a.mode };
     }
     await type(a.text);
     if (!a.read) return { ok: true };
     await sleep(a.read);
     const shot = screen();
-    if (a.close) term.write('\x1b');
+    if (a.close) { term.write('\x1b'); await sleep(600); } // let the panel close before anything else is typed
     return { ok: true, screen: shot };
   }).catch(() => ({ ok: false })));
   const server = net.createServer((sock) => {
