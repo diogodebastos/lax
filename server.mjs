@@ -8,9 +8,10 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { ensureHome, commitMind, syncMindName } from './lib/home.mjs';
+import { ensureHome, commitMind, syncMindName, addMemoryLayout } from './lib/home.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS, secret, ensureDirs, readEnv } from './lib/paths.mjs';
 import { MAX_LEVEL, STAGES, levelOf, stageIdx, barFor } from './lib/levels.mjs';
+import { createBrain, ensureBrain, brief } from './lib/brain.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 // Lax itself lives in ~/.lax (lib/paths.mjs): memory, secrets, mind, logs. This repo is only its body.
@@ -61,7 +62,7 @@ if (!kvGet('newPath', false)) { if (kvGet('pet', null)) milestone(`${readSetting
 
 // Life menu settings — live on the Mac, edited from the phone.
 const DEFAULTS = { name: 'Lax', color: '#D97757', voice: true, pitch: 1.6, speakDone: false,
-  phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system' };
+  phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system', learns: true };
 // Preferences live in settings.json, a plain file you can read; rebirth leaves them alone.
 function readSettings() { try { return JSON.parse(fs.readFileSync(SETTINGS, 'utf8')); } catch { return {}; } }
 const writeSettings = (s) => fs.writeFileSync(SETTINGS, JSON.stringify(s, null, 2) + '\n');
@@ -72,7 +73,7 @@ function updateSettings(b) {
   const clean = {};
   if (typeof b.name === 'string' && b.name.trim()) clean.name = b.name.trim().slice(0, 12);
   if (/^#[0-9a-f]{6}$/i.test(b.color || '')) clean.color = b.color;
-  for (const k of ['voice', 'speakDone', 'phoneApprovals']) if (typeof b[k] === 'boolean') clean[k] = b[k];
+  for (const k of ['voice', 'speakDone', 'phoneApprovals', 'learns']) if (typeof b[k] === 'boolean') clean[k] = b[k];
   if (Number.isFinite(b.pitch)) clean.pitch = Math.min(2, Math.max(0.5, b.pitch));
   if ([15, 30, 60, 120].includes(b.askTimeout)) clean.askTimeout = b.askTimeout;
   if (['system', 'light', 'dark'].includes(b.theme)) clean.theme = b.theme;
@@ -203,6 +204,7 @@ function onHook(h) {
   touchDay();
   const mine = sid && sid === voiceSessions[ASSISTANT]; // Lax's own assistant: talk() already shows what you said and the answer
   if (/^(PostToolUse|PostToolUseFailure|Stop|UserPromptSubmit)$/.test(h.hook_event_name)) clearRelays((c) => c.cwd === h.cwd);
+  brain.onEvent(sid, h.hook_event_name); // a quiet session after real work → Lax reflects on it
   switch (h.hook_event_name) {
     case 'SessionStart':
       pet.sessions++; gainXp(2); s.status = 'idle';
@@ -218,7 +220,7 @@ function onHook(h) {
       if (n === 'Bash' && /\b(test|pytest|jest|vitest|cargo test|go test)\b/.test(h.tool_input?.command || '')) pet.tools.__tests = (pet.tools.__tests || 0) + 1;
       const ext = (h.tool_input?.file_path || '').split('.').pop();
       if (/^(Edit|Write|MultiEdit)$/.test(n) && LANG[ext]) pet.langs[LANG[ext]] = (pet.langs[LANG[ext]] || 0) + 1;
-      feed(describeTool(n, h.tool_input), 'tool', project, sid);
+      feed(describeTool(n, h.tool_input), 'tool', project, sid); logEvent(sid, project, 'tool', describeTool(n, h.tool_input));
       break;
     }
     case 'PostToolUse': {
@@ -299,7 +301,7 @@ function channelEvent(b) {
   if (b.type === 'reply') {
     if (channelWait?.cid === b.cid) { clearTimeout(channelWait.timer); channelWait = null; }
     const text = String(b.text || '');
-    feed(`↩ ${short(spoken(text), 90)}`, 'done', c.project, channelSession(c)); logEvent('', c.project, 'reply', short(text, 1000));
+    feed(`↩ ${short(spoken(text), 90)}`, 'done', c.project, channelSession(c)); logEvent(channelSession(c) || '', c.project, 'reply', short(text, 1000));
     broadcast('bubble', { id: 'ch' + Date.now(), kind: 'reply', text: short(text.replace(/```[\s\S]*?```/g, ' '), 400), say: spoken(text), speak: true });
   } else if (b.type === 'permission') {
     const id = 'relay-' + b.request_id;
@@ -324,6 +326,12 @@ function channelEvent(b) {
 // It's one long-running headless Claude in LAX_WORKDIR that also knows what your sessions are doing.
 let voiceRun = null;
 const ASSISTANT = 'assistant:' + MIND; // its key in voiceSessions (a conversation only resumes in the folder it started in)
+
+// ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
+ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addMemoryLayout();
+const brain = createBrain({ db, settings: () => settings, feed, broadcast, gainXp: (n) => { gainXp(n); save(); pushState(); },
+  sessionInfo: (sid) => sessions.get(sid), skip: (sid) => sid === voiceSessions[ASSISTANT], claude: process.env.LAX_CLAUDE,
+  log: (...a) => console.log('[brain]', ...a) });
 const tabLabel = (s) => `${s.project}·${s.where || 'cli'}`;
 function sessionsBrief() {
   const list = sessionList().filter((s) => s.id !== voiceSessions[ASSISTANT]);
@@ -355,7 +363,7 @@ function talk(text) {
   if (voiceSessions[ASSISTANT]) args.push('--resume', voiceSessions[ASSISTANT]);
   pet.voice++; gainXp(3); save();
   feed(`> ${short(text, 90)}`, 'prompt', name);
-  const child = spawn('claude', args, { cwd, env: { ...process.env, LAX_VOICE: '1', LAX_HOME: HOME }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.env.LAX_CLAUDE || 'claude', args, { cwd, env: { ...process.env, LAX_VOICE: '1', LAX_HOME: HOME }, stdio: ['ignore', 'pipe', 'pipe'] });
   voiceRun = { child, cwd, sessionId: voiceSessions[ASSISTANT] || null };
   broadcast('react', { state: 'thinking' }); pushState();
   let buf = '', result = null;
@@ -437,6 +445,7 @@ http.createServer(async (req, res) => {
     });
     return;
   }
+  if (url.pathname === '/api/brief') return json(res, { text: brief(url.searchParams.get('project') || '', settings.name) });
   if (url.pathname === '/api/memory') return json(res, { pet: petView(), raw: pet, voiceProject: pickChannel() ? channels.get(pickChannel()).project : 'assistant',
     milestones: db.prepare('SELECT ts,text FROM milestones ORDER BY id DESC LIMIT 50').all() });
   if (req.method !== 'POST') return json(res, { error: 'method' }, 405);
@@ -456,6 +465,7 @@ http.createServer(async (req, res) => {
     case '/api/settings': updateSettings(b); pushState(); return json(res, { ok: true, settings });
     case '/api/rebirth': rebirth(); broadcast('reborn', {}); pushState(); return json(res, { ok: true });
     case '/api/diag': console.log(`[phone ${new Date().toISOString().slice(11, 19)}] ${JSON.stringify(b).slice(0, 600)}`); return json(res, { ok: true });
+    case '/api/brain/reflect': return json(res, { ok: isLocal(req) && !!b.session && (brain.enqueue(String(b.session)), true) }); // local only: reflect now
     case '/api/channel/event': return json(res, { ok: isLocal(req) && channelEvent(b) });
     case '/api/target':
       voiceTarget = b.target === 'auto' || channels.has(b.target) ? b.target : 'background'; pushState();

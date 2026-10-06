@@ -49,6 +49,12 @@ Pixel Lax (squash and stretch, Super Meat Boy energy) with idle / working / wait
 
 ## Next
 
+### Phase 3.4: the seed brain [diogodebastos/lax#15](https://github.com/diogodebastos/lax/issues/15)
+The smallest learning loop that runs without you, so Lax starts learning now (Phase 5 builds on it).
+- After a session that did real work goes quiet, Lax reflects on it in the background and updates its notes: about you, and about that project. Every change is committed in its mind's history.
+- "I learned 2 things from edge-cava" on the phone. New sessions in that project start with Lax's brief.
+- How it learns (`learning.md`) lives in its mind, and a weekly review lets Lax improve it.
+
 ### Phase 3.5: quick actions by voice [diogodebastos/lax#11](https://github.com/diogodebastos/lax/issues/11)
 - `claude-lax` runs Claude Code inside a small terminal wrapper, so Lax can type into it.
 - In a live tab, say "clear", "compact", "stop" or "continue". Voice only, no buttons.
