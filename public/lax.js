@@ -85,7 +85,7 @@ function applyLook() {
   $('#nameBtn').textContent = settings.name.toUpperCase(); $('#lifeName').textContent = settings.name.toUpperCase(); $('#menuName').textContent = settings.name.toUpperCase();
 }
 let pet = { name: 'Lax', level: 1, stage: 'sprout', traits: [], mood: 'happy', xp: 0, prevXp: 0, nextXp: 10 };
-let sessions = [], voiceBusy = false, thinking = false, lastWork = 0, channels = [], voiceTarget = 'background';
+let sessions = [], voiceBusy = false, thinking = false, lastWork = 0, channels = [], voiceTarget = 'background', usage = null;
 // The Mac is asleep or off (no link): Lax sleeps too. ASLEEP = the app's offline copy of this page (no Mac at all).
 const ASLEEP = qs.has('asleep'); let macAsleep = ASLEEP;
 let listening = false, speaking = false, react = null, reactUntil = 0;
@@ -649,7 +649,7 @@ wakeEl.addEventListener('click', async () => {
 });
 
 // ---------- live link ----------
-function applyState(s) { pet = s.pet; sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
+function applyState(s) { pet = s.pet; sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; usage = s.usage || null; updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
 // Remember how Lax looks, so the app's offline page can show the same Lax asleep.
 const remember = () => { try { NATIVE?.remember(JSON.stringify({ pet, settings })); } catch {} };
 function setAsleep(v) { if (macAsleep === v) return; macAsleep = v; updateHint(); }
@@ -736,6 +736,14 @@ function renderLife() {
   const tools = Object.entries(raw.tools || {}).filter(([k]) => !k.startsWith('__')).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const max = tools[0]?.[1] || 1;
   $('#tools').innerHTML = tools.length ? tools.map(([k, v]) => `<div class="bar"><span>${esc(k.replace(/^mcp__.*?__/, ''))}</span><div class="track"><i style="width:${Math.round(100 * v / max)}%"></i></div><b>${v}</b></div>`).join('') : '<div class="bar"><span>nothing yet</span></div>';
+  // Claude plan usage, from the status line of your terminal sessions (hooks/lax-status.mjs).
+  const resets = (ms) => { if (!ms) return ''; const d = new Date(ms), hm = d.toTimeString().slice(0, 5);
+    return d - Date.now() < 864e5 ? hm : d.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' + hm; };
+  const win = [['five_hour', '5 hours'], ['seven_day', 'week']].filter(([k]) => usage?.[k]);
+  $('#usage').innerHTML = win.length ? win.map(([k, l]) => { const w = usage[k], hot = w.pct >= 80;
+    return `<div class="bar"><span>${l}${w.resets ? ' · ' + resets(w.resets) : ''}</span><div class="track"><i style="width:${w.pct}%${hot ? ';background:var(--red)' : ''}"></i></div><b>${w.pct}%</b></div>`; }).join('')
+    : '<div class="bar"><span>shows once a terminal session runs</span></div>';
+  $('#usageAge').textContent = usage?.ts ? `${Math.round((Date.now() - usage.ts) / 60000)} min ago` : '';
   $('#miles').innerHTML = (memory?.milestones || []).slice(0, 12).map((m) => `<li>${new Date(m.ts).toLocaleDateString()} ${m.text.replace(/</g, '&lt;')}</li>`).join('') || '<li>…</li>';
 }
 $('#nameBtn').addEventListener('click', (e) => { e.stopPropagation(); openLife(); });

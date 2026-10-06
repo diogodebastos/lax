@@ -18,5 +18,11 @@ for (const [ev, timeout] of Object.entries(EVENTS)) {
   if (groups.length) settings.hooks[ev] = groups; else delete settings.hooks[ev];
 }
 if (!Object.keys(settings.hooks).length) delete settings.hooks;
+// The status line shows your plan usage and hands it to Lax. A status line of your own is never replaced.
+const status = path.resolve(path.dirname(hook), 'lax-status.mjs');
+const ours = String(settings.statusLine?.command || '').includes('lax-status.mjs');
+if (process.argv.includes('--remove')) { if (ours) delete settings.statusLine; }
+else if (!settings.statusLine || ours) settings.statusLine = { type: 'command', command: `node "${status}"` };
+else console.log('You have your own status line, so Lax won\'t see your plan usage (it comes from the status line).');
 fs.writeFileSync(file, JSON.stringify(settings, null, 2) + '\n');
 console.log(process.argv.includes('--remove') ? 'Lax hooks removed.' : `Lax hooks installed → ${file} (backup: settings.json.bak-lax)`);
