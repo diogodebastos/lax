@@ -72,7 +72,7 @@ syncMindName(settings.name);
 function updateSettings(b) {
   const clean = {};
   if (typeof b.name === 'string' && b.name.trim()) clean.name = b.name.trim().slice(0, 12);
-  if (/^#[0-9a-f]{6}$/i.test(b.color || '') && !colorSet()) clean.color = b.color;
+  if (/^#[0-9a-f]{6}$/i.test(b.color || '') && !pet.color) clean.color = b.color;
   for (const k of ['voice', 'speakDone', 'phoneApprovals', 'learns']) if (typeof b[k] === 'boolean') clean[k] = b[k];
   if (Number.isFinite(b.pitch)) clean.pitch = Math.min(2, Math.max(0.5, b.pitch));
   if ([15, 30, 60, 120].includes(b.askTimeout)) clean.askTimeout = b.askTimeout;
@@ -96,6 +96,12 @@ const stageOf = (lvl) => STAGES[Math.max(stageIdx(lvl), pet.stageReached || 0)][
 // From level 50 Lax has evolved into its colour's form (public/lax.js), so the colour is kept for good.
 const COLOR_SET_AT = STAGES.findIndex(([l]) => l === 50);
 const colorSet = () => Math.max(stageIdx(levelOf(pet.xp)), pet.stageReached || 0) >= COLOR_SET_AT;
+// The colour is pinned in Lax's life (pet.color), not just its settings, so editing settings.json can't change it either.
+function pinColor() {
+  if (!pet.color && colorSet()) { pet.color = settings.color; kvSet('pet', pet); }
+  if (pet.color && settings.color !== pet.color) { settings = { ...settings, color: pet.color }; writeSettings(settings); }
+}
+pinColor();
 // Traits (headband, glasses, cape…) show from level 10: a young Lax is just itself.
 const TRAITS_FROM = 10;
 function traits(p) {
@@ -128,7 +134,7 @@ function gainXp(n) {
   const after = levelOf(pet.xp);
   if (after > before) {
     const grew = stageIdx(after) > Math.max(stageIdx(before), pet.stageReached || 0);
-    pet.stageReached = Math.max(pet.stageReached || 0, stageIdx(after));
+    pet.stageReached = Math.max(pet.stageReached || 0, stageIdx(after)); pinColor();
     const st = stageOf(after);
     const text = after === MAX_LEVEL ? `${settings.name} reached level 100! A legend.`
       : grew ? `${settings.name} evolved into a ${st}!` : `${settings.name} reached level ${after}!`;
@@ -149,7 +155,7 @@ function touchDay() {
 function petView() {
   const level = levelOf(pet.xp), [prevXp, nextXp] = barFor(pet.xp);
   return { name: settings.name, born: pet.born, level, stage: stageOf(level), xp: pet.xp, prevXp, nextXp,
-    traits: traits(pet), mood: mood(pet), streak: pet.streak, colorSet: colorSet() };
+    traits: traits(pet), mood: mood(pet), streak: pet.streak, colorSet: !!pet.color };
 }
 let saveTimer;
 const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => { kvSet('pet', pet); kvSet('voiceSessions', voiceSessions); }, 500); };
