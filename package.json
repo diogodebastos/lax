@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Lax \u2014 a pixel companion for Claude Code that lives on an old phone.",
+  "description": "Lax — a pixel companion for Claude Code that lives on an old phone.",
   "engines": {
     "node": ">=22.13"
   },
@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
+    "@xterm/headless": "6.0.0",
     "node-pty": "1.1.0",
     "zod": "^4.6.5"
   }
