@@ -59,7 +59,7 @@ Pixel Lax (squash and stretch, Super Meat Boy energy) with idle / working / wait
 - Text opens the chat with the message typed in; with `app: any`, the macOS share sheet.
 - "…on my phone": the Lax app does the same on the phone.
 
-### Phase 3.7: easter egg 🥚 [diogodebastos/lax#14](https://github.com/diogodebastos/lax/issues/14)
+### Phase 3.7: easter egg 🥚 ✅ [diogodebastos/lax#14](https://github.com/diogodebastos/lax/issues/14)
 - Lax levels up to 100 on a familiar fire-starter's curve (Medium Slow), and evolves at 16 and 36, then 50 and 100.
 - No names in the UI; those who know, know.
 - Shipping it puts Lax at the right stage for the new curve (a one-time reset). From then on, Lax never de-evolves.

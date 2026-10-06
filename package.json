@@ -16,7 +16,8 @@
     "logs": "tail -f data/server.log data/tunnel.log",
     "install-channel": "node scripts/install-channel.mjs",
     "remove-channel": "node scripts/install-channel.mjs --remove",
-    "android": "node scripts/android.mjs"
+    "android": "node scripts/android.mjs",
+    "test": "node scripts/test-levels.mjs && node --no-warnings scripts/test-channel.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
