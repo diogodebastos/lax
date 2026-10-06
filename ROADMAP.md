@@ -45,7 +45,7 @@ Pixel Lax (squash and stretch, Super Meat Boy energy) with idle / working / wait
 - **Approve / Deny notifications** that buzz, wake the screen, and work on the lock screen and the cover screen.
 - Android's own speech recognition and text-to-speech, with no browser quirks.
 - Pairing by QR (`/pair` → Android app) or over USB (`npm run android -- --pair`).
-- Tabs are sessions: an "all" tab, then `project·where` (mac / cli / api / web). The open tab filters the terminal.
+- Tabs are sessions: Lax's own tab (named after it: everything, and talking goes to Lax itself), then `project·where` (mac / cli / api / web). The open tab filters the terminal.
 
 ## Next
 
