@@ -72,7 +72,7 @@ syncMindName(settings.name);
 function updateSettings(b) {
   const clean = {};
   if (typeof b.name === 'string' && b.name.trim()) clean.name = b.name.trim().slice(0, 12);
-  if (/^#[0-9a-f]{6}$/i.test(b.color || '')) clean.color = b.color;
+  if (/^#[0-9a-f]{6}$/i.test(b.color || '') && !colorSet()) clean.color = b.color;
   for (const k of ['voice', 'speakDone', 'phoneApprovals', 'learns']) if (typeof b[k] === 'boolean') clean[k] = b[k];
   if (Number.isFinite(b.pitch)) clean.pitch = Math.min(2, Math.max(0.5, b.pitch));
   if ([15, 30, 60, 120].includes(b.askTimeout)) clean.askTimeout = b.askTimeout;
@@ -93,6 +93,9 @@ const levelOf = (xp) => levelOn(xp, curveOf(settings.color));
 const barFor = (xp) => barOn(xp, curveOf(settings.color));
 // Never de-evolve: a stage, once reached, is kept (pet.stageReached), even if the curve ever changes again.
 const stageOf = (lvl) => STAGES[Math.max(stageIdx(lvl), pet.stageReached || 0)][1];
+// From level 50 Lax has evolved into its colour's form (public/lax.js), so the colour is kept for good.
+const COLOR_SET_AT = STAGES.findIndex(([l]) => l === 50);
+const colorSet = () => Math.max(stageIdx(levelOf(pet.xp)), pet.stageReached || 0) >= COLOR_SET_AT;
 // Traits (headband, glasses, cape…) show from level 10: a young Lax is just itself.
 const TRAITS_FROM = 10;
 function traits(p) {
@@ -146,7 +149,7 @@ function touchDay() {
 function petView() {
   const level = levelOf(pet.xp), [prevXp, nextXp] = barFor(pet.xp);
   return { name: settings.name, born: pet.born, level, stage: stageOf(level), xp: pet.xp, prevXp, nextXp,
-    traits: traits(pet), mood: mood(pet), streak: pet.streak };
+    traits: traits(pet), mood: mood(pet), streak: pet.streak, colorSet: colorSet() };
 }
 let saveTimer;
 const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => { kvSet('pet', pet); kvSet('voiceSessions', voiceSessions); }, 500); };

@@ -89,6 +89,8 @@
     background:conic-gradient(#ff4b3e, #ffc65a, #7CFC9A, #3ec1c9, #4a8fe0, #9b5de5, #ff5d8f, #ff4b3e); }
   #swatches input::-webkit-color-swatch-wrapper { padding:0; } #swatches input::-webkit-color-swatch { border:0; opacity:0; } #swatches input::-moz-color-swatch { border:0; opacity:0; }
   #swatches input.on { outline-color:var(--fg); }
+  #swatches .set { display:flex; align-items:center; gap:8px; color:var(--dim); }
+  #swatches .set i { width:24px; height:24px; border:2px solid #000; outline:2px solid var(--fg); }
   .tog { width:34px; height:16px; background:var(--line2); position:relative; cursor:pointer; flex:none; border:0; }
   .tog::after { content:''; position:absolute; left:2px; top:2px; width:12px; height:12px; background:var(--dim); transition:left .1s steps(2); }
   .tog.on { background:var(--coral); } .tog.on::after { left:20px; background:#fff; }
