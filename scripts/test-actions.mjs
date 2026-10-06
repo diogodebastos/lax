@@ -1,6 +1,6 @@
 // Quick actions by voice (Phase 3.5), end to end with a fake Claude: `lax` (bin/claude-lax.mjs) runs it in a
-// pseudo-terminal, your keys still pass through, saying "clear" in its live tab types /clear into it, "plan mode"
-// switches modes by reading the footer, "context"/"usage" are read back aloud, only the closed list gets through,
+// pseudo-terminal, your keys still pass through, saying "clear" in its live tab types /clear into it, "plan mode" /
+// "auto mode" switch modes by reading the footer, "context"/"usage"/"model" are read back aloud, "sonnet" switches, only the closed list gets through,
 // and nothing is left behind after it exits.
 // Runs a PRIVATE Lax (own port + temp home), so your real Lax never sees any of it.
 import fs from 'node:fs';
@@ -28,7 +28,12 @@ check('"/compact" is an action', voiceAction('/compact') === 'compact');
 check('"Slash clear" (as speech hears "/clear") is an action', voiceAction('Slash clear') === 'clear');
 check('"Quit" ends the session (an action)', voiceAction('Quit') === 'quit' && voiceAction('exit.') === 'exit');
 check('"Plan mode." is an action', voiceAction('Plan mode.') === 'plan mode' && voiceAction('plan  mode') === 'plan mode');
+check('"Plan mouth" (misheard) is plan mode', voiceAction('Plan mouth') === 'plan mode' && voiceAction('Plan mood.') === 'plan mode');
 check('"Context?" / "usage" / "cost" are actions', voiceAction('Context?') === 'context' && voiceAction('usage') === 'usage' && voiceAction('Cost.') === 'cost');
+check('"Auto mode" / "switch to accept edits" / "manual mode" are actions', voiceAction('Auto mode.') === 'auto mode' && voiceAction('switch to accept edits') === 'accept edits' && voiceAction('manual mode') === 'manual mode');
+check('"model" asks which model', voiceAction('Model?') === 'model');
+check('"sonnet" / "use opus" / "Haiku model" / "model fable" switch models', voiceAction('Sonnet.') === 'model sonnet' && voiceAction('use opus') === 'model opus' && voiceAction('Haiku model') === 'model haiku' && voiceAction('model fable') === 'model fable');
+check('"sonnet is great" is a message', voiceAction('sonnet is great') === null);
 check('"clear up the README" is a message', voiceAction('clear up the README') === null);
 check('"rm -rf" is not an action', voiceAction('rm -rf') === null);
 
@@ -72,6 +77,15 @@ const USAGE = `   Settings  Status   Config   Usage   Stats
 const use = readStatus('usage', USAGE);
 check('usage is read aloud', use.say === 'This session window is 21% used, resets 7:39pm. This week, 29%.', use.say);
 check('…with resets and cost in the feed', /week 29% · resets Oct 7 at 5:59pm/.test(use.text) && /\$0\.0000/.test(use.text), JSON.stringify(use.text));
+const PICKER = `   Select model
+     1.  Default (recommended)  Opus 5.5 · Best for everyday, complex tasks
+   ❯ 2.  Opus 5.5 ✔             For complex work and everyday tasks
+     3.  Sonnet 5.5             Most efficient for simpler tasks
+   Enter to set as default · s to use this session only · Esc to cancel`;
+check('model: the picker\'s ✔ is read aloud', readStatus('model', PICKER).say === 'This session uses Opus 5.5.', readStatus('model', PICKER).say);
+check('model: "Default ✔" reads the model behind it', readStatus('model', '     1.  Default (recommended) ✔  Opus 5.5 · Best').say === 'This session uses Opus 5.5.');
+const SET = `❯ /model sonnet\n  ⎿  Set model to Sonnet 5.5 and saved as your default for new sessions\n   ◐ medium · /effort`;
+check('model: a switch is confirmed aloud', readStatus('model sonnet', SET).say === 'Switched to Sonnet 5.5. New sessions will use it too.', readStatus('model sonnet', SET).say);
 check('an unreadable screen says so', readStatus('usage', 'nothing here').say === "I couldn't read the usage.");
 
 const server = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server.mjs')], { env: ENV, stdio: 'ignore' });
@@ -101,6 +115,8 @@ process.stdin.on('data', (d) => {
   if (d === '\\x1b[Z') { mode = (mode + 1) % MODES.length; foot(); }
   if (all.endsWith('/context\\r')) process.stdout.write(${crlf(CONTEXT)});
   if (all.endsWith('/usage\\r')) process.stdout.write(${crlf(USAGE)});
+  if (all.endsWith('/model\\r')) process.stdout.write(${crlf(PICKER)});
+  if (all.endsWith('/model sonnet\\r')) process.stdout.write(${crlf(SET)});
 });
 process.stdout.on('resize', () => fs.writeFileSync(${JSON.stringify(SIZE)}, process.stdout.columns + 'x' + process.stdout.rows));
 process.stdout.write('\\x1b[32mready\\x1b[0m\\r\\n'); foot();
@@ -117,13 +133,14 @@ term.onData((d) => { screen += d; });
 let exit = null; term.onExit((e) => { exit = e; });
 const keys = () => { try { return fs.readFileSync(KEYS, 'utf8'); } catch { return ''; } };
 // What the phone would hear.
-const bubbles = [];
+const bubbles = [], feedLines = [];
 (async () => {
   const res = await fetch(`${LAX}/api/stream?t=${TOKEN}`); let buf = '';
   for await (const c of res.body) {
     buf += Buffer.from(c).toString(); let i;
     while ((i = buf.indexOf('\n\n')) >= 0) { const blk = buf.slice(0, i); buf = buf.slice(i + 2);
-      if (/^event: bubble$/m.test(blk)) bubbles.push(JSON.parse(/^data: (.*)$/m.exec(blk)[1])); }
+      if (/^event: bubble$/m.test(blk)) bubbles.push(JSON.parse(/^data: (.*)$/m.exec(blk)[1]));
+      if (/^event: feed$/m.test(blk)) feedLines.push(JSON.parse(/^data: (.*)$/m.exec(blk)[1]).line); }
   }
 })().catch(() => {});
 const heard = (re) => until(() => bubbles.some((b) => re.test(b.text)), 6000);
@@ -152,6 +169,17 @@ check('"plan mode" presses Shift+Tab until the footer says plan', await heard(/d
 bubbles.length = 0;
 await post('/api/talk', { text: 'plan mode' });
 check('…and presses nothing if it already is', await heard(/in plan mode now/) && presses() === 3, `${presses()} presses`);
+await post('/api/talk', { text: 'Auto mode.' });
+check('"auto mode" goes on round to auto', await heard(/demo-proj is in auto mode now/) && presses() === 4, `${presses()} presses`);
+await post('/api/talk', { text: 'accept edits' });
+check('"accept edits" too', await heard(/in accept-edits mode now/) && presses() === 6, `${presses()} presses`);
+check('the feed shows actions plainly, no emoji', feedLines.includes('> clear') && feedLines.includes('> auto mode') && !feedLines.some((l) => /\p{Extended_Pictographic}/u.test(l)), JSON.stringify(feedLines));
+before = keys();
+await post('/api/talk', { text: 'Model?' });
+check('"model" opens the picker, reads the ✔ aloud, then closes it', await heard(/This session uses Opus 5\.5/) && keys().endsWith('/model\r\x1b'), JSON.stringify(keys().slice(before.length)));
+before = keys();
+await post('/api/talk', { text: 'use sonnet' });
+check('"use sonnet" types /model sonnet and confirms aloud', await heard(/Switched to Sonnet 5\.5/) && keys().endsWith('/model sonnet\r'), JSON.stringify(keys().slice(before.length)));
 await post('/api/talk', { text: 'Context?' });
 check('"context" types /context and reads it aloud', await heard(/^Context is 3% full/), JSON.stringify(bubbles.map((b) => b.text)));
 before = keys();
