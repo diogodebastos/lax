@@ -59,6 +59,13 @@ Pixel Lax (squash and stretch, Super Meat Boy energy) with idle / working / wait
 - Text opens the chat with the message typed in; with `app: any`, the macOS share sheet.
 - "…on my phone": the Lax app does the same on the phone.
 
+### Phase 3.7: Lax learns what it couldn't do [diogodebastos/lax#13](https://github.com/diogodebastos/lax/issues/13)
+When a session that hears you has to say "I can't", Lax learns from it instead of you pasting it into another session.
+- **Notice:** sessions and Lax's assistant report the gap (what you asked, why not, an idea) to a wish list in `~/.lax`. Repeats merge.
+- **Propose, by voice:** "You asked me to share to WhatsApp. I can learn it like this. Want me to?" Answer yes, no, later, or correct it.
+- **On yes:** a GitHub issue, then Lax builds it on a branch (worktree, tests on a throwaway Lax) and opens a PR. **You merge**, by voice or on GitHub.
+- Guardrails in code: never auth, tokens, the tunnel or itself; never `main` without your yes.
+
 ### Phase 4: Lax on the cover screen [diogodebastos/lax#3](https://github.com/diogodebastos/lax/issues/3)
 This is the product: glance, don't open.
 - Run the app full-screen on the Flip 3's cover strip, through Good Lock MultiStar or CoverScreen OS.
@@ -80,7 +87,7 @@ Focused automation: natural-language scheduling for reports, backups and briefin
 - Anything outside the allowlist pauses and asks on the phone; results arrive as a spoken summary, a notification, and a run log.
 
 ### Phase 7: Lax improves itself [diogodebastos/lax#8](https://github.com/diogodebastos/lax/issues/8)
-The personal-agent loop: notice friction → fix its own code → ask → ship safely.
+The personal-agent loop: notice friction → fix its own code → ask → ship safely. Builds on Phase 3.7 (#13), which handles what you *asked for*; this phase adds what Lax notices by itself.
 - Logs friction: sessions started without Lax, approvals answered on the laptop, timeouts, failed voice, "Lax, that was annoying".
 - A nightly Phase 6 job works in a git worktree of the Lax repo: one small fix on a branch, tests on the throwaway Lax.
 - In the morning Lax tells you what it saw and what it changed; you approve, reject, or say how to do it instead.
