@@ -14,6 +14,7 @@ import { grantKey } from './lib/allow.mjs';
 import { MAX_LEVEL, STAGES, levelOf as levelOn, stageIdx, barFor as barOn, curveOf } from './lib/levels.mjs';
 import { createBrain, ensureBrain, brief } from './lib/brain.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus } from './lib/actions.mjs';
+import { readUsage, usageText } from './lib/usage.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 // Lax itself lives in ~/.lax (lib/paths.mjs): memory, secrets, mind, logs. This repo is only its body.
@@ -175,7 +176,16 @@ function sessionList() {
   return [...sessions.entries()].filter(([id, s]) => s.ts > cutoff && id !== voiceSessions[ASSISTANT]).map(([id, s]) => ({ id, ...s }));
 }
 const stateMsg = () => ({ pet: petView(), sessions: sessionList(), voiceBusy: !!voiceRun, thinking: !!channelWait, settings,
-  channels: channelList(), voiceTarget });
+  channels: channelList(), voiceTarget, usage });
+// Your Claude plan usage, as the last terminal's status line saw it (hooks/lax-status.mjs). Kept across restarts.
+let usage = kvGet('usage', null);
+function setUsage(rl) {
+  const u = readUsage(rl); if (!u) return false;
+  const changed = JSON.stringify(u) !== JSON.stringify({ five_hour: usage?.five_hour, seven_day: usage?.seven_day });
+  usage = { ...u, ts: Date.now() }; kvSet('usage', usage);
+  if (changed) pushState(); // the status line runs often; the phone only hears when a number moves
+  return true;
+}
 const pushState = () => broadcast('state', stateMsg());
 // session: which Claude Code session a line belongs to, so the phone can show one session's tab at a time.
 const recentFeed = []; // what the assistant knows about your sessions
@@ -395,7 +405,8 @@ function sessionsBrief() {
 // Who Lax is lives in its mind (~/.lax/mind/CLAUDE.md); this adds what changes per message.
 const assistantPrompt = () =>
   'The user is talking to you by voice: start with ONE short, plain sentence that can be read aloud.\n\n' +
-  `Their Claude Code sessions right now (tab name, status, latest activity):\n${sessionsBrief()}`;
+  `Their Claude Code sessions right now (tab name, status, latest activity):\n${sessionsBrief()}\n\n` +
+  `Their Claude plan usage: ${usageText(usage)}`;
 // Quick actions by voice: a closed list typed into a live `lax` session's terminal (lib/actions.mjs).
 function quickAction(cid, action) {
   const c = channels.get(cid); if (!c?.pty || !action) return false;
@@ -587,6 +598,7 @@ http.createServer(async (req, res) => {
     case '/api/diag': console.log(`[phone ${new Date().toISOString().slice(11, 19)}] ${JSON.stringify(b).slice(0, 600)}`); return json(res, { ok: true });
     case '/api/brain/reflect': return json(res, { ok: isLocal(req) && !!b.session && (brain.enqueue(String(b.session)), true) }); // local only: reflect now
     case '/api/channel/event': return json(res, { ok: isLocal(req) && channelEvent(b) });
+    case '/api/usage': return json(res, { ok: isLocal(req) && setUsage(b.rate_limits) });
     case '/api/target':
       voiceTarget = b.target === 'auto' || channels.has(b.target) ? b.target : 'background'; pushState();
       return json(res, { ok: true, voiceTarget });
