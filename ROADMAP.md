@@ -113,6 +113,7 @@ Once Lax passes the one-week bar. Not "Diogo's Lax, published": anyone can have 
 - **No Android SDK needed:** a signed APK on GitHub Releases; any Android 11+ (the Flip 3 cover screen is a bonus).
 - **Nothing personal in the code:** no domain, email or `~/REPOS` defaults, and neutral service names.
 - A README for newcomers with the honest privacy note; license, CONTRIBUTING, SECURITY; `npm run doctor`; token rotation; leftover LAN bits removed.
+- **Easter eggs as hints:** the level 50 colour forms (and the other nods to familiar faces) become subtle references, not recognisable copies.
 - Test: a fresh macOS account gets its own working Lax from the README alone.
 
 ### Phase 10: viral release [diogodebastos/lax#9](https://github.com/diogodebastos/lax/issues/9)
