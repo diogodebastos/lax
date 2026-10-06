@@ -172,6 +172,8 @@ const feed = (line, kind = 'tool', project, session) => {
 };
 // The hook-side session a lax channel runs in (matched by the claude process pid).
 const channelSession = (c) => c?.sessionPid ? [...sessions.entries()].find(([, s]) => s.pid === c.sessionPid)?.[0] : undefined;
+// The terminal shows replies and results in full (capped), so you can check them on the phone; bubbles stay short.
+const clip = (t, n = 4000) => { t = String(t ?? '').trim(); return t.length > n ? t.slice(0, n) + '\n…' : t; };
 const proj = (cwd) => (cwd ? path.basename(cwd) : '?');
 const short = (s, n = 60) => { s = String(s ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 
@@ -226,6 +228,11 @@ function onHook(h) {
     case 'PostToolUse': {
       const r = h.tool_response; const err = r && (r.is_error || r.interrupted || (typeof r.exit_code === 'number' && r.exit_code !== 0));
       if (err) { pet.errors++; feed(`  ✗ ${h.tool_name} failed`, 'error', project, sid); broadcast('react', { state: 'error' }); }
+      // A shell command's output, like a terminal: the first lines under the command.
+      if (h.tool_name === 'Bash' && r) {
+        const out = String(r.stdout || r.stderr || '').replace(/\s+$/, ''), lines = out ? out.split('\n') : [];
+        if (lines.length) feed(lines.slice(0, 12).map((l) => '  ' + short(l, 160)).join('\n') + (lines.length > 12 ? `\n  … ${lines.length - 12} more lines` : ''), 'out', project, sid);
+      }
       break;
     }
     case 'Notification':
@@ -237,7 +244,7 @@ function onHook(h) {
     case 'Stop': {
       s.status = 'done'; pet.turns++; gainXp(5);
       const msg = h.last_assistant_message || '';
-      if (!mine) feed(`✓ ${project}: ${short(spoken(msg), 90)}`, 'done', project, sid);
+      if (!mine) feed(`✓ ${project}: ${clip(msg, 1500) || 'done'}`, 'done', project, sid);
       logEvent(sid, project, 'done', short(msg, 1000));
       if (!(voiceRun && voiceRun.sessionId === sid)) // voice runs speak their own result
         broadcast('bubble', { id: 'done-' + sid + Date.now(), kind: 'done', text: `${project}: ${spoken(msg) || 'done!'}`, session: sid, speak: false });
@@ -304,7 +311,7 @@ function channelEvent(b) {
   if (b.type === 'reply') {
     if (channelWait?.cid === b.cid) { clearTimeout(channelWait.timer); channelWait = null; }
     const text = String(b.text || '');
-    feed(`↩ ${short(spoken(text), 90)}`, 'done', c.project, channelSession(c)); logEvent(channelSession(c) || '', c.project, 'reply', short(text, 1000));
+    feed(`↩ ${clip(text)}`, 'done', c.project, channelSession(c)); logEvent(channelSession(c) || '', c.project, 'reply', short(text, 1000));
     broadcast('bubble', { id: 'ch' + Date.now(), kind: 'reply', text: short(text.replace(/```[\s\S]*?```/g, ' '), 400), say: spoken(text), speak: true });
   } else if (b.type === 'permission') {
     const id = 'relay-' + b.request_id;
@@ -386,7 +393,7 @@ function talk(text) {
     const ok = result && !result.is_error;
     const say = ok ? spoken(result.result) : `Something went wrong. ${short(err || result?.result, 120)}`;
     broadcast('bubble', { id: 'voice' + Date.now(), kind: ok ? 'reply' : 'error', text: say, speak: true });
-    feed(`↩ ${short(say, 90)}`, ok ? 'done' : 'error', name);
+    feed(`↩ ${ok ? clip(result.result) : say}`, ok ? 'done' : 'error', name); // the full answer; the bubble says the short one
     if (!ok) { pet.errors++; if (voiceSessions[ASSISTANT] && /session|resume/i.test(err)) delete voiceSessions[ASSISTANT]; }
     save(); pushState();
   });

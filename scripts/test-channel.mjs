@@ -90,6 +90,13 @@ await client.close();
 await sleep(600);
 const after = phone.filter((e) => e.ev === 'state').pop()?.d;
 check('closing the session unregisters the channel', (after?.channels?.length ?? 1) === (state?.channels?.length ?? 1) - 1);
+// A shell command's output shows in the terminal, like a real one.
+await post('/api/hook', { hook_event_name: 'PostToolUse', session_id: 's-out', cwd: '/tmp/out', tool_name: 'Bash', tool_input: { command: 'ls' },
+  tool_response: { stdout: 'CLAUDE.md\nlearning.md\nprojects\n' } });
+await sleep(200);
+const outLine = phone.filter((e) => e.ev === 'feed' && e.d.kind === 'out').pop();
+check('a command\'s output shows in the terminal', /CLAUDE\.md[\s\S]*projects/.test(outLine?.d.line || ''));
+
 // Lax's own assistant has no terminal: even with "ask me on the phone" off, its requests come to the phone.
 await post('/api/settings', { phoneApprovals: false });
 const voiceHook = spawn(process.execPath, [path.join(ROOT, 'hooks', 'lax-hook.mjs')], { env: { ...ENV, LAX_VOICE: '1' }, stdio: ['pipe', 'pipe', 'ignore'] });
