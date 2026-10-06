@@ -48,6 +48,8 @@ const newPet = () => ({
 let pet = kvGet('pet', null) || newPet();
 let voiceSessions = kvGet('voiceSessions', {}); // cwd -> claude session id
 if (!kvGet('pet', null)) { milestone('Lax was born'); }
+// Phase 3.7 moved Lax to a new level curve (it went from brick back to sprout): note it once.
+if (!kvGet('newPath', false)) { if (kvGet('pet', null)) milestone(`${kvGet('settings', {}).name || 'Lax'} started over on a new path`); kvSet('newPath', true); }
 
 // Life menu settings — live on the Mac, edited from the phone.
 const DEFAULTS = { name: 'Lax', color: '#D97757', voice: true, pitch: 1.6, speakDone: false,
@@ -72,7 +74,10 @@ function rebirth() {
 // ---------- evolution (pure rules, no AI) ----------
 // Never de-evolve: a stage, once reached, is kept (pet.stageReached), even if the curve ever changes again.
 const stageOf = (lvl) => STAGES[Math.max(stageIdx(lvl), pet.stageReached || 0)][1];
+// Traits (headband, glasses, cape…) show from level 10: a young Lax is just itself.
+const TRAITS_FROM = 10;
 function traits(p) {
+  if (levelOf(p.xp) < TRAITS_FROM) return [];
   const t = [];
   const top = Object.entries(p.tools).sort((a, b) => b[1] - a[1])[0];
   const total = Object.values(p.tools).reduce((a, b) => a + b, 0);
