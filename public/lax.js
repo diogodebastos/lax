@@ -554,7 +554,7 @@ function renderLife() {
   $('#sName').value !== settings.name && document.activeElement !== $('#sName') && ($('#sName').value = settings.name);
   $('#sPitch').value = settings.pitch;
   $('#swatches').innerHTML = COLORS.map((c) => `<button style="background:${c}" data-c="${c}" class="${c === settings.color ? 'on' : ''}"></button>`).join('')
-    + `<input type="color" id="sColor" value="${settings.color}" title="custom">`;
+    + `<input type="color" id="sColor" value="${settings.color}" title="custom" class="${COLORS.some((c) => c.toLowerCase() === settings.color.toLowerCase()) ? '' : 'on'}">`;
   lifeEl.querySelectorAll('.tog').forEach((t) => t.classList.toggle('on', !!settings[t.dataset.k]));
   $('#sWait').querySelectorAll('button').forEach((b) => b.classList.toggle('on', +b.dataset.v === settings.askTimeout));
   $('#sTheme').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === (settings.theme || 'system')));
