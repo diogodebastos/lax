@@ -60,9 +60,9 @@ These files are created on first use and never overwritten.
 
 ## Life menu
 
-Tap **LAX ≡** to open Lax's life. It reads top to bottom:
-- **Life** (read-only, what Lax has lived): stats (level, stage, XP, streak, mood, traits…), favorite tools, milestones
-- **Settings** (yours to change): name, color, theme (system / light / dark), voice and pitch, whether it reads every "done", where talk goes, phone approvals and the wait time
+Tap **LAX ≡** to open the menu. It reads top to bottom:
+- **Settings**: name, color, theme (system / light / dark), voice and pitch, whether it reads every "done", where talk goes, phone approvals and the wait time
+- **♥ Lax's life** (read-only): stats (level, stage, XP, streak, mood, traits…), favorite tools, milestones
 - **Rebirth**: hold for 2s to start a new life. Its life (`life.db`) is wiped; your settings stay
 
 ## Reaching Lax from anywhere (Cloudflare Tunnel + Access)
