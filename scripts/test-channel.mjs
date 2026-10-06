@@ -98,11 +98,12 @@ const outLine = phone.filter((e) => e.ev === 'feed' && e.d.kind === 'out').pop()
 check('a command\'s output shows in the terminal', /CLAUDE\.md[\s\S]*projects/.test(outLine?.d.line || ''));
 
 // Lax's own assistant has no terminal: even with "ask me on the phone" off, its requests come to the phone.
+// (A command that changes something: read-only ones like `ls` run without asking.)
 await post('/api/settings', { phoneApprovals: false });
 const voiceHook = spawn(process.execPath, [path.join(ROOT, 'hooks', 'lax-hook.mjs')], { env: { ...ENV, LAX_VOICE: '1' }, stdio: ['pipe', 'pipe', 'ignore'] });
 let voiceOut = ''; voiceHook.stdout.on('data', (d) => (voiceOut += d));
-voiceHook.stdin.end(JSON.stringify({ hook_event_name: 'PreToolUse', session_id: 'assistant-x', cwd: '/tmp', tool_name: 'Bash', tool_input: { command: 'ls' } }));
-let ask; for (let i = 0; i < 40 && !ask; i++) { await sleep(100); ask = phone.filter((e) => e.ev === 'bubble' && e.d.kind === 'permission' && /\$ ls/.test(e.d.text)).pop(); }
+voiceHook.stdin.end(JSON.stringify({ hook_event_name: 'PreToolUse', session_id: 'assistant-x', cwd: '/tmp', tool_name: 'Bash', tool_input: { command: 'touch notes.md' } }));
+let ask; for (let i = 0; i < 40 && !ask; i++) { await sleep(100); ask = phone.filter((e) => e.ev === 'bubble' && e.d.kind === 'permission' && /\$ touch notes\.md/.test(e.d.text)).pop(); }
 check('approvals off: Lax\'s own request still asks the phone', !!ask);
 if (ask) await post('/api/decide', { id: ask.d.id, decision: 'allow' });
 await new Promise((r) => voiceHook.on('close', r));

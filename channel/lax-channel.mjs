@@ -12,7 +12,7 @@ import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprot
 import { z } from 'zod';
 import { claudePid, processArgs } from '../lib/claude-pid.mjs';
 import { readToken } from '../lib/paths.mjs';
-import { share, finishShare } from '../lib/share.mjs';
+import { share, finishShare, pickOption } from '../lib/share.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const LAX = process.env.LAX_URL || 'http://127.0.0.1:7777';
@@ -61,24 +61,40 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
   }, {
     name: 'share',
-    description: 'Share a file or text to a WhatsApp chat on this Mac, ready to send. Opens the contact\'s chat in WhatsApp ' +
-      'Desktop with the text typed in or the file pasted in. Lax then asks the user on the phone and sends only on their yes. ' +
+    description: 'Share a file or text from this Mac. Default (app "whatsapp"): opens the contact\'s chat in WhatsApp ' +
+      'Desktop with the text typed in or the file pasted in; Lax then asks the user on the phone and sends only on their yes. ' +
+      'If several contacts match, Lax asks the user which one on the phone and carries on by itself. ' +
+      'Other apps: "airdrop", "messages", "mail" open that app with it; "any" opens the macOS share menu to pick an app. ' +
       'Returns what to tell the user (say it with reply).',
     inputSchema: {
       type: 'object',
       properties: {
         file: { type: 'string', description: 'Absolute path of the file or image to share' },
         text: { type: 'string', description: 'Text to put in the chat' },
-        to: { type: 'string', description: 'Contact name as the user said it ("Veralicious"); looked up in macOS Contacts' },
+        to: { type: 'string', description: 'WhatsApp: contact name as the user said it ("Veralicious"); looked up in macOS Contacts' },
+        app: { type: 'string', enum: ['whatsapp', 'airdrop', 'messages', 'mail', 'any'], description: 'Where to share (default whatsapp)' },
       },
     },
   }],
 }));
 
+// A share that asked "Which Vera?" waits here for your answer from the phone.
+const picks = new Map(); // id -> { args, contacts }
+async function shareAndTell(args) {
+  const r = await share(args).catch((e) => ({ ok: false, say: `Sharing failed: ${e.message}` }));
+  if (r.pick) {
+    const id = crypto.randomBytes(4).toString('hex');
+    picks.set(id, { args, contacts: r.pick.contacts });
+    await post({ type: 'pick', id, question: r.pick.question, options: r.pick.options });
+  }
+  if (r.line) await post({ type: 'share', line: r.line, ready: r.ready }); // ready → Lax asks "Send it?" on the phone
+  r.done?.then((res) => post({ type: 'shared', sent: res === 'shared', failed: res.startsWith('error') ? res.slice(7) : undefined })); // share sheet
+  return r;
+}
+
 mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
   if (req.params.name === 'share') {
-    const r = await share(req.params.arguments || {}).catch((e) => ({ ok: false, say: `Sharing failed: ${e.message}` }));
-    if (r.line) await post({ type: 'share', line: r.line, ready: r.ready }); // ready → Lax asks "Send it?" on the phone
+    const { done, pick, ...r } = await shareAndTell(req.params.arguments || {});
     return { content: [{ type: 'text', text: JSON.stringify(r) }], isError: !r.ok };
   }
   if (req.params.name !== 'reply') throw new Error(`unknown tool: ${req.params.name}`);
@@ -117,6 +133,12 @@ async function listen() {
           if (ev === 'message') {
             await mcp.notification({ method: 'notifications/claude/channel',
               params: { content: d.text, meta: { chat_id: d.chat_id, via: d.via || 'voice' } } });
+          } else if (ev === 'pick') { // your answer to "Which Vera?"
+            const p = picks.get(d.id); picks.delete(d.id);
+            const contact = p && p.contacts[pickOption(p.contacts.map((c) => c.label), d.answer, p.contacts.map((c) => c.nickname))];
+            if (contact) { const r = await shareAndTell({ ...p.args, contact }); if (!r.ready) await post({ type: 'say', text: r.say }); }
+            else if (p && d.answer) await post({ type: 'say', text: /\b(none|neither|nobody|no one|cancel|never ?mind|forget it|stop)\b/i.test(d.answer)
+              ? `Okay, I won't share it.` : `I didn't catch which one, so I didn't share it.` });
           } else if (ev === 'share') { // your answer to "Send it?" from the phone; pressed here, where the terminal has Accessibility
             await finishShare(d.send).then(() => post({ type: 'shared', sent: !!d.send, who: d.who }),
               (e) => post({ type: 'shared', failed: e.message, who: d.who }));
