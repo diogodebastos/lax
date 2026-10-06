@@ -134,6 +134,72 @@ function step(dt, m, t) {
 
 // ---------- drawing ----------
 const px = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
+// Outlined shapes: all the outlines first, then the fills, so touching rects read as one piece.
+const blk = (rects, c) => { for (const [x, y, w, h] of rects) px(x - 1, y - 1, w + 2, h + 2, C.out); for (const [x, y, w, h] of rects) px(x, y, w, h, c); };
+// At level 50 Lax evolves into its colour's form, after the familiar face that colour comes from
+// ([form, how far the level-100 crown rises to clear it]). A custom colour stays a plain brick.
+const FORMS = { '#5abf8e': ['bloom', 9], '#d97757': ['wings', 0], '#5aa7e6': ['cannons', 2], '#f6d23c': ['bolt', 4], '#a8754a': ['ruff', 4],
+  '#c58fd8': ['gem', 4], '#403e4a': ['rings', 4], '#f2ede3': ['coin', 6], '#f4a6c8': ['float', 0] };
+const formOf = () => (pet.stage === 'brick' || pet.stage === 'legend') && FORMS[String(settings.color).toLowerCase()] || [null, 0];
+// Mirror a rect to the other side of the body.
+const mirror = (x0, w, rects) => rects.map(([x, y, rw, rh]) => [2 * x0 + w - x - rw, y, rw, rh]);
+// Behind the body: wings and tails.
+function formBack(f, x0, y0, w, h, m, t) {
+  const R = x0 + w, B = y0 + h;
+  if (f === 'wings') { // the fire lizard's last form: teal wings with an orange rim, and its tail flame
+    const fl = Math.sin(t / (m === 'working' ? 90 : 220)) > 0 ? 1 : 0;
+    const wing = [[x0 - 3, y0 + 2, 3, 6], [x0 - 5, y0, 2, 7], [x0 - 7, y0 - 2 + fl, 2, 7], [x0 - 9, y0 - 4 + fl, 2, 7], [x0 - 11, y0 - 6 + fl * 2, 2, 6], [x0 - 12, y0 - 8 + fl * 2, 2, 3]];
+    for (const side of [wing, mirror(x0, w, wing)]) { blk(side, '#2c8a8f'); for (const [x, y, rw] of side) px(x, y, rw, 1, C.body); }
+    blk([[R, B - 3, 5, 2], [R + 4, B - 6, 2, 4]], C.body);
+    if (m !== 'sleep') { const f2 = Math.round(t / 110) % 2; blk([[R + 3, B - 10 - f2, 4, 4 + f2]], C.gold); px(R + 4, B - 8, 2, 2, C.red); }
+  }
+  if (f === 'cannons') { const shell = [[x0 - 2, y0 + 3, 2, h - 5]]; blk([...shell, ...mirror(x0, w, shell)], '#a7774a'); }
+  if (f === 'bolt') { // lightning-bolt tail, brown at the base
+    blk([[R + 2, B - 9, 2, 5], [R + 2, B - 10, 5, 2], [R + 5, B - 16, 2, 7], [R + 5, B - 17, 6, 2]], C.body);
+    blk([[R, B - 5, 3, 2]], '#8a5a2b');
+  }
+  if (f === 'ruff') { const sw = Math.round(Math.sin(t / 300)); blk([[x0 - 4, B - 7, 4, 3], [x0 - 7, B - 11, 5, 5]], C.body); blk([[x0 - 8 + sw, B - 14, 4, 4]], '#f3e6c8'); }
+  if (f === 'gem') { const sw = Math.round(Math.sin(t / 350)); blk([[R, B - 6, 4, 2], [R + 3, B - 9, 2, 4], [R + 1 + sw, B - 13, 2, 4], [R + 5 + sw, B - 14, 2, 5]], C.body); }
+  if (f === 'rings') { blk([[x0 - 4, B - 7, 4, 3], [x0 - 7, B - 11, 5, 5], [x0 - 8, B - 15, 4, 5]], C.body); px(x0 - 7, B - 9, 5, 1, ringGlow(m, t)); }
+  if (f === 'coin') blk([[R, B - 5, 3, 2], [R + 2, B - 10, 2, 6], [R, B - 11, 3, 2]], C.body), px(R, B - 11, 2, 2, '#7a5a3a');
+  if (f === 'float') { const sw = Math.round(Math.sin(t / 260)); blk([[R, B - 2, 3, 1], [R + 3, B - 3, 3, 1], [R + 6, B - 8, 1, 5], [R + 4 + sw, B - 9, 3, 1]], C.body); blk([[R + 3 + sw, B - 12, 3, 3]], C.body); }
+}
+// The moon fox's rings: they glow brighter in the dark (asleep).
+const ringGlow = (m, t) => (m === 'sleep' || Math.sin(t / 500) > 0.6 ? '#fff0a0' : '#f6d23c');
+// On the body, under the face: ears, flowers, cannons, ruffs.
+function formFront(f, x0, y0, w, h, m, t) {
+  const B = y0 + h, ears = (rects, inner, tip) => { blk([...rects, ...mirror(x0, w, rects)], C.body);
+    if (inner) for (const r of [inner, ...mirror(x0, w, [inner])]) px(...r, tip || shade(C.body, -0.35)); };
+  if (f === 'bloom') { // the seed's last form: a big flower on its back
+    const sw = Math.round(Math.sin(t / 500));
+    const leaf = [[x0 - 5, y0 - 3, 8, 3], [x0 - 8, y0 - 2, 3, 2]]; blk([...leaf, ...mirror(x0, w, leaf)], '#2f7a43'); blk([[x0 + w / 2 - 1, y0 - 3, 3, 3]], '#8a5a3c');
+    const cx = x0 + Math.floor(w / 2) + sw; blk([[cx - 6, y0 - 6, 13, 3], [cx - 4, y0 - 8, 9, 2]], '#ef7f9f');
+    for (const [x, y] of [[cx - 4, y0 - 5], [cx + 4, y0 - 5], [cx, y0 - 7]]) px(x, y, 1, 1, '#fff2f5');
+  }
+  if (f === 'cannons') { const can = [[x0 + 1, y0 - 2, 3, 3], [x0 - 1, y0 - 5, 3, 3]]; blk([...can, ...mirror(x0, w, can)], '#a7b0ba');
+    for (const [x, y] of [[x0 - 1, y0 - 5], ...mirror(x0, w, [[x0 - 1, y0 - 5, 3, 1]])]) px(x, y, 3, 1, '#4b5158');
+    px(x0 + 3, B - 4, w - 6, 2, '#f1e2b0');
+    if (m === 'happy' && Math.random() < 0.3) { spark(x0, y0 - 6, C.glass, 0.6, 24); spark(x0 + w, y0 - 6, C.glass, 0.6, 24); } }
+  if (f === 'bolt') ears([[x0 + 2, y0 - 3, 3, 3], [x0 + 1, y0 - 7, 2, 4]], [x0 + 1, y0 - 7, 2, 2], '#4a3020');
+  if (f === 'ruff') { ears([[x0, y0 - 3, 5, 3], [x0 + 1, y0 - 6, 3, 3], [x0 + 1, y0 - 8, 2, 2]], [x0 + 2, y0 - 5, 1, 4], '#5b3a22');
+    blk([[x0 - 2, B - 5, w + 4, 3], [x0 - 1, B - 6, 3, 1], [x0 + w - 2, B - 6, 3, 1]], '#f3e6c8'); }
+  if (f === 'gem') ears([[x0 + 1, y0 - 4, 3, 4], [x0 + 1, y0 - 7, 2, 3]], [x0 + 2, y0 - 4, 1, 3], '#e9b8f0');
+  if (f === 'rings') { ears([[x0 + 1, y0 - 4, 3, 4], [x0 + 1, y0 - 8, 2, 4]], [x0 + 1, y0 - 5, 3, 1], ringGlow(m, t));
+    px(x0, B - 6, 2, 1, ringGlow(m, t)); px(x0 + w - 2, B - 6, 2, 1, ringGlow(m, t)); }
+  if (f === 'coin' || f === 'float') ears([[x0 + 1, y0 - 3, 3, 3], [x0 + 2, y0 - 4, 1, 1]], f === 'coin' ? [x0 + 2, y0 - 2, 1, 2] : null, '#7a5a3a');
+  if (f === 'float' && m !== 'sleep' && Math.random() < 0.04) spark(x0 + Math.random() * w, y0 + Math.random() * h, '#ffd6ea', 0.3, 30);
+}
+// Over the face: gems, coins, cheeks, whiskers.
+function formTop(f, x0, y0, w, h, eyeY, m, t) {
+  const cx = x0 + Math.floor(w / 2);
+  if (f === 'bolt') { px(x0 + 1, eyeY + 4, 2, 2, C.red); px(x0 + w - 3, eyeY + 4, 2, 2, C.red);
+    if ((m === 'happy' || m === 'working') && Math.random() < 0.15) spark(x0 + (Math.random() < .5 ? 1 : w - 2), eyeY + 4, C.gold, 0.7, 14); }
+  if (f === 'gem') { blk([[cx - 1, y0 + 1, 3, 2]], '#e2304a'); px(cx - 1, y0 + 1, 1, 1, '#ffb3c0'); }
+  if (f === 'rings') { const c = ringGlow(m, t); px(cx - 1, y0 + 1, 3, 1, c); px(cx - 2, y0 + 2, 1, 1, c); px(cx + 2, y0 + 2, 1, 1, c); px(cx - 1, y0 + 3, 3, 1, c); }
+  if (f === 'coin') { blk([[cx - 1, y0 - 5, 3, 1], [cx - 2, y0 - 4, 5, 3], [cx - 1, y0 - 1, 3, 1]], C.gold); px(cx, y0 - 4, 1, 3, '#c99a2e');
+    if (Math.round(t / 900) % 4 === 0) px(cx - 1, y0 - 4, 1, 1, '#fff8d0');
+    for (const y of [eyeY + 3, eyeY + 5]) { px(x0 - 4, y, 4, 1, C.dust); px(x0 + w, y, 4, 1, C.dust); } }
+}
 function draw(m, t) {
   g.clearRect(0, 0, W, H);
   // ground: the dotted line is the hint's line in the page (#hint), so text never sits on it
@@ -145,17 +211,20 @@ function draw(m, t) {
   let dx = 0;
   if (m === 'working') dx = Math.round(Math.sin(t / 45));
   if (m === 'talking') s += Math.sin(t / 60) * 0.03;
-  const cx = CX + dx, x0 = cx - Math.floor(w / 2), feetH = 2, y0 = GROUND - feetH - h - Math.round(body.y);
-  const shadowW = Math.max(4, w - Math.round(body.y / 2));
+  const [form, crownLift] = formOf();
+  const by = Math.round(body.y) + (form === 'float' ? 4 + Math.round(Math.sin(t / 400) * 1.5) : 0); // the pink one hovers
+  const cx = CX + dx, x0 = cx - Math.floor(w / 2), feetH = 2, y0 = GROUND - feetH - h - by;
+  const shadowW = Math.max(4, w - Math.round(by / 2));
   px(cx - shadowW / 2, GROUND + 1, shadowW, 1, C.shadow);
 
   // cape behind
   if (pet.traits.includes('cape')) { const fl = Math.round(Math.sin(t / 120) * 2); px(x0 - 3 + fl, y0 + 3, 3, h - 2, C.cape); px(x0 - 4 + fl * 2, y0 + 5, 2, h - 5, C.cape); }
+  if (form) formBack(form, x0, y0, w, h, m, t);
 
   // feet
   const run = m === 'working' ? Math.round(Math.sin(t / 50)) : 0;
-  px(x0 + 2, GROUND - feetH - Math.max(0, run) - Math.round(body.y), 3, 2, C.out);
-  px(x0 + w - 5, GROUND - feetH - Math.max(0, -run) - Math.round(body.y), 3, 2, C.out);
+  px(x0 + 2, GROUND - feetH - Math.max(0, run) - by, 3, 2, C.out);
+  px(x0 + w - 5, GROUND - feetH - Math.max(0, -run) - by, 3, 2, C.out);
 
   // body: thick outline, flat fill, light top-left, shade bottom-right (Meat Boy-ish chunk)
   px(x0 - 1, y0 - 1, w + 2, h + 2, C.out);
@@ -167,6 +236,7 @@ function draw(m, t) {
     for (const [cx2, cy2] of [[x0, y0], [x0 + w - 1, y0], [x0, y0 + h - 1], [x0 + w - 1, y0 + h - 1]]) px(cx2, cy2, 1, 1, C.out);
   }
   if (pet.traits.includes('scar')) { px(x0 + w - 5, y0 + h - 6, 1, 1, C.out); px(x0 + w - 4, y0 + h - 5, 1, 1, C.out); px(x0 + w - 3, y0 + h - 4, 1, 1, C.out); }
+  if (form) formFront(form, x0, y0, w, h, m, t);
 
   // arms when waving
   if (m === 'waiting' || m === 'happy') { const up = Math.sin(t / 90) > 0 ? 2 : 0;
@@ -203,7 +273,8 @@ function draw(m, t) {
   if (pet.traits.includes('goggles')) { px(x0 + 1, y0, w - 2, 1, C.out); px(ex1, y0 - 1, 3, 2, C.glass); px(ex2, y0 - 1, 3, 2, C.glass); }
   if (pet.traits.includes('antenna')) { px(cx, y0 - 5, 1, 4, C.out); px(cx - 1, y0 - 7, 3, 2, Math.sin(t / 200) > 0 ? C.red : C.gold); }
   if (pet.stage === 'sprout') { px(cx, y0 - 3, 1, 2, C.green); px(cx + 1, y0 - 4, 2, 1, C.green); px(cx - 2, y0 - 3, 2, 1, C.green); }
-  if (pet.stage === 'legend') { px(cx - 4, y0 - 3, 9, 2, C.gold); px(cx - 4, y0 - 5, 1, 2, C.gold); px(cx, y0 - 5, 1, 2, C.gold); px(cx + 4, y0 - 5, 1, 2, C.gold); }
+  if (form) formTop(form, x0, y0, w, h, eyeY, m, t);
+  if (pet.stage === 'legend') { const cy = y0 - crownLift; px(cx - 4, cy - 3, 9, 2, C.gold); px(cx - 4, cy - 5, 1, 2, C.gold); px(cx, cy - 5, 1, 2, C.gold); px(cx + 4, cy - 5, 1, 2, C.gold); }
   if (pet.traits.includes('flame') && m !== 'sleep') { const f = Math.round(t / 100) % 2; px(x0 + w + 2, y0 - 2 - f, 2, 3, C.gold); px(x0 + w + 2, y0, 2, 1, C.red); }
 
   // overlays
@@ -553,6 +624,8 @@ function renderLife() {
     .map(([v, l]) => `<button data-v="${esc(v)}" class="${v === voiceTarget ? 'on' : ''}">${esc(l)}</button>`).join('');
   $('#sName').value !== settings.name && document.activeElement !== $('#sName') && ($('#sName').value = settings.name);
   $('#sPitch').value = settings.pitch;
+  // Evolved (level 50): the colour is part of its form now, so the swatches go.
+  if (pet.colorSet) { $('#swatches').innerHTML = `<span class="set"><i style="background:${settings.color}"></i>its own now</span>`; } else
   $('#swatches').innerHTML = COLORS.map((c) => `<button style="background:${c}" data-c="${c}" class="${c === settings.color ? 'on' : ''}"></button>`).join('')
     + `<input type="color" id="sColor" value="${settings.color}" title="custom" class="${COLORS.some((c) => c.toLowerCase() === settings.color.toLowerCase()) ? '' : 'on'}">`;
   lifeEl.querySelectorAll('.tog').forEach((t) => t.classList.toggle('on', !!settings[t.dataset.k]));
@@ -573,8 +646,8 @@ lifeEl.addEventListener('pointerdown', (e) => e.stopPropagation());
 $('#lifeClose').addEventListener('click', () => lifeEl.classList.remove('open'));
 $('#sName').addEventListener('change', (e) => e.target.value.trim() && saveSettings({ name: e.target.value.trim().slice(0, 12) }));
 $('#sPitch').addEventListener('change', (e) => { saveSettings({ pitch: +e.target.value }); speak('Is this my voice?'); });
-$('#swatches').addEventListener('click', (e) => { if (e.target.dataset.c) { saveSettings({ color: e.target.dataset.c }); hop(1); } });
-$('#swatches').addEventListener('change', (e) => { if (e.target.id === 'sColor') { saveSettings({ color: e.target.value }); hop(1); } });
+$('#swatches').addEventListener('click', (e) => { if (e.target.dataset.c && !pet.colorSet) { saveSettings({ color: e.target.dataset.c }); hop(1); } });
+$('#swatches').addEventListener('change', (e) => { if (e.target.id === 'sColor' && !pet.colorSet) { saveSettings({ color: e.target.value }); hop(1); } });
 lifeEl.querySelectorAll('.tog').forEach((t) => t.addEventListener('click', () => saveSettings({ [t.dataset.k]: !settings[t.dataset.k] })));
 $('#sWait').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ askTimeout: +e.target.dataset.v }));
 $('#sTheme').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ theme: e.target.dataset.v }));
