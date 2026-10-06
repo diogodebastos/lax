@@ -43,4 +43,4 @@ adb logcat -s LaxService LaxBridge LaxPage
 
 `lax://pair?u=<Lax URL with ?t=token>&id=<CF-Access-Client-Id>&s=<CF-Access-Client-Secret>`
 
-The service token lets the background link through Cloudflare Access, where there's no browser login. It's stored only in the app's private storage on the phone and in `data/env.json` on the Mac, never in git.
+The service token lets the background link through Cloudflare Access, where there's no browser login. It's stored only in the app's private storage on the phone and in `~/.lax/secrets/env.json` on the Mac, never in git.
