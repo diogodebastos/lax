@@ -68,7 +68,7 @@ The smallest learning loop that runs without you, so Lax starts learning now (Ph
 ### Phase 3.7: easter egg 🥚 ✅ [diogodebastos/lax#14](https://github.com/diogodebastos/lax/issues/14)
 - Lax levels up to 100 on a familiar fire-starter's curve (Medium Slow), and evolves at 16 and 36, then 50 and 100.
 - No names in the UI; those who know, know.
-- The colours are familiar faces, in order: grass, fire, water starters, the electric mouse, the brown fox, the coin cat, the pink one, then a free picker. Each colour levels on its face's curve: Medium Slow for the starters and the pink one, Medium Fast for the others and any custom colour. Changing colour can move the level; the stage never goes back.
+- The colours are familiar faces, in order: grass, fire, water starters, the electric mouse, the brown fox and its sun and moon forms, the coin cat, the pink one, then a free picker. Each colour levels on its face's curve: Medium Slow for the starters and the pink one, Medium Fast for the others and any custom colour. Changing colour can move the level; the stage never goes back.
 - Shipping it puts Lax at the right stage for the new curve (a one-time reset). From then on, Lax never de-evolves.
 
 ### Phase 4: Lax on the cover screen [diogodebastos/lax#3](https://github.com/diogodebastos/lax/issues/3)

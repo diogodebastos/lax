@@ -23,7 +23,7 @@ check('the curve always goes up', mono, true);
 
 check('Medium Fast: level 16 / 100 at 4096 / 1e6 XP', [16, 100].map((n) => xpFor(n, 'mediumFast')), [4096, 1000000]);
 check('1387 XP on Medium Fast is level 11', levelOf(1387, 'mediumFast'), 11);
-check('swatch curves, in order', COLORS.map(([, c]) => c), ['mediumSlow', 'mediumSlow', 'mediumSlow', 'mediumFast', 'mediumFast', 'mediumFast', 'mediumSlow']);
+check('swatch curves, in order', COLORS.map(([, c]) => c), ['mediumSlow', 'mediumSlow', 'mediumSlow', 'mediumFast', 'mediumFast', 'mediumFast', 'mediumFast', 'mediumFast', 'mediumSlow']);
 check('the default colour (any case) stays Medium Slow', curveOf('#d97757'), 'mediumSlow');
 check('a custom colour is Medium Fast', curveOf('#123456'), 'mediumFast');
 const ui = fs.readFileSync(new URL('../public/lax.js', import.meta.url), 'utf8').match(/const COLORS = (\[.*?\]);/)[1];
