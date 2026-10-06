@@ -142,7 +142,7 @@ class LaxService : Service() {
             c.disconnect()
             return when {
                 code == 401 -> "bad Lax token, pair again"
-                code in 500..599 -> "Lax is asleep, waiting…" // Cloudflare: tunnel or server down (502 / 530)
+                code in 500..599 -> "$name is asleep, waiting…" // Cloudflare: tunnel or server down (502 / 530)
                 else -> "can't link ($code ${type.substringBefore(';')})"
             }
         }
@@ -179,6 +179,7 @@ class LaxService : Service() {
         main.post {
             when (event) {
                 "bubble" -> onBubble(j)
+                "state" -> j.optJSONObject("settings")?.optString("name")?.takeIf { it.isNotBlank() }?.let(::rename)
                 "clear" -> cancelAsk(j.optString("id"))
             }
         }
@@ -215,7 +216,7 @@ class LaxService : Service() {
         val n = Notification.Builder(this, CH_ASK)
             .setSmallIcon(R.drawable.ic_stat_lax)
             .setColor(0xFFD97757.toInt())
-            .setContentTitle("Lax · $title")
+            .setContentTitle("$name · $title")
             .setContentText(text)
             .setStyle(Notification.BigTextStyle().bigText(big))
             .setCategory(Notification.CATEGORY_REMINDER)
@@ -240,7 +241,7 @@ class LaxService : Service() {
     }
 
     private fun news(kind: String, text: String) {
-        val title = when (kind) { "levelup" -> "★ level up"; "reply" -> "Lax"; else -> "done" }
+        val title = when (kind) { "levelup" -> "★ level up"; "reply" -> name; else -> "done" }
         nm.notify(2, Notification.Builder(this, CH_NEWS)
             .setSmallIcon(R.drawable.ic_stat_lax)
             .setColor(0xFFD97757.toInt())
@@ -260,6 +261,14 @@ class LaxService : Service() {
         pm.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP, "lax:ask").acquire(10_000)
     }
 
+    /** The character's name (the user picks it in the life menu); remembered for after a reboot. The app itself stays "Lax". */
+    private val name: String get() = Lax.name(this)
+    private fun rename(n: String) {
+        if (n == Lax.name(this)) return
+        Lax.setName(this, n)
+        nm.notify(ID_LINK, linkNotification(lastLink.ifEmpty { "linked" }))
+    }
+
     private var lastLink = ""
     private fun setLink(text: String) {
         if (text == lastLink) return
@@ -270,7 +279,7 @@ class LaxService : Service() {
     private fun linkNotification(text: String): Notification = Notification.Builder(this, CH_LINK)
         .setSmallIcon(R.drawable.ic_stat_lax)
         .setColor(0xFFD97757.toInt())
-        .setContentTitle("Lax is watching")
+        .setContentTitle("$name is watching")
         .setContentText(text)
         .setContentIntent(openApp())
         .setOngoing(true)

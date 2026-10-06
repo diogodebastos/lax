@@ -33,6 +33,9 @@ object Lax {
         prefs(ctx).edit().putString("url", c.url).putString("cfId", c.cfId).putString("cfSecret", c.cfSecret).apply()
     }
 
+    fun name(ctx: Context): String = prefs(ctx).getString("name", null) ?: "Lax"
+    fun setName(ctx: Context, n: String) = prefs(ctx).edit().putString("name", n.take(12)).apply()
+
     fun flag(ctx: Context, key: String): Boolean = prefs(ctx).getBoolean(key, false)
     fun setFlag(ctx: Context, key: String) = prefs(ctx).edit().putBoolean(key, true).apply()
 
