@@ -12,6 +12,7 @@ import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprot
 import { z } from 'zod';
 import { claudePid, processArgs } from '../lib/claude-pid.mjs';
 import { readToken } from '../lib/paths.mjs';
+import { share, finishShare } from '../lib/share.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const LAX = process.env.LAX_URL || 'http://127.0.0.1:7777';
@@ -58,10 +59,28 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
       required: ['chat_id', 'text'],
     },
+  }, {
+    name: 'share',
+    description: 'Share a file or text to a WhatsApp chat on this Mac, ready to send. Opens the contact\'s chat in WhatsApp ' +
+      'Desktop with the text typed in or the file pasted in. Lax then asks the user on the phone and sends only on their yes. ' +
+      'Returns what to tell the user (say it with reply).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', description: 'Absolute path of the file or image to share' },
+        text: { type: 'string', description: 'Text to put in the chat' },
+        to: { type: 'string', description: 'Contact name as the user said it ("Ritalicious"); looked up in macOS Contacts' },
+      },
+    },
   }],
 }));
 
 mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
+  if (req.params.name === 'share') {
+    const r = await share(req.params.arguments || {}).catch((e) => ({ ok: false, say: `Sharing failed: ${e.message}` }));
+    if (r.line) await post({ type: 'share', line: r.line, ready: r.ready }); // ready → Lax asks "Send it?" on the phone
+    return { content: [{ type: 'text', text: JSON.stringify(r) }], isError: !r.ok };
+  }
   if (req.params.name !== 'reply') throw new Error(`unknown tool: ${req.params.name}`);
   const { chat_id, text } = req.params.arguments || {};
   const r = await post({ type: 'reply', chat_id: String(chat_id || ''), text: String(text || '') });
@@ -98,6 +117,9 @@ async function listen() {
           if (ev === 'message') {
             await mcp.notification({ method: 'notifications/claude/channel',
               params: { content: d.text, meta: { chat_id: d.chat_id, via: d.via || 'voice' } } });
+          } else if (ev === 'share') { // your answer to "Send it?" from the phone; pressed here, where the terminal has Accessibility
+            await finishShare(d.send).then(() => post({ type: 'shared', sent: !!d.send, who: d.who }),
+              (e) => post({ type: 'shared', failed: e.message, who: d.who }));
           } else if (ev === 'verdict') {
             await mcp.notification({ method: 'notifications/claude/channel/permission',
               params: { request_id: d.request_id, behavior: d.behavior === 'allow' ? 'allow' : 'deny' } });
