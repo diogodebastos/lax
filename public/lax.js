@@ -232,10 +232,10 @@ function tabLabels(list) {
   return list.map((s) => { const base = `${s.project}·${s.where || 'cli'}`; seen[base] = (seen[base] || 0) + 1; return seen[base] > 1 ? `${base} ${seen[base]}` : base; });
 }
 function renderHud() {
-  // Tabs: "all", then one per session. The open tab filters the terminal; a live one (claude-lax) also hears your voice.
+  // Tabs: Lax's own (its name: everything, and talking goes to Lax itself), then one per session. The open tab filters the terminal; a live one (claude-lax) also hears your voice.
   const shown = sessions.slice(0, 8), labels = tabLabels(shown);
   if (view !== 'all' && !shown.some((s) => s.id === view)) setView('all');
-  $('#chips').innerHTML = `<span class="all${view === 'all' ? ' sel' : ''}" data-view="all">all</span>` + shown.map((s, i) => {
+  $('#chips').innerHTML = `<span class="all${view === 'all' ? ' sel' : ''}" data-view="all">${esc(settings.name.toLowerCase())}</span>` + shown.map((s, i) => {
     const ch = channels.find((c) => c.sessionPid && c.sessionPid === s.pid), open = s.id === view;
     return `<span class="${s.status}${ch ? ' live' : ''}${open ? (ch ? ' sel' : ' front') : ''}" data-view="${esc(s.id)}" data-cid="${ch ? ch.cid : ''}" data-label="${esc(labels[i])}">${esc(labels[i])}</span>`;
   }).join('');
