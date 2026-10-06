@@ -28,7 +28,7 @@ const move = (from, to, mode) => {
 };
 // data/ → ~/.lax
 for (const f of ['token', 'env.json', 'tunnel-token', 'cf-setup-token', 'pair-qr.jpg']) move(path.join(OLD, f), path.join(SECRETS, f), 0o600);
-for (const f of ['', '-wal', '-shm']) move(path.join(OLD, 'lax.db' + f), DB + f);
+for (const f of ['', '-wal', '-shm']) move(path.join(OLD, 'lax.db' + f), DB + f); // lax.db is now life.db
 for (const f of ['server.log', 'tunnel.log']) move(path.join(OLD, f), path.join(LOGS, f));
 
 // ~/.lax/CLAUDE.md (+ .claude/) → ~/.lax/mind, with the new template; the Notes it kept come along.

@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { ensureHome, commitMind } from './lib/home.mjs';
-import { HOME, MIND, DB, secret, ensureDirs, readEnv } from './lib/paths.mjs';
+import { HOME, MIND, DB, OLD_DB, SETTINGS, secret, ensureDirs, readEnv } from './lib/paths.mjs';
 import { MAX_LEVEL, STAGES, levelOf, stageIdx, barFor } from './lib/levels.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
@@ -28,7 +28,16 @@ if (!fs.existsSync(tokenFile)) fs.writeFileSync(tokenFile, crypto.randomBytes(12
 const TOKEN = fs.readFileSync(tokenFile, 'utf8').trim();
 
 // ---------- memory ----------
+// lax.db became life.db (what Lax has lived); settings moved out to settings.json. Once, before opening it.
+for (const f of ['', '-wal', '-shm']) if (fs.existsSync(OLD_DB + f) && !fs.existsSync(DB + f)) fs.renameSync(OLD_DB + f, DB + f);
 const db = new DatabaseSync(DB);
+{ // Lax's mind learns about the rename once (its notes are kept; it's a one-line update).
+  const md = path.join(MIND, 'CLAUDE.md');
+  try {
+    const t = fs.readFileSync(md, 'utf8'), old = t.split('\n').find((l) => l.startsWith(`- ${OLD_DB}:`));
+    if (old) { fs.writeFileSync(md, t.replace(old, `- ${DB}: what you have lived (XP, level, stats, milestones, a journal of every session you saw). Your server keeps it; don't open it.\n- ${SETTINGS}: the user's preferences for you (name, colour, voice). They change these from the phone.`)); commitMind('lax.db is now life.db; settings in settings.json'); }
+  } catch {}
+}
 db.exec(`
   CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, ts INTEGER, session TEXT, project TEXT, kind TEXT, text TEXT);
   CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
@@ -48,12 +57,16 @@ let pet = kvGet('pet', null) || newPet();
 let voiceSessions = kvGet('voiceSessions', {}); // cwd -> claude session id
 if (!kvGet('pet', null)) { milestone('Lax was born'); }
 // Phase 3.7 moved Lax to a new level curve (it went from brick back to sprout): note it once.
-if (!kvGet('newPath', false)) { if (kvGet('pet', null)) milestone(`${kvGet('settings', {}).name || 'Lax'} started over on a new path`); kvSet('newPath', true); }
+if (!kvGet('newPath', false)) { if (kvGet('pet', null)) milestone(`${readSettings().name || 'Lax'} started over on a new path`); kvSet('newPath', true); }
 
 // Life menu settings — live on the Mac, edited from the phone.
 const DEFAULTS = { name: 'Lax', color: '#D97757', voice: true, pitch: 1.6, speakDone: false,
   phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system' };
-let settings = { ...DEFAULTS, ...kvGet('settings', {}) };
+// Preferences live in settings.json, a plain file you can read; rebirth leaves them alone.
+function readSettings() { try { return JSON.parse(fs.readFileSync(SETTINGS, 'utf8')); } catch { return {}; } }
+const writeSettings = (s) => fs.writeFileSync(SETTINGS, JSON.stringify(s, null, 2) + '\n');
+if (!fs.existsSync(SETTINGS) && kvGet('settings', null)) { writeSettings(kvGet('settings', {})); db.prepare('DELETE FROM kv WHERE key=?').run('settings'); }
+let settings = { ...DEFAULTS, ...readSettings() };
 function updateSettings(b) {
   const clean = {};
   if (typeof b.name === 'string' && b.name.trim()) clean.name = b.name.trim().slice(0, 12);
@@ -62,7 +75,7 @@ function updateSettings(b) {
   if (Number.isFinite(b.pitch)) clean.pitch = Math.min(2, Math.max(0.5, b.pitch));
   if ([15, 30, 60, 120].includes(b.askTimeout)) clean.askTimeout = b.askTimeout;
   if (['system', 'light', 'dark'].includes(b.theme)) clean.theme = b.theme;
-  settings = { ...settings, ...clean }; kvSet('settings', settings);
+  settings = { ...settings, ...clean }; writeSettings(settings);
 }
 function rebirth() {
   db.exec('DELETE FROM events; DELETE FROM milestones;');

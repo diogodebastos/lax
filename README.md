@@ -13,7 +13,7 @@ No API credits. Voice runs `claude -p` with your normal Claude Code login. Speec
 
 ```
 Claude Code (Mac) ──hooks──▶ server.mjs (Mac, :7777) ──SSE──▶ phone browser (Lax's body)
-                     ◀─allow/deny─┘   │  SQLite memory: ~/.lax/lax.db    │
+                     ◀─allow/deny─┘   │  SQLite life:   ~/.lax/life.db   │
                                       └──── claude -p ◀── /api/talk ◀────┘ (voice)
 ```
 
@@ -21,10 +21,11 @@ The repo is Lax's **body** (code only). **Lax itself** lives in `~/.lax` on your
 
 ```
 ~/.lax/
-  mind/      where Lax the assistant works: CLAUDE.md (who it is, its body, notes about you). Git-tracked.
-  lax.db     memory: XP, level, milestones, every session's events
-  secrets/   token, env.json, tunnel-token (0700, never readable by the assistant)
-  logs/      server.log, tunnel.log   (npm run logs)
+  mind/          what Lax knows: where the assistant works. CLAUDE.md (who it is, its body, notes about you). Git-tracked.
+  life.db        what Lax has lived: XP, level, stats, milestones, a journal of every session it saw (rebirth wipes it)
+  settings.json  your preferences for it: name, colour, voice, theme… (rebirth keeps them)
+  secrets/       token, env.json, tunnel-token (0700, never readable by the assistant)
+  logs/          server.log, tunnel.log   (npm run logs)
 ```
 
 The phone stores nothing except the access token. Coming from an older Lax with a `data/` folder? `npm run move-home` moves it, once.
@@ -52,7 +53,7 @@ One URL. The layout follows the screen, and `?layout=wide|tall|big` forces one:
 
 Talking from the **all** tab goes to Lax itself: an assistant you can ask anything. It runs Claude Code in its mind, `~/.lax/mind`:
 - `CLAUDE.md` holds who Lax is, **its body** (this repo: what each part does, and how it may change it: on a `lax/<slug>` branch in a worktree, tests, then you merge), and **Notes** it keeps about you. It adds notes on its own, you can edit them, and it reads them to you when you ask what it remembers. Every change is committed to the mind's own git history.
-- `.claude/settings.json`: it reads your repos (`LAX_WORKDIR`, default `~/REPOS`) and its body freely; editing outside its mind needs your approval on the phone; its secrets and `lax.db` are denied (and Lax's hook refuses them too).
+- `.claude/settings.json`: it reads your repos (`LAX_WORKDIR`, default `~/REPOS`) and its body freely; editing outside its mind needs your approval on the phone; its secrets and `life.db` are denied (and Lax's hook refuses them too).
 - Each message also carries a short summary of your Claude Code sessions, so "what's my cli session doing?" works.
 
 These files are created on first use and never overwritten.

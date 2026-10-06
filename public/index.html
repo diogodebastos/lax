@@ -69,6 +69,11 @@
   #life header { display:flex; justify-content:space-between; align-items:center; color:var(--coral); font-size:22px; margin-bottom:6px; position:sticky; top:-8px; background:var(--bg); padding:4px 0; }
   #life header button { font:inherit; background:none; border:0; color:var(--fg); font-size:22px; cursor:pointer; padding:0 4px; }
   #life h3 { font-weight:400; color:var(--dim); font-size:15px; margin:10px 0 4px; border-bottom:1px dashed var(--line2); text-transform:uppercase; letter-spacing:1px; }
+  /* Two groups: life (read-only, what Lax has lived) first, then settings (yours to change), then rebirth. */
+  #life h2.group { font-weight:400; font-size:19px; color:var(--coral); margin:18px 0 2px; letter-spacing:1px; text-transform:uppercase; }
+  #life h2.group:first-of-type { margin-top:6px; }
+  #life h2.group small { font-size:14px; color:var(--dim); text-transform:none; letter-spacing:0; margin-left:6px; }
+  body.big #life h2.group { font-size:24px; } body.big #life h2.group small { font-size:17px; }
   #life label { display:flex; justify-content:space-between; align-items:center; gap:8px; margin:5px 0; }
   #life input[type=text] { font:inherit; background:var(--field); color:var(--fg); border:2px solid var(--line2); padding:1px 5px; width:120px; }
   #life input[type=range] { width:110px; accent-color:var(--coral); }
@@ -172,6 +177,14 @@
   </div>
   <div id="life">
     <header><span>♥ <span id="lifeName">LAX</span>'s life</span><button id="lifeClose">✕</button></header>
+    <h2 class="group">life <small>what Lax has lived</small></h2>
+    <h3>stats</h3>
+    <div id="stats"></div>
+    <h3>favorite tools</h3>
+    <div id="tools"></div>
+    <h3>milestones</h3>
+    <ul id="miles"></ul>
+    <h2 class="group">settings <small>yours to change</small></h2>
     <h3>who</h3>
     <label>name <input type="text" id="sName" maxlength="12"></label>
     <h3>color</h3>
@@ -187,13 +200,7 @@
     <h3>approvals</h3>
     <label>ask me on the phone <button class="tog" data-k="phoneApprovals"></button></label>
     <label>wait before terminal <span class="seg" id="sWait"><button data-v="15">15s</button><button data-v="30">30s</button><button data-v="60">60s</button><button data-v="120">2m</button></span></label>
-    <h3>memory</h3>
-    <div id="stats"></div>
-    <h3>favorite tools</h3>
-    <div id="tools"></div>
-    <h3>milestones</h3>
-    <ul id="miles"></ul>
-    <h3>rebirth</h3>
+    <h2 class="group">rebirth <small>a new life; your settings stay</small></h2>
     <button id="rebirth"><i></i><span>hold 2s to start a new life</span></button>
   </div>
 </div>
