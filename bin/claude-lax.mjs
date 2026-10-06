@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // `lax` / `claude-lax`: Claude Code with the Lax channel, inside a small pseudo-terminal so Lax can type a few
-// quick actions into it by voice ("clear", "compact", "stop", "continue"). Your terminal feels the same: raw keys,
+// quick actions into it by voice ("clear", "compact", "stop", "continue", "quit"). Your terminal feels the same: raw keys,
 // colours, resize and the exit code all pass straight through.
 // Lax reaches it over a private Unix socket (its path is in LAX_PTY, which the channel reports to the server).
 // The socket takes action NAMES only, from the closed list in lib/actions.mjs, never free text.

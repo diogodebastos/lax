@@ -22,7 +22,10 @@ const until = async (fn, ms = 3000) => { for (let t = 0; t < ms && !fn(); t += 5
 // What counts as an action: only an exact short command.
 check('"Clear." is an action', voiceAction('Clear.') === 'clear');
 check('"stop!" is an action', voiceAction(' stop! ') === 'stop');
+check('"Quit." is an action', voiceAction('Quit.') === 'quit');
 check('"/compact" is an action', voiceAction('/compact') === 'compact');
+check('"Slash clear" (as speech hears "/clear") is an action', voiceAction('Slash clear') === 'clear');
+check('"Quit" ends the session (an action)', voiceAction('Quit') === 'quit' && voiceAction('exit.') === 'exit');
 check('"clear up the README" is a message', voiceAction('clear up the README') === null);
 check('"rm -rf" is not an action', voiceAction('rm -rf') === null);
 
@@ -77,6 +80,9 @@ check('…and types /clear, then Enter', await until(() => keys() === before + '
 before = keys();
 await post('/api/talk', { text: 'stop' });
 check('"stop" presses Esc', await until(() => keys() === before + '\x1b'), JSON.stringify(keys().slice(before.length)));
+before = keys();
+await post('/api/talk', { text: 'Quit' });
+check('"quit" types /exit, then Enter', await until(() => keys() === before + '/exit\r'), JSON.stringify(keys().slice(before.length)));
 before = keys();
 await post('/api/talk', { text: 'clear up the README' });
 await sleep(400);
