@@ -80,7 +80,7 @@ function applyLook() {
   applyTheme();
   C.body = settings.color; C.hi = shade(settings.color, 0.3); C.lo = shade(settings.color, -0.25);
   document.documentElement.style.setProperty('--coral', settings.color);
-  $('#nameBtn').textContent = settings.name.toUpperCase(); $('#lifeName').textContent = settings.name.toUpperCase();
+  $('#nameBtn').textContent = settings.name.toUpperCase(); $('#lifeName').textContent = settings.name.toUpperCase(); $('#menuName').textContent = settings.name.toUpperCase();
 }
 let pet = { name: 'Lax', level: 1, stage: 'sprout', traits: [], mood: 'happy', xp: 0, prevXp: 0, nextXp: 10 };
 let sessions = [], voiceBusy = false, thinking = false, lastWork = 0, channels = [], voiceTarget = 'background';
