@@ -537,7 +537,8 @@ function demo() {
 
 // ---------- life menu ----------
 const lifeEl = $('#life');
-const COLORS = ['#D97757', '#5fbf4a', '#4a8fe0', '#9b5de5', '#f2b134', '#e8e2d6', '#ff5d8f', '#3ec1c9'];
+// Same order as lib/levels.mjs, where each colour's growth curve lives.
+const COLORS = ['#5abf8e', '#D97757', '#5aa7e6', '#f6d23c', '#a8754a', '#f2ede3', '#f4a6c8'];
 let memory = null;
 function saveSettings(patch) {
   settings = { ...settings, ...patch }; applyLook(); renderLife();
