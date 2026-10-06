@@ -26,7 +26,7 @@ check('"stop!" is an action', voiceAction(' stop! ') === 'stop');
 check('"Quit." is an action', voiceAction('Quit.') === 'quit');
 check('"/compact" is an action', voiceAction('/compact') === 'compact');
 check('"Slash clear" (as speech hears "/clear") is an action', voiceAction('Slash clear') === 'clear');
-check('"Quit" ends the session (an action)', voiceAction('Quit') === 'quit' && voiceAction('exit.') === 'exit');
+check('"Quit" ends the session (an action)', voiceAction('Quit') === 'quit' && voiceAction('exit.') === 'exit' && voiceAction('Close') === 'close');
 check('"Plan mode." is an action', voiceAction('Plan mode.') === 'plan mode' && voiceAction('plan  mode') === 'plan mode');
 check('"Plan mouth" (misheard) is plan mode', voiceAction('Plan mouth') === 'plan mode' && voiceAction('Plan mood.') === 'plan mode');
 check('"Blind mode" (misheard) is plan mode', voiceAction('Blind mode') === 'plan mode');
