@@ -472,7 +472,7 @@ function speak(text) {
 }
 
 // ---------- tap-to-talk ----------
-// Talking. Tap Lax and talk: a breath doesn't end it, about 2s of quiet after your last words sends it.
+// Talking. Tap Lax and talk: a breath doesn't end it, about 2s without new words sends it (background noise too).
 // Or hold Lax: it listens until you let go (slide off Lax before letting go to cancel). While listening, your words
 // show in a bubble; tap Lax, tap the bubble or swipe it away to cancel. Speech recognizers stop at every pause,
 // so each stop just starts the next stretch, and the stretches are joined.
@@ -535,15 +535,18 @@ function listenStretch() {
   rec.onend = () => stretchEnded(text);
   try { rec.start(); } catch (err) { diag('sr-start-throw', { msg: err.message }); failListening(err.message); }
 }
-function speechBegan() { clearTimeout(quietTimer); } // talking again: don't send yet
-function partial(text) { if (!listening) return; clearTimeout(quietTimer); heard = text; showHeard(); }
+// Tap mode sends once your words stop changing for QUIET_MS. Not "once the recognizer hears silence": in a noisy room it
+// keeps hearing "speech" that never turns into words, and would wait forever (each stretch times out and starts over).
+function armQuiet() { if (talkMode !== 'tap' || !words()) return; clearTimeout(quietTimer); quietTimer = setTimeout(finishListening, QUIET_MS); }
+function speechBegan() { armQuiet(); } // talking again: a fresh countdown, so new words have time to arrive
+function partial(text) { if (!listening || text === heard) return; heard = text; showHeard(); armQuiet(); }
 function stretchEnded(text) {
   if (!listening) return;
   heard = ''; if (text?.trim()) said = [said, text.trim()].join(' ').trim();
   if (releasing) return finishListening();
   if (talkMode === 'tap' && !said) { showBubble({ id: 'mic', kind: 'error', text: micError('no-speech') }); return stopListening(true); }
   listenStretch(); showHeard();
-  if (talkMode === 'tap') { clearTimeout(quietTimer); quietTimer = setTimeout(finishListening, QUIET_MS); }
+  if (text?.trim()) armQuiet(); // only new words restart it: an empty stretch (noise, then a timeout) leaves the countdown running
 }
 function stopListening(discard) {
   if (!listening) return;
