@@ -81,7 +81,7 @@
   #life label { display:flex; justify-content:space-between; align-items:center; gap:8px; margin:5px 0; }
   #life input[type=text] { font:inherit; background:var(--field); color:var(--fg); border:2px solid var(--line2); padding:1px 5px; width:120px; }
   #life input[type=range] { width:110px; accent-color:var(--coral); }
-  #swatches { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  #swatches { display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:2px; } /* room for the outline, which .scroll would clip */
   #swatches button { width:24px; height:24px; border:2px solid #000; outline:2px solid var(--line2); cursor:pointer; }
   #swatches button.on { outline-color:var(--fg); }
   #swatches input { width:28px; height:28px; border:0; background:none; padding:0; }
