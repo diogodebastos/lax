@@ -29,8 +29,11 @@ check('"Slash clear" (as speech hears "/clear") is an action', voiceAction('Slas
 check('"Quit" ends the session (an action)', voiceAction('Quit') === 'quit' && voiceAction('exit.') === 'exit');
 check('"Plan mode." is an action', voiceAction('Plan mode.') === 'plan mode' && voiceAction('plan  mode') === 'plan mode');
 check('"Plan mouth" (misheard) is plan mode', voiceAction('Plan mouth') === 'plan mode' && voiceAction('Plan mood.') === 'plan mode');
+check('"Blind mode" (misheard) is plan mode', voiceAction('Blind mode') === 'plan mode');
 check('"Context?" / "usage" / "cost" are actions', voiceAction('Context?') === 'context' && voiceAction('usage') === 'usage' && voiceAction('Cost.') === 'cost');
 check('"Auto mode" / "switch to accept edits" / "manual mode" are actions', voiceAction('Auto mode.') === 'auto mode' && voiceAction('switch to accept edits') === 'accept edits' && voiceAction('manual mode') === 'manual mode');
+check('"Aiko" (misheard) is Haiku', voiceAction('Aiko') === 'model haiku');
+check('menu answers can\'t be said', voiceAction('pick 1') === null);
 check('"model" asks which model', voiceAction('Model?') === 'model');
 check('"sonnet" / "use opus" / "Haiku model" / "model fable" switch models', voiceAction('Sonnet.') === 'model sonnet' && voiceAction('use opus') === 'model opus' && voiceAction('Haiku model') === 'model haiku' && voiceAction('model fable') === 'model fable');
 check('"sonnet is great" is a message', voiceAction('sonnet is great') === null);
@@ -85,6 +88,11 @@ const PICKER = `   Select model
 check('model: the picker\'s ✔ is read aloud', readStatus('model', PICKER).say === 'This session uses Opus 5.5.', readStatus('model', PICKER).say);
 check('model: "Default ✔" reads the model behind it', readStatus('model', '     1.  Default (recommended) ✔  Opus 5.5 · Best').say === 'This session uses Opus 5.5.');
 const SET = `❯ /model sonnet\n  ⎿  Set model to Sonnet 5.5 and saved as your default for new sessions\n   ◐ medium · /effort`;
+const SWITCH = `⏺ ok\n\n▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔\n   Switch model?\n   Your next response will be slower and use more tokens\n\n   This conversation is cached for the current model.\n\n   ❯ 1. Yes, switch to Haiku 4.5\n     2. No, go back\n`;
+const menu = readStatus('model haiku', SWITCH).menu;
+check('model: "Switch model?" mid-conversation is a menu for the phone', menu?.question === 'Switch model?' && menu.options.join('|') === 'Yes, switch to Haiku 4.5|No, go back' && /slower/.test(menu.detail), JSON.stringify(menu));
+check('model: "Kept model" after "No, go back"', readStatus('pick 2', SWITCH + '\n  ⎿  Kept model as Opus 5.5\n  ⏵⏵ auto mode on').say === 'Kept Opus 5.5.');
+check('model: the footer under a switch isn\'t a menu', !readStatus('model sonnet', SET).menu);
 check('model: a switch is confirmed aloud', readStatus('model sonnet', SET).say === 'Switched to Sonnet 5.5. New sessions will use it too.', readStatus('model sonnet', SET).say);
 check('an unreadable screen says so', readStatus('usage', 'nothing here').say === "I couldn't read the usage.");
 
@@ -117,6 +125,8 @@ process.stdin.on('data', (d) => {
   if (all.endsWith('/usage\\r')) process.stdout.write(${crlf(USAGE)});
   if (all.endsWith('/model\\r')) process.stdout.write(${crlf(PICKER)});
   if (all.endsWith('/model sonnet\\r')) process.stdout.write(${crlf(SET)});
+  if (all.endsWith('/model haiku\\r')) process.stdout.write(${crlf(SWITCH)});
+  if (all.endsWith('/model haiku\\r2')) process.stdout.write(${crlf('\n  ⎿  Kept model as Opus 5.5\n')});
 });
 process.stdout.on('resize', () => fs.writeFileSync(${JSON.stringify(SIZE)}, process.stdout.columns + 'x' + process.stdout.rows));
 process.stdout.write('\\x1b[32mready\\x1b[0m\\r\\n'); foot();
@@ -180,6 +190,13 @@ check('"model" opens the picker, reads the ✔ aloud, then closes it', await hea
 before = keys();
 await post('/api/talk', { text: 'use sonnet' });
 check('"use sonnet" types /model sonnet and confirms aloud', await heard(/Switched to Sonnet 5\.5/) && keys().endsWith('/model sonnet\r'), JSON.stringify(keys().slice(before.length)));
+before = keys(); bubbles.length = 0;
+await post('/api/talk', { text: 'Haiku' });
+check('"haiku" mid-conversation: Claude Code\'s "Switch model?" comes to the phone as a question',
+  await until(() => bubbles.some((b) => b.kind === 'question' && b.questions[0].question === 'Switch model?' && b.questions[0].options.length === 2), 6000), JSON.stringify(bubbles));
+const q = bubbles.find((b) => b.kind === 'question');
+await post('/api/decide', { id: q?.id, decision: 'answer', answers: { 'Switch model?': 'No, go back' } });
+check('…picking "No, go back" presses 2 and says so', await heard(/Kept Opus 5\.5/) && keys().endsWith('/model haiku\r2'), JSON.stringify(keys().slice(before.length)));
 await post('/api/talk', { text: 'Context?' });
 check('"context" types /context and reads it aloud', await heard(/^Context is 3% full/), JSON.stringify(bubbles.map((b) => b.text)));
 before = keys();
