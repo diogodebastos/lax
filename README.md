@@ -13,11 +13,21 @@ No API credits. Voice runs `claude -p` with your normal Claude Code login. Speec
 
 ```
 Claude Code (Mac) ──hooks──▶ server.mjs (Mac, :7777) ──SSE──▶ phone browser (Lax's body)
-                     ◀─allow/deny─┘   │  SQLite memory: data/lax.db      │
+                     ◀─allow/deny─┘   │  SQLite memory: ~/.lax/lax.db    │
                                       └──── claude -p ◀── /api/talk ◀────┘ (voice)
 ```
 
-All of Lax's memory stays in `data/` on your Mac. The phone stores nothing except the access token.
+The repo is Lax's **body** (code only). **Lax itself** lives in `~/.lax` on your Mac (`LAX_HOME` moves it):
+
+```
+~/.lax/
+  mind/      where Lax the assistant works: CLAUDE.md (who it is, its body, notes about you). Git-tracked.
+  lax.db     memory: XP, level, milestones, every session's events
+  secrets/   token, env.json, tunnel-token (0700, never readable by the assistant)
+  logs/      server.log, tunnel.log   (npm run logs)
+```
+
+The phone stores nothing except the access token. Coming from an older Lax with a `data/` folder? `npm run move-home` moves it, once.
 
 ## Run
 
@@ -38,11 +48,11 @@ One URL. The layout follows the screen, and `?layout=wide|tall|big` forces one:
 - **tall** (cover screen held sideways, 260×512): Lax on top, terminal below
 - **big** (open / Flex mode): Lax above the fold; session chips, terminal and buttons below it
 
-## Lax's home (`~/.lax`)
+## Lax's mind (`~/.lax/mind`)
 
-Talking from the **all** tab goes to Lax itself: an assistant you can ask anything. It runs Claude Code in its own home, `~/.lax` (override with `LAX_HOME`):
-- `~/.lax/CLAUDE.md` holds who Lax is, plus **Notes** it keeps about you. It adds them on its own, you can edit them, and it reads them to you when you ask what it remembers.
-- `~/.lax/.claude/settings.json`: it can read your repos (`LAX_WORKDIR`, default `~/REPOS`) freely. Editing anything outside its home needs your approval on the phone.
+Talking from the **all** tab goes to Lax itself: an assistant you can ask anything. It runs Claude Code in its mind, `~/.lax/mind`:
+- `CLAUDE.md` holds who Lax is, **its body** (this repo: what each part does, and how it may change it: on a `lax/<slug>` branch in a worktree, tests, then you merge), and **Notes** it keeps about you. It adds notes on its own, you can edit them, and it reads them to you when you ask what it remembers. Every change is committed to the mind's own git history.
+- `.claude/settings.json`: it reads your repos (`LAX_WORKDIR`, default `~/REPOS`) and its body freely; editing outside its mind needs your approval on the phone; its secrets and `lax.db` are denied (and Lax's hook refuses them too).
 - Each message also carries a short summary of your Claude Code sessions, so "what's my cli session doing?" works.
 
 These files are created on first use and never overwritten.
@@ -78,7 +88,7 @@ ingress:
   - service: http_status:404
 ```
 
-`data/env.json` (gitignored):
+`~/.lax/secrets/env.json`:
 
 ```json
 { "LAX_PUBLIC_URL": "https://lax.diogodebastos.com", "CF_ACCESS_CLIENT_ID": "…", "CF_ACCESS_CLIENT_SECRET": "…" }
@@ -131,4 +141,4 @@ Already in a session that wasn't started with `lax` (the desktop app, or plain `
 - **Voice runs** use their own Claude session per project (resumed each time). The project is the one where Claude Code was active most recently. Read-only tools run freely. Anything else (edits, Bash) needs ✓ on the phone, and silence counts as a no.
 - When the server is down, the hook exits in milliseconds, so Claude Code is never slowed down.
 
-Env (or `data/env.json`): `LAX_PORT` (7777), `LAX_HOST` (127.0.0.1), `LAX_PUBLIC_URL`, `LAX_ASK_TIMEOUT` (30), `LAX_WORKDIR` (fallback voice project, `~/REPOS`).
+Env (or `~/.lax/secrets/env.json`): `LAX_PORT` (7777), `LAX_HOST` (127.0.0.1), `LAX_PUBLIC_URL`, `LAX_ASK_TIMEOUT` (30), `LAX_WORKDIR` (fallback voice project, `~/REPOS`).

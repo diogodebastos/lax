@@ -1,11 +1,13 @@
 // One-shot, idempotent Cloudflare setup for Lax: Access (login in front) → tunnel → DNS.
-// Needs data/cf-setup-token: a short-lived API token with Access (apps/policies, service tokens,
-// orgs/IdPs), Cloudflare Tunnel, and Zone DNS edit. Secrets are written to data/ (0600), never printed.
+// Needs ~/.lax/secrets/cf-setup-token: a short-lived API token with Access (apps/policies, service tokens,
+// orgs/IdPs), Cloudflare Tunnel, and Zone DNS edit. Secrets are written to ~/.lax/secrets (0600), never printed.
 import fs from 'node:fs';
 import path from 'node:path';
+import { SECRETS, ensureDirs } from '../lib/paths.mjs';
+ensureDirs();
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const DATA = path.join(ROOT, 'data');
+const DATA = SECRETS;
 const HOST = process.env.LAX_HOSTNAME || 'lax.diogodebastos.com';
 const ZONE = HOST.split('.').slice(-2).join('.');
 const EMAIL = process.env.LAX_OWNER_EMAIL || 'diogodebastos18@gmail.com';
@@ -48,7 +50,7 @@ if (!st) {
 env.CF_ACCESS_SERVICE_TOKEN_ID = st.id;
 env.LAX_PUBLIC_URL = `https://${HOST}`;
 writeSecret('env.json', JSON.stringify(env, null, 2) + '\n');
-step('service token lax-android → data/env.json');
+step('service token lax-android → ~/.lax/secrets/env.json');
 
 // 3. Reusable policies + the Access application (created BEFORE DNS, so the host is never exposed unprotected)
 async function policy(name, decision, include) {
@@ -74,7 +76,7 @@ await cf('PUT', `/accounts/${A.id}/cfd_tunnel/${tunnel.id}/configurations`, {
   config: { ingress: [{ hostname: HOST, service: 'http://127.0.0.1:7777' }, { service: 'http_status:404' }] },
 });
 writeSecret('tunnel-token', await cf('GET', `/accounts/${A.id}/cfd_tunnel/${tunnel.id}/token`));
-step(`tunnel lax (${tunnel.id}) → data/tunnel-token`);
+step(`tunnel lax (${tunnel.id}) → ~/.lax/secrets/tunnel-token`);
 
 // 5. DNS
 const target = `${tunnel.id}.cfargotunnel.com`;

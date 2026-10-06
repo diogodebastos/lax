@@ -10,13 +10,15 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const PORT = 7798, LAX = `http://127.0.0.1:${PORT}`, DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-test-'));
-const ENV = { ...process.env, LAX_DATA: DATA, LAX_PORT: String(PORT), LAX_URL: LAX, LAX_PUBLIC_URL: '', LAX_HOME: path.join(DATA, 'home') };
+// A throwaway Lax home: memory, secrets and mind all in a temp folder.
+const ENV = { ...process.env, LAX_HOME: DATA, LAX_PORT: String(PORT), LAX_URL: LAX, LAX_PUBLIC_URL: '' };
+delete ENV.LAX_DATA;
 const server = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server.mjs')], { env: ENV, stdio: 'ignore' });
 const cleanup = () => { server.kill(); fs.rmSync(DATA, { recursive: true, force: true }); };
 process.on('exit', cleanup);
-for (let i = 0; i < 50 && !fs.existsSync(path.join(DATA, 'token')); i++) await new Promise((r) => setTimeout(r, 100));
+for (let i = 0; i < 50 && !fs.existsSync(path.join(DATA, 'secrets', 'token')); i++) await new Promise((r) => setTimeout(r, 100));
 await new Promise((r) => setTimeout(r, 300));
-const TOKEN = fs.readFileSync(path.join(DATA, 'token'), 'utf8').trim();
+const TOKEN = fs.readFileSync(path.join(DATA, 'secrets', 'token'), 'utf8').trim();
 const H = { 'content-type': 'application/json', 'x-lax-token': TOKEN };
 const post = (p, b) => fetch(LAX + p, { method: 'POST', headers: H, body: JSON.stringify(b) }).then((r) => r.json());
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

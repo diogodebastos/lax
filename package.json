@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Lax — a pixel companion for Claude Code that lives on an old phone.",
+  "description": "Lax \u2014 a pixel companion for Claude Code that lives on an old phone.",
   "engines": {
     "node": ">=22.13"
   },
@@ -13,11 +13,12 @@
     "remove-hooks": "node scripts/install-hooks.mjs --remove",
     "install-service": "node scripts/install-launchd.mjs",
     "remove-service": "node scripts/install-launchd.mjs --remove",
-    "logs": "tail -f data/server.log data/tunnel.log",
+    "logs": "tail -f ~/.lax/logs/server.log ~/.lax/logs/tunnel.log",
     "install-channel": "node scripts/install-channel.mjs",
     "remove-channel": "node scripts/install-channel.mjs --remove",
     "android": "node scripts/android.mjs",
-    "test": "node scripts/test-levels.mjs && node --no-warnings scripts/test-channel.mjs"
+    "test": "node scripts/test-levels.mjs && node --no-warnings scripts/test-channel.mjs",
+    "move-home": "node scripts/move-home.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",

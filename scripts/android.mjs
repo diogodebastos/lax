@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { readToken, readEnv } from '../lib/paths.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const APP = path.join(ROOT, 'android');
@@ -34,10 +35,8 @@ const adb = (...a) => run('adb', a);
 adb('install', '-r', apk);
 
 if (args.has('--pair')) {
-  const DATA = process.env.LAX_DATA || path.join(ROOT, 'data');
-  const token = fs.readFileSync(path.join(DATA, 'token'), 'utf8').trim();
-  let cfg = {}; try { cfg = JSON.parse(fs.readFileSync(path.join(DATA, 'env.json'), 'utf8')); } catch {}
-  if (!cfg.LAX_PUBLIC_URL) { console.error('No LAX_PUBLIC_URL in data/env.json, so there\'s nothing to pair with.'); process.exit(1); }
+  const token = readToken(), cfg = readEnv();
+  if (!token || !cfg.LAX_PUBLIC_URL) { console.error('No Lax token or LAX_PUBLIC_URL in ~/.lax/secrets, so there\'s nothing to pair with.'); process.exit(1); }
   const link = 'lax://pair?' + new URLSearchParams({ u: `${cfg.LAX_PUBLIC_URL.replace(/\/$/, '')}/?t=${token}`,
     id: cfg.CF_ACCESS_CLIENT_ID || '', s: cfg.CF_ACCESS_CLIENT_SECRET || '' });
   // adb shell joins its arguments into one remote shell command: single-quote the link (it has no quotes of its own).
