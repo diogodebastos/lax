@@ -8,7 +8,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { ensureHome, commitMind, syncMindName, addMemoryLayout } from './lib/home.mjs';
+import { ensureHome, commitMind, syncMindName, addMemoryLayout, addToolsAdvice } from './lib/home.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS, secret, ensureDirs, readEnv } from './lib/paths.mjs';
 import { MAX_LEVEL, STAGES, levelOf, stageIdx, barFor } from './lib/levels.mjs';
 import { createBrain, ensureBrain, brief } from './lib/brain.mjs';
@@ -254,7 +254,10 @@ function onHook(h) {
 // Decisions: allow | deny | answer (AskUserQuestion, with answers) | none (fall back to the terminal).
 function ask(h) {
   return new Promise((resolve) => {
-    if (clients.size === 0 || !settings.phoneApprovals) return resolve({ decision: 'none' });
+    // Lax's own assistant (h.lax_voice) has no terminal: its requests always come to the phone, whatever "ask me on the phone"
+    // (which is about your terminal sessions) says. If it can't be asked, say why.
+    if (clients.size === 0) return resolve({ decision: 'none', why: 'no phone is connected to Lax' });
+    if (!settings.phoneApprovals && !h.lax_voice) return resolve({ decision: 'none', why: 'phone approvals are off' });
     // Sessions with a live lax channel relay tool approvals themselves (no duplicate bubble); questions still come here.
     if (h.tool_name !== 'AskUserQuestion' && h.lax_session_pid && [...channels.values()].some((c) => c.sessionPid === h.lax_session_pid))
       return resolve({ decision: 'none' });
@@ -328,7 +331,7 @@ let voiceRun = null;
 const ASSISTANT = 'assistant:' + MIND; // its key in voiceSessions (a conversation only resumes in the folder it started in)
 
 // ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
-ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addMemoryLayout();
+ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addMemoryLayout(); addToolsAdvice();
 const brain = createBrain({ db, settings: () => settings, feed, broadcast, gainXp: (n) => { gainXp(n); save(); pushState(); },
   sessionInfo: (sid) => sessions.get(sid), skip: (sid) => sid === voiceSessions[ASSISTANT], claude: process.env.LAX_CLAUDE,
   log: (...a) => console.log('[brain]', ...a) });

@@ -90,5 +90,17 @@ await client.close();
 await sleep(600);
 const after = phone.filter((e) => e.ev === 'state').pop()?.d;
 check('closing the session unregisters the channel', (after?.channels?.length ?? 1) === (state?.channels?.length ?? 1) - 1);
+// Lax's own assistant has no terminal: even with "ask me on the phone" off, its requests come to the phone.
+await post('/api/settings', { phoneApprovals: false });
+const voiceHook = spawn(process.execPath, [path.join(ROOT, 'hooks', 'lax-hook.mjs')], { env: { ...ENV, LAX_VOICE: '1' }, stdio: ['pipe', 'pipe', 'ignore'] });
+let voiceOut = ''; voiceHook.stdout.on('data', (d) => (voiceOut += d));
+voiceHook.stdin.end(JSON.stringify({ hook_event_name: 'PreToolUse', session_id: 'assistant-x', cwd: '/tmp', tool_name: 'Bash', tool_input: { command: 'ls' } }));
+let ask; for (let i = 0; i < 40 && !ask; i++) { await sleep(100); ask = phone.filter((e) => e.ev === 'bubble' && e.d.kind === 'permission' && /\$ ls/.test(e.d.text)).pop(); }
+check('approvals off: Lax\'s own request still asks the phone', !!ask);
+if (ask) await post('/api/decide', { id: ask.d.id, decision: 'allow' });
+await new Promise((r) => voiceHook.on('close', r));
+check('…and your yes gets back to it', /"permissionDecision":"allow"/.test(voiceOut));
+await post('/api/settings', { phoneApprovals: true });
+
 console.log(failed ? `\n${failed} check(s) failed` : '\nall channel checks passed');
 process.exit(failed ? 1 : 0);

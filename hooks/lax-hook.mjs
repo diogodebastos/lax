@@ -79,10 +79,12 @@ try {
   } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && /^(Edit|Write|MultiEdit)$/.test(input.tool_name) && within(MIND)) {
     decide('allow', 'Lax\'s own mind.');
   } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && !SAFE.test(input.tool_name)) {
-    const { decision } = await post('/api/ask', input, 120000);
+    const { decision, why } = await post('/api/ask', { ...input, lax_voice: true }, 120000);
     console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse',
       permissionDecision: decision === 'allow' ? 'allow' : 'deny',
-      permissionDecisionReason: decision === 'allow' ? 'Approved from Lax.' : 'Not approved from Lax (denied or timed out).' } }));
+      permissionDecisionReason: decision === 'allow' ? 'Approved from Lax.'
+        : decision === 'deny' ? 'The user said no on the phone.'
+        : why ? `Couldn't ask the user: ${why}.` : 'The user didn\'t answer on the phone in time.' } }));
   }
 } catch { /* Lax asleep — let Claude Code carry on normally */ }
 process.exit(0);
