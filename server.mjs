@@ -381,11 +381,27 @@ function quickAction(cid, action) {
     } else if (ACTIONS[action].mode) say(`${c.project} is in ${ACTIONS[action].mode} mode now.`.replace('accept edits mode', 'accept-edits mode'));
     else if (ACTIONS[action].read) { // status: read it out, details in the feed
       const st = readStatus(action, r.screen);
+      if (st.menu) return askMenu(cid, st.menu);
       if (st.text) feed(`↩ ${st.text}`, 'done', c.project, sid);
       say(st.say);
     }
   });
   return true;
+}
+// A menu an action opened in the terminal ("Switch model?"): a question bubble; the pick is pressed in as its number.
+function askMenu(cid, menu) {
+  const c = channels.get(cid); if (!c) return;
+  const id = 'menu-' + crypto.randomBytes(4).toString('hex'), labels = menu.options.slice(0, 9);
+  const questions = [{ question: menu.question, header: c.project, options: labels.map((label, i) => ({ label, description: i ? '' : menu.detail })) }];
+  const bubble = { id, kind: 'question', project: c.project, questions, text: `${c.project}: ${menu.question}`, speak: true };
+  pending.set(id, { bubble, relay: { cid }, finish(decision, answers) {
+    if (!pending.delete(id)) return;
+    broadcast('clear', { id });
+    const a = String(Object.values(answers || {})[0] || '').trim().toLowerCase(); // a tapped label, or said ("yes", "no, go back")
+    const n = decision !== 'answer' || !a ? 0 : labels.findIndex((l) => l.toLowerCase() === a || l.toLowerCase().startsWith(a.split(/[ ,.!]/)[0])) + 1;
+    if (n >= 1 && n <= 2) quickAction(cid, `pick ${n}`);
+  } });
+  broadcast('bubble', bubble);
 }
 function talk(text) {
   const cid = pickChannel();

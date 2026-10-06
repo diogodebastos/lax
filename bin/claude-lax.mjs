@@ -52,7 +52,7 @@ if (!pty || !process.stdin.isTTY || !process.stdout.isTTY) {
   const act = (name) => (busy = busy.then(async () => {
     const a = Object.hasOwn(ACTIONS, name) ? ACTIONS[name] : null;
     if (!a || ((a.mode || a.read) && !vt)) return { ok: false };
-    if (a.keys) { term.write(a.keys); return { ok: true }; }
+    if (a.keys && !a.read) { term.write(a.keys); return { ok: true }; }
     if (a.mode) { // Shift+Tab through the modes until the footer shows it; a mode that isn't there stops a full cycle later
       const start = screenMode(screen());
       for (let i = 0; i < 8 && screenMode(screen()) !== a.mode; i++) {
@@ -61,7 +61,7 @@ if (!pty || !process.stdin.isTTY || !process.stdout.isTTY) {
       }
       return { ok: screenMode(screen()) === a.mode };
     }
-    await type(a.text);
+    if (a.keys) term.write(a.keys); else await type(a.text);
     if (!a.read) return { ok: true };
     await sleep(a.read);
     const shot = screen();
