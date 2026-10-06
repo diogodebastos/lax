@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { claudePid } from '../lib/claude-pid.mjs';
 import { MIND, SECRETS, DB, readToken } from '../lib/paths.mjs';
+import { readOnlyBash } from '../lib/readonly.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const URL_BASE = process.env.LAX_URL || 'http://127.0.0.1:7777';
@@ -18,7 +19,7 @@ const post = (p, body, ms) => fetch(URL_BASE + p, {
 }).then((r) => r.json());
 
 // Tools that never need a human in voice mode.
-const SAFE = /^(Read|Glob|Grep|LS|TodoWrite|WebSearch|WebFetch|Task|Agent)$/;
+const SAFE = /^(Read|Glob|Grep|LS|TodoWrite|WebSearch|WebFetch|Task|Agent|ToolSearch|Skill|BashOutput|NotebookRead)$/;
 const ev = input.hook_event_name;
 // Where the session runs, for its tab label: mac (Claude desktop app), cli (terminal, claude-lax), api (headless: Lax's voice, SDK), web (cloud).
 const entry = process.env.CLAUDE_CODE_ENTRYPOINT || '';
@@ -78,6 +79,8 @@ try {
     decide('deny', 'Off limits: Lax\'s secrets and database are never touched by the assistant.');
   } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && /^(Edit|Write|MultiEdit)$/.test(input.tool_name) && within(MIND)) {
     decide('allow', 'Lax\'s own mind.');
+  } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && input.tool_name === 'Bash' && readOnlyBash(cmd)) {
+    decide('allow', 'Only looking (read-only command).');
   } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && !SAFE.test(input.tool_name)) {
     const { decision, why } = await post('/api/ask', { ...input, lax_voice: true }, 120000);
     console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse',
