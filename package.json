@@ -17,11 +17,13 @@
     "install-channel": "node scripts/install-channel.mjs",
     "remove-channel": "node scripts/install-channel.mjs --remove",
     "android": "node scripts/android.mjs",
-    "test": "node scripts/test-levels.mjs && node --no-warnings scripts/test-channel.mjs && node --no-warnings scripts/test-brain.mjs",
-    "move-home": "node scripts/move-home.mjs"
+    "test": "node scripts/test-levels.mjs && node --no-warnings scripts/test-channel.mjs && node --no-warnings scripts/test-brain.mjs && node --no-warnings scripts/test-actions.mjs",
+    "move-home": "node scripts/move-home.mjs",
+    "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
+    "node-pty": "1.1.0",
     "zod": "^4.6.5"
   }
 }

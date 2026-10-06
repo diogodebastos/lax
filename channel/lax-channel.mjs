@@ -80,7 +80,8 @@ await mcp.connect(new StdioServerTransport());
 async function listen() {
   for (let delay = 1000; ; delay = Math.min(delay * 2, 30000)) {
     try {
-      const qs = new URLSearchParams({ cid: CID, pid: String(process.pid), session_pid: String(SESSION_PID || ''), cwd: process.cwd() });
+      const qs = new URLSearchParams({ cid: CID, pid: String(process.pid), session_pid: String(SESSION_PID || ''), cwd: process.cwd(),
+        pty: process.env.LAX_PTY || '' }); // the `lax` wrapper's socket, for quick actions by voice
       const res = await fetch(`${LAX}/api/channel/stream?${qs}`, { headers: { 'x-lax-token': TOKEN } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       log('linked to Lax as', CID, 'session pid', SESSION_PID);
