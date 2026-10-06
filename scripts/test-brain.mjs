@@ -90,5 +90,13 @@ check('reflecting: no shell', fence('Bash', { command: 'ls' }) === 'deny');
 check('reflecting: no reading outside its mind', fence('Read', { file_path: path.join(ROOT, 'server.mjs') }) === 'deny');
 check('reflecting: no secrets', fence('Read', { file_path: path.join(HOME, 'secrets', 'token') }) === 'deny');
 
+// Talking to Lax: its mind's history says what changed, not what was said (speech can be mis-heard).
+process.env.LAX_HOME = HOME; const { describeMindDiff } = await import('../lib/home.mjs');
+const hunk = (lines) => `--- a/projects/lax.md\n+++ b/projects/lax.md\n@@ -21 +20,0 @@\n${lines}`;
+check('mind history: "forget that" reads as forgot', describeMindDiff(hunk('-- Landscape layout: bubbles above Lax on the left half, like portrait.')) === 'forgot: Landscape layout: bubbles above Lax on the left half, like portrait.');
+check('mind history: a new note reads as noted', describeMindDiff(hunk('+- 2026-10-06: Prefers tea.')) === 'noted: Prefers tea.');
+check('mind history: an edited note reads as changed', describeMindDiff(hunk('-- Likes coffee.\n+- Likes tea.')) === 'changed: Likes tea.');
+check('mind history: no change, no message', describeMindDiff('') === '');
+
 console.log(failed ? `\n${failed} check(s) failed` : '\nall brain checks passed');
 process.exit(failed ? 1 : 0);

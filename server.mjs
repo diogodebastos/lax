@@ -400,7 +400,7 @@ function talk(text) {
   });
   let err = ''; child.stderr.on('data', (d) => { err += d; });
   child.on('close', (code) => {
-    commitMind(`after: ${short(text, 120)}`); // whatever Lax learned or changed in its mind, with history
+    commitMind(); // whatever Lax learned or changed in its mind, with history, described by what changed
     voiceRun = null;
     const ok = result && !result.is_error;
     const say = ok ? spoken(result.result) : `Something went wrong. ${short(err || result?.result, 120)}`;
