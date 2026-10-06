@@ -8,7 +8,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { ensureHome, commitMind } from './lib/home.mjs';
+import { ensureHome, commitMind, syncMindName } from './lib/home.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS, secret, ensureDirs, readEnv } from './lib/paths.mjs';
 import { MAX_LEVEL, STAGES, levelOf, stageIdx, barFor } from './lib/levels.mjs';
 
@@ -67,6 +67,7 @@ function readSettings() { try { return JSON.parse(fs.readFileSync(SETTINGS, 'utf
 const writeSettings = (s) => fs.writeFileSync(SETTINGS, JSON.stringify(s, null, 2) + '\n');
 if (!fs.existsSync(SETTINGS) && kvGet('settings', null)) { writeSettings(kvGet('settings', {})); db.prepare('DELETE FROM kv WHERE key=?').run('settings'); }
 let settings = { ...DEFAULTS, ...readSettings() };
+syncMindName(settings.name);
 function updateSettings(b) {
   const clean = {};
   if (typeof b.name === 'string' && b.name.trim()) clean.name = b.name.trim().slice(0, 12);
@@ -75,7 +76,9 @@ function updateSettings(b) {
   if (Number.isFinite(b.pitch)) clean.pitch = Math.min(2, Math.max(0.5, b.pitch));
   if ([15, 30, 60, 120].includes(b.askTimeout)) clean.askTimeout = b.askTimeout;
   if (['system', 'light', 'dark'].includes(b.theme)) clean.theme = b.theme;
+  const renamed = clean.name && clean.name !== settings.name;
   settings = { ...settings, ...clean }; writeSettings(settings);
+  if (renamed) syncMindName(settings.name); // its mind knows its new name
 }
 function rebirth() {
   db.exec('DELETE FROM events; DELETE FROM milestones;');
@@ -331,7 +334,7 @@ function sessionsBrief() {
   }).join('\n');
 }
 // Who Lax is lives in its mind (~/.lax/mind/CLAUDE.md); this adds what changes per message.
-const assistantPrompt = () => (settings.name !== 'Lax' ? `Your name is now ${settings.name}.\n` : '') +
+const assistantPrompt = () =>
   'The user is talking to you by voice: start with ONE short, plain sentence that can be read aloud.\n\n' +
   `Their Claude Code sessions right now (tab name, status, latest activity):\n${sessionsBrief()}`;
 function talk(text) {
@@ -347,7 +350,7 @@ function talk(text) {
   }
   if (voiceRun) return false;
   const cwd = MIND, name = settings.name.toLowerCase();
-  ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT });
+  ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name });
   const args = ['-p', text, '--output-format', 'stream-json', '--verbose', '--add-dir', DEFAULT_WORKDIR, '--append-system-prompt', assistantPrompt()];
   if (voiceSessions[ASSISTANT]) args.push('--resume', voiceSessions[ASSISTANT]);
   pet.voice++; gainXp(3); save();

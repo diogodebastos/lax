@@ -78,6 +78,8 @@ darkQuery.addEventListener?.('change', applyTheme);
 window.laxOnTheme = applyTheme; // the app calls this when the phone switches dark mode
 function applyLook() {
   applyTheme();
+  try { updateHint(); } catch {} // (not ready on the very first call)
+  const wakeName = document.querySelector('#wakeName'); if (wakeName) wakeName.textContent = settings.name;
   C.body = settings.color; C.hi = shade(settings.color, 0.3); C.lo = shade(settings.color, -0.25);
   document.documentElement.style.setProperty('--coral', settings.color);
   $('#nameBtn').textContent = settings.name.toUpperCase(); $('#lifeName').textContent = settings.name.toUpperCase(); $('#menuName').textContent = settings.name.toUpperCase();
@@ -285,7 +287,7 @@ function renderBubble() {
   const b = bubbles.find((x) => x.sticky) || bubbles[bubbles.length - 1];
   if (!b) { elB.className = ''; elB.dataset.key = ''; return; }
   elB.className = 'show ' + b.kind; elB.dataset.id = b.id;
-  if (b.kind !== 'question') elB.querySelector('.tag').textContent = TAGS[b.kind] || '';
+  if (b.kind !== 'question') elB.querySelector('.tag').textContent = (b.kind === 'reply' ? settings.name.toLowerCase() : TAGS[b.kind]) || '';
   elB.querySelector('.actions').style.display = b.actions ? 'flex' : 'none';
   elB.querySelector('.more').style.display = b.details ? '' : 'none';
   const det = elB.querySelector('.det'); det.textContent = b.details || ''; det.style.display = b.details && b.showDetails ? 'block' : 'none';
@@ -362,22 +364,23 @@ const isBrave = !!navigator.brave;
 let voiceBroken = !SR && !NATIVE;
 let rec, heard = '', cancelled = false;
 const hint = $('#hint');
-let IDLE_HINT = 'tap Lax to talk';
+let IDLE_HINT = 'tap Lax to talk'; // the character's name, from settings (updateHint)
 // Where talking goes: a live Claude Code session (lax channel) or the background session.
 function routeChannel() {
   return voiceTarget === 'background' ? null : channels.find((c) => c.cid === voiceTarget) || [...channels].sort((a, b) => b.active - a.active)[0] || null;
 }
 function setTarget(v) { voiceTarget = v; updateHint(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); if (!DEMO) api('/api/target', { target: v }); }
-function updateHint() { IDLE_HINT = macAsleep ? `zzz… ${settings.name.toLowerCase()} is asleep` : voiceBroken ? 'tap Lax to type' : 'tap Lax to talk'; if (!listening) hint.textContent = IDLE_HINT; }
+function updateHint() { IDLE_HINT = macAsleep ? `zzz… ${settings.name.toLowerCase()} is asleep` : voiceBroken ? `tap ${settings.name} to type` : `tap ${settings.name} to talk`; if (!listening) hint.textContent = IDLE_HINT; }
 const MIC_ERRORS = {
   'not-allowed': 'Mic is blocked. Tap the icon left of the address → Permissions → Microphone → Allow, then reload.',
   'service-not-allowed': 'This browser has no speech recognition. Use Chrome.',
   'network': isBrave ? 'Brave can\'t do speech recognition, so type instead (or use Chrome for voice).' : 'Speech service unreachable. Check your connection.',
   'audio-capture': 'No microphone found.',
-  ...(NATIVE && { 'not-allowed': 'Lax needs the mic. Allow it, then tap me again.',
+  ...(NATIVE && { 'not-allowed': 'NAME needs the mic. Allow it, then tap me again.',
     'network': 'Speech service unreachable. Check your connection.', 'busy': 'The mic is busy. Try again in a sec.' }),
   'no-speech': 'I didn\'t hear anything. Tap me and talk.',
 };
+const micError = (code) => (MIC_ERRORS[code] || 'Mic error: ' + code).replace('NAME', settings.name);
 updateHint();
 (async () => { let mic = 'unknown'; try { mic = (await navigator.permissions.query({ name: 'microphone' })).state; } catch {}
   diag('load', { v: VERSION, native: !!NATIVE, ua: navigator.userAgent, secure: isSecureContext, sr: !!SR, brave: isBrave, mediaDevices: !!navigator.mediaDevices, mic, w: innerWidth, h: innerHeight, dpr: devicePixelRatio }); })();
@@ -395,7 +398,7 @@ function startListening() {
   rec.onerror = (e) => {
     diag('sr-error', { error: e.error, message: e.message });
     if (e.error === 'aborted') return;
-    showBubble({ id: 'mic', kind: 'error', text: MIC_ERRORS[e.error] || 'Mic error: ' + e.error });
+    showBubble({ id: 'mic', kind: 'error', text: micError(e.error) });
     // No recognition service at all: remember it and let you type this one right away.
     if (['network', 'service-not-allowed', 'language-not-supported'].includes(e.error)) { voiceBroken = true; cancelled = true; updateHint(); setTimeout(typeInstead, 300); }
   };
@@ -413,7 +416,7 @@ window.laxOnSpeech = (text, final) => { if (!listening) return; heard = text; hi
 window.laxOnSpeechError = (error) => {
   if (!listening) return;
   diag('sr-error', { error, native: true });
-  if (error !== 'aborted') showBubble({ id: 'mic', kind: 'error', text: MIC_ERRORS[error] || 'Mic error: ' + error });
+  if (error !== 'aborted') showBubble({ id: 'mic', kind: 'error', text: micError(error) });
   cancelled = true; endListening();
 };
 window.laxOnSpeaking = (on) => { speaking = !!on; };
@@ -450,7 +453,7 @@ wakeEl.addEventListener('click', async () => {
     else navigator.mediaDevices.getUserMedia({ audio: true })
       .then((st) => { diag('gum-ok', { tracks: st.getTracks().length }); st.getTracks().forEach((t) => t.stop()); })
       .catch((err) => { diag('gum-error', { name: err.name, msg: err.message });
-        showBubble({ id: 'mic', kind: 'error', text: err.name === 'NotAllowedError' ? MIC_ERRORS['not-allowed'] : 'Mic: ' + err.name }); });
+        showBubble({ id: 'mic', kind: 'error', text: err.name === 'NotAllowedError' ? micError('not-allowed') : 'Mic: ' + err.name }); });
   }
   try { await document.documentElement.requestFullscreen?.(); } catch {}
   const lock = async () => { try { await navigator.wakeLock?.request('screen'); } catch {} };
