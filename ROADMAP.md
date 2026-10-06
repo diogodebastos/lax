@@ -99,13 +99,14 @@ The personal-agent loop: notice friction → fix its own code → ask → ship s
 - Approved → merge, restart, health check, automatic rollback if it fails. Auth, tokens, the tunnel and the guardrails themselves are off limits, enforced in code.
 - Later, opt-in: offer generic fixes upstream as PRs.
 
-### Phase 9: open-source release [diogodebastos/lax#4](https://github.com/diogodebastos/lax/issues/4)
-Once Lax passes the one-week bar.
-- A README from zero, led by the personal-agent story and the honest privacy note.
-- `npm run doctor` health check (also used by Phase 8's rollback).
-- Token rotation with re-pairing.
-- Remove the leftover LAN bits.
-- Tag `v0.2.0`.
+### Phase 9: open source, everyone their own Lax [diogodebastos/lax#4](https://github.com/diogodebastos/lax/issues/4)
+Once Lax passes the one-week bar. Not "Diogo's Lax, published": anyone can have their own.
+- **Born fresh for each person:** their Lax lives in their `~/.lax`, learns them, and grows its own body on their clone. Nothing of Diogo's mind, memory or secrets ships.
+- **One command:** `npx lax setup` creates `~/.lax`, names your Lax, installs hooks, `lax`, `/lax` and the background services, sets up reaching it from anywhere (Cloudflare on your own domain, or simpler options), and shows the pairing QR.
+- **No Android SDK needed:** a signed APK on GitHub Releases; any Android 11+ (the Flip 3 cover screen is a bonus).
+- **Nothing personal in the code:** no domain, email or `~/REPOS` defaults, and neutral service names.
+- A README for newcomers with the honest privacy note; license, CONTRIBUTING, SECURITY; `npm run doctor`; token rotation; leftover LAN bits removed.
+- Test: a fresh macOS account gets its own working Lax from the README alone.
 
 ### Phase 10: viral release [diogodebastos/lax#9](https://github.com/diogodebastos/lax/issues/9)
 The best possible Lax, built to be shared. Phase 9 makes the repo presentable; this makes it spread.
