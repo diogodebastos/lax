@@ -12,7 +12,7 @@ import { ensureHome, commitMind, syncMindName, addMemoryLayout, addToolsAdvice }
 import { HOME, MIND, DB, OLD_DB, SETTINGS, secret, ensureDirs, readEnv } from './lib/paths.mjs';
 import { MAX_LEVEL, STAGES, levelOf as levelOn, stageIdx, barFor as barOn, curveOf } from './lib/levels.mjs';
 import { createBrain, ensureBrain, brief } from './lib/brain.mjs';
-import { voiceAction, sendAction } from './lib/actions.mjs';
+import { ACTIONS, voiceAction, sendAction, readStatus } from './lib/actions.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 // Lax itself lives in ~/.lax (lib/paths.mjs): memory, secrets, mind, logs. This repo is only its body.
@@ -373,7 +373,18 @@ function quickAction(cid, action) {
   const c = channels.get(cid); if (!c?.pty || !action) return false;
   c.active = Date.now(); pet.voice++; gainXp(1); save();
   feed(`⚡ ${action}`, 'prompt', c.project, channelSession(c)); pushState();
-  sendAction(c.pty, action).then((ok) => { if (!ok) feed(`  ⚡ ${action} didn't reach the terminal`, 'error', c.project, channelSession(c)); });
+  const sid = channelSession(c), say = (text, kind = 'reply') => broadcast('bubble', { id: 'act' + Date.now(), kind, text, speak: true });
+  sendAction(c.pty, action).then((r) => {
+    if (!r.ok) {
+      feed(`  ⚡ ${action} didn't reach the terminal`, 'error', c.project, sid);
+      if (ACTIONS[action].mode || ACTIONS[action].read) say(`I couldn't do ${action} in ${c.project}.`, 'error');
+    } else if (ACTIONS[action].mode) say(`${c.project} is in ${action} now.`);
+    else if (ACTIONS[action].read) { // status: read it out, details in the feed
+      const st = readStatus(action, r.screen);
+      if (st.text) feed(`↩ ${st.text}`, 'done', c.project, sid);
+      say(st.say);
+    }
+  });
   return true;
 }
 function talk(text) {

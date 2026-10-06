@@ -55,9 +55,10 @@ The smallest learning loop that runs without you, so Lax starts learning now (Ph
 - "I learned 2 things from edge-cava" on the phone. New sessions in that project start with Lax's brief.
 - How it learns (`learning.md`) lives in its mind, and a weekly review lets Lax improve it.
 
-### Phase 3.5: quick actions by voice [diogodebastos/lax#11](https://github.com/diogodebastos/lax/issues/11)
-- `claude-lax` runs Claude Code inside a small terminal wrapper, so Lax can type into it.
-- In a live tab, say "clear", "compact", "stop" or "continue". Voice only, no buttons.
+### Phase 3.5: quick actions by voice ✅ [diogodebastos/lax#11](https://github.com/diogodebastos/lax/issues/11)
+- `lax` runs Claude Code inside a small terminal wrapper, so Lax can type into it.
+- In a live tab, say "clear", "compact", "stop", "continue" or "quit". Voice only, no buttons.
+- "Plan mode" switches to it by reading the footer; "context" and "usage" are read back aloud, details in the feed.
 - A closed list of actions only. Your terminal feels exactly the same.
 
 ### Phase 3.6: share via WhatsApp [diogodebastos/lax#12](https://github.com/diogodebastos/lax/issues/12)
