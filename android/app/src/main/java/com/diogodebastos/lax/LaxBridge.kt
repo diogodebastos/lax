@@ -137,7 +137,8 @@ class LaxBridge(private val act: MainActivity, private val web: WebView) {
             js("laxOnSpeechError", JSONObject.quote(code))
         }
         override fun onReadyForSpeech(p: Bundle?) {}
-        override fun onBeginningOfSpeech() {}
+        // You started (or went on) talking: the page holds off sending after a pause (laxOnSpeechBegin).
+        override fun onBeginningOfSpeech() { if (current) js("laxOnSpeechBegin") }
         override fun onRmsChanged(rms: Float) {}
         override fun onBufferReceived(buf: ByteArray?) {}
         override fun onEndOfSpeech() {}

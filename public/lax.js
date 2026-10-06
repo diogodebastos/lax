@@ -339,10 +339,10 @@ function feed(line, kind = 'tool', project, session = '') {
 // ---------- bubble ----------
 let bubbles = []; // newest last; the one with actions wins
 const elB = $('#bubble');
-const TAGS = { question: 'question', permission: 'needs you', waiting: 'waiting', done: 'done', reply: 'lax', error: 'uh oh', levelup: '★ level up', you: 'you', learned: '✦ learned' };
+const TAGS = { question: 'question', permission: 'needs you', waiting: 'waiting', done: 'done', reply: 'lax', error: 'uh oh', levelup: '★ level up', you: 'you', listening: 'listening', learned: '✦ learned' };
 function showBubble(b) {
   bubbles = bubbles.filter((x) => x.id !== b.id); bubbles.push(b);
-  b.sticky = b.actions || b.kind === 'question';
+  b.sticky = b.actions || b.kind === 'question' || b.kind === 'listening';
   if (!b.sticky) b.expires = performance.now() + (b.kind === 'reply' ? 15000 : 9000);
   renderBubble();
   if (b.kind === 'permission' || b.kind === 'question') { sfx([660, 880, 660]); buzz([80, 60, 80]); }
@@ -356,7 +356,7 @@ function clearBubble(id) { bubbles = bubbles.filter((x) => x.id !== id); renderB
 function renderBubble() {
   const now = performance.now();
   bubbles = bubbles.filter((b) => !b.expires || b.expires > now);
-  const b = bubbles.find((x) => x.sticky) || bubbles[bubbles.length - 1];
+  const b = bubbles.find((x) => x.kind === 'listening') || bubbles.find((x) => x.sticky) || bubbles[bubbles.length - 1]; // your words while talking win
   if (!b) { elB.className = ''; elB.dataset.key = ''; return; }
   elB.className = 'show ' + b.kind; elB.dataset.id = b.id;
   if (b.kind !== 'question') elB.querySelector('.tag').textContent = (b.kind === 'reply' ? settings.name.toLowerCase() : TAGS[b.kind]) || '';
@@ -398,7 +398,7 @@ let swiped = false;
     if (!down) return; down = false;
     const b = bubbles.find((x) => x.id === elB.dataset.id);
     elB.style.transform = ''; elB.style.opacity = '';
-    if (Math.abs(dx) > 70) { swiped = true; if (b && !b.actions && b.kind !== 'question') clearBubble(b.id); }
+    if (Math.abs(dx) > 70) { swiped = true; if (b?.kind === 'listening') cancelListening(); else if (b && !b.actions && b.kind !== 'question') clearBubble(b.id); }
   };
   elB.addEventListener('pointerup', end); elB.addEventListener('pointercancel', end);
 }
@@ -406,6 +406,7 @@ elB.addEventListener('click', (e) => {
   e.stopPropagation();
   if (swiped) { swiped = false; return; } // the end of a swipe isn't a tap
   const id = elB.dataset.id, b = bubbles.find((x) => x.id === id); if (!b) return;
+  if (b.kind === 'listening') return cancelListening();
   if (e.target.matches('.more')) { b.showDetails = !b.showDetails; renderBubble(); return; }
   if (e.target.matches('.yes, .no')) { const decision = e.target.matches('.yes') ? 'allow' : 'deny';
     clearBubble(id); sfx(decision === 'allow' ? [880, 1175] : [300, 200]); if (decision === 'allow') setReact('happy'); if (!DEMO) api('/api/decide', { id, decision }); }
@@ -447,13 +448,16 @@ function speak(text) {
 }
 
 // ---------- tap-to-talk ----------
-// Tap once, speak, Lax sends when you pause (tap again to cancel). Hold-to-talk fought Android Chrome:
-// the mic permission prompt cancels the touch, and continuous recognition is flaky there.
+// Talking. Tap Lax and talk: a breath doesn't end it, about 2s of quiet after your last words sends it.
+// Or hold Lax: it listens until you let go (slide off Lax before letting go to cancel). While listening, your words
+// show in a bubble; tap Lax, tap the bubble or swipe it away to cancel. Speech recognizers stop at every pause,
+// so each stop just starts the next stretch, and the stretches are joined.
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const isBrave = !!navigator.brave;
 // Set once the browser proves it can't do speech recognition (e.g. Brave: no Google speech service). Then taps go to typing.
 let voiceBroken = !SR && !NATIVE;
-let rec, heard = '', cancelled = false;
+let rec, said = '', heard = '', talkMode = 'tap', releasing = false, quietTimer = 0;
+const QUIET_MS = 2000;
 const hint = $('#hint');
 let IDLE_HINT = 'tap Lax to talk'; // the character's name, from settings (updateHint)
 // Where talking goes: a live Claude Code session (lax channel) or the background session.
@@ -461,7 +465,7 @@ function routeChannel() {
   return voiceTarget === 'background' ? null : channels.find((c) => c.cid === voiceTarget) || [...channels].sort((a, b) => b.active - a.active)[0] || null;
 }
 function setTarget(v) { voiceTarget = v; updateHint(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); if (!DEMO) api('/api/target', { target: v }); }
-function updateHint() { IDLE_HINT = macAsleep ? `zzz… ${settings.name.toLowerCase()} is asleep` : voiceBroken ? `tap ${settings.name} to type` : `tap ${settings.name} to talk`; if (!listening) hint.textContent = IDLE_HINT; }
+function updateHint() { IDLE_HINT = macAsleep ? `zzz… ${settings.name.toLowerCase()} is asleep` : voiceBroken ? `tap ${settings.name} to type` : `tap or hold ${settings.name} to talk`; if (!listening) hint.textContent = IDLE_HINT; }
 const MIC_ERRORS = {
   'not-allowed': 'Mic is blocked. Tap the icon left of the address → Permissions → Microphone → Allow, then reload.',
   'service-not-allowed': 'This browser has no speech recognition. Use Chrome.',
@@ -475,49 +479,96 @@ const micError = (code) => (MIC_ERRORS[code] || 'Mic error: ' + code).replace('N
 updateHint();
 (async () => { let mic = 'unknown'; try { mic = (await navigator.permissions.query({ name: 'microphone' })).state; } catch {}
   diag('load', { v: VERSION, native: !!NATIVE, ua: navigator.userAgent, secure: isSecureContext, sr: !!SR, brave: isBrave, mediaDevices: !!navigator.mediaDevices, mic, w: innerWidth, h: innerHeight, dpr: devicePixelRatio }); })();
-function startListening() {
+function startListening() { if (listening) cancelListening(); else beginListening('tap'); } // tap: talk / cancel
+function beginListening(m) {
   if (macAsleep) { hop(0.5); showBubble({ id: 'asleep', kind: 'reply', text: 'Zzz… I\'m asleep right now. I\'ll wake up on my own.' }); return; }
-  if (listening) { cancelled = true; NATIVE ? NATIVE.cancelListening() : rec?.abort(); return; }
   if (voiceBusy && !answerHook) { showBubble({ id: 'busy', kind: 'reply', text: 'Still working on the last one…' }); return; }
   if (voiceBroken) return typeInstead();
-  heard = ''; cancelled = false; listening = true; hint.textContent = 'listening… (tap to cancel)'; sfx([440]);
-  if (NATIVE) { NATIVE.hush(); diag('talk-tap', { native: true }); NATIVE.listen(navigator.language || 'en-US'); return; }
-  speechSynthesis.cancel();
+  said = ''; heard = ''; releasing = false; talkMode = m; listening = true; sfx([440]);
+  if (m === 'hold') buzz([30]);
+  NATIVE ? NATIVE.hush() : speechSynthesis.cancel();
+  diag('talk-' + m, { native: !!NATIVE }); showHeard(); listenStretch();
+}
+const words = () => [said, heard].filter(Boolean).join(' ').trim();
+function showHeard(outside = false) {
+  hint.textContent = talkMode === 'hold' ? (outside ? 'let go to cancel' : 'let go to send · slide off to cancel') : 'tap me to cancel';
+  showBubble({ id: 'listen', kind: 'listening', text: words() || '…' });
+}
+// One stretch of recognition (until the recognizer stops at a pause).
+function listenStretch() {
+  if (NATIVE) return NATIVE.listen(navigator.language || 'en-US');
   rec = new SR(); rec.lang = navigator.language || 'en-US'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
-  ['start', 'audiostart', 'soundstart', 'speechstart', 'speechend', 'audioend', 'nomatch'].forEach((ev) => rec.addEventListener(ev, () => diag('sr-' + ev)));
-  rec.onresult = (e) => { heard = [...e.results].map((r) => r[0].transcript).join(''); hint.textContent = heard.slice(-40); };
+  let text = '';
+  rec.onspeechstart = speechBegan;
+  rec.onresult = (e) => { text = [...e.results].map((r) => r[0].transcript).join(''); partial(text); };
   rec.onerror = (e) => {
     diag('sr-error', { error: e.error, message: e.message });
-    if (e.error === 'aborted') return;
-    showBubble({ id: 'mic', kind: 'error', text: micError(e.error) });
+    if (['aborted', 'no-speech'].includes(e.error)) return;
+    failListening(e.error);
     // No recognition service at all: remember it and let you type this one right away.
-    if (['network', 'service-not-allowed', 'language-not-supported'].includes(e.error)) { voiceBroken = true; cancelled = true; updateHint(); setTimeout(typeInstead, 300); }
+    if (['network', 'service-not-allowed', 'language-not-supported'].includes(e.error)) { voiceBroken = true; updateHint(); setTimeout(typeInstead, 300); }
   };
-  rec.onend = endListening;
-  diag('talk-tap'); try { rec.start(); } catch (err) { diag('sr-start-throw', { msg: err.message }); listening = false; hint.textContent = IDLE_HINT; showBubble({ id: 'mic', kind: 'error', text: 'Mic error: ' + err.message }); }
+  rec.onend = () => stretchEnded(text);
+  try { rec.start(); } catch (err) { diag('sr-start-throw', { msg: err.message }); failListening(err.message); }
 }
-function endListening() {
-  diag('sr-end', { heard: heard.slice(0, 80), cancelled }); listening = false; hint.textContent = IDLE_HINT;
+function speechBegan() { clearTimeout(quietTimer); } // talking again: don't send yet
+function partial(text) { if (!listening) return; clearTimeout(quietTimer); heard = text; showHeard(); }
+function stretchEnded(text) {
+  if (!listening) return;
+  heard = ''; if (text?.trim()) said = [said, text.trim()].join(' ').trim();
+  if (releasing) return finishListening();
+  if (talkMode === 'tap' && !said) { showBubble({ id: 'mic', kind: 'error', text: micError('no-speech') }); return stopListening(true); }
+  listenStretch(); showHeard();
+  if (talkMode === 'tap') { clearTimeout(quietTimer); quietTimer = setTimeout(finishListening, QUIET_MS); }
+}
+function stopListening(discard) {
+  if (!listening) return;
+  diag('sr-end', { heard: words().slice(0, 80), cancelled: discard, talkMode });
+  clearTimeout(quietTimer); clearTimeout(releaseTimer); listening = false; releasing = false;
+  if (NATIVE) NATIVE.cancelListening(); else if (rec) { rec.onend = null; rec.onerror = null; try { rec.abort(); } catch {} }
+  clearBubble('listen'); hint.textContent = IDLE_HINT;
+}
+function finishListening() { // send what was heard
+  if (!listening) return;
+  const text = words(), h = answerHook; answerHook = null;
+  stopListening(false);
+  if (text) { sfx([330]); h ? h(text) : send(text); } else if (h) renderBubble();
+}
+function cancelListening() {
+  if (!listening) return;
   const h = answerHook; answerHook = null;
-  if (!cancelled && heard.trim()) { sfx([330]); h ? h(heard.trim()) : send(heard.trim()); } else if (h) renderBubble();
-  heard = '';
+  stopListening(true); sfx([300, 200]); if (h) renderBubble();
+}
+function failListening(code) {
+  if (!listening) return;
+  if (code !== 'aborted') showBubble({ id: 'mic', kind: 'error', text: micError(code) });
+  const h = answerHook; answerHook = null; stopListening(true); if (h) renderBubble();
+}
+// Letting go of a hold: the recognizer delivers its last words, then it's sent (or dropped, if you slid off).
+let releaseTimer = 0;
+function releaseHold(inside) {
+  if (!listening || talkMode !== 'hold') return;
+  if (!inside) return cancelListening();
+  releasing = true; NATIVE ? NATIVE.stopListening() : rec?.stop();
+  releaseTimer = setTimeout(finishListening, 1500); // in case the last words never come
 }
 // The app's speech recognizer calls these (LaxBridge.kt).
-window.laxOnSpeech = (text, final) => { if (!listening) return; heard = text; hint.textContent = heard.slice(-40); if (final) endListening(); };
+window.laxOnSpeech = (text, final) => { if (!listening) return; final ? stretchEnded(text) : partial(text); };
+window.laxOnSpeechBegin = () => { if (listening) speechBegan(); };
 window.laxOnSpeechError = (error) => {
-  if (!listening) return;
+  if (!listening || error === 'aborted') return; // aborted: one of ours (a restart or a cancel)
   diag('sr-error', { error, native: true });
-  if (error !== 'aborted') showBubble({ id: 'mic', kind: 'error', text: micError(error) });
-  cancelled = true; endListening();
+  if (error === 'no-speech') return stretchEnded('');
+  if (error === 'busy') return void setTimeout(() => listening && listenStretch(), 300); // restarted too fast
+  failListening(error);
 };
-window.laxOnSpeaking = (on) => { speaking = !!on; };
+
 // Typing fallback: same destination as voice (the open question, or your session).
 function typeInstead() {
   const h = answerHook; answerHook = null;
   const text = prompt(h ? 'Your answer:' : 'Talk to Lax:');
   if (text?.trim()) (h ? h(text.trim()) : send(text.trim())); else if (h) renderBubble();
 }
-function stopListening() { if (!listening) return; NATIVE ? NATIVE.stopListening() : rec?.stop(); }
 function send(text) {
   showBubble({ id: 'you' + Date.now(), kind: 'you', text: '“' + text + '”' });
   if (DEMO) { voiceBusy = true; setTimeout(() => { voiceBusy = false; showBubble({ id: 'r' + Date.now(), kind: 'reply', text: 'Demo mode — I heard you!', speak: true }); }, 1800); return; }
@@ -525,11 +576,30 @@ function send(text) {
     .catch(() => showBubble({ id: 'net', kind: 'error', text: 'Couldn\'t reach your Mac.' }));
 }
 const topEl = $('#top');
-topEl.addEventListener('click', () => { if (!wakeEl.isConnected && !lifeEl.classList.contains('open')) startListening(); });
+// Tap: talk (or cancel). Hold (350ms): listen until you let go; slide off before letting go to cancel.
+{ let press = null;
+  const inside = (e) => { const r = topEl.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
+  topEl.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('#hud, #bubble') || wakeEl.isConnected || lifeEl.classList.contains('open')) return;
+    try { topEl.setPointerCapture(e.pointerId); } catch {}
+    const p = press = { id: e.pointerId, held: false, out: false };
+    p.timer = setTimeout(() => { p.held = true; if (!listening) beginListening('hold'); }, 350);
+  });
+  topEl.addEventListener('pointermove', (e) => {
+    if (!press?.held || !listening || talkMode !== 'hold') return;
+    const out = !inside(e); if (out !== press.out) { press.out = out; showHeard(out); }
+  });
+  topEl.addEventListener('pointerup', (e) => {
+    const p = press; press = null; if (!p || p.id !== e.pointerId) return;
+    clearTimeout(p.timer);
+    if (!p.held) startListening(); else releaseHold(inside(e));
+  });
+  topEl.addEventListener('pointercancel', () => { const p = press; press = null; if (!p) return; clearTimeout(p.timer); if (p.held) cancelListening(); });
+}
 topEl.addEventListener('contextmenu', (e) => e.preventDefault());
 // Desktop: hold space to talk.
-addEventListener('keydown', (e) => { if (e.code === 'Space' && !e.repeat && !listening && e.target === document.body) { e.preventDefault(); startListening(); } });
-addEventListener('keyup', (e) => { if (e.code === 'Space') stopListening(); });
+addEventListener('keydown', (e) => { if (e.code === 'Space' && !e.repeat && !listening && e.target === document.body) { e.preventDefault(); beginListening('hold'); } });
+addEventListener('keyup', (e) => { if (e.code === 'Space') releaseHold(true); });
 
 // ---------- wake (audio unlock, fullscreen, keep screen on) ----------
 const wakeEl = $('#wake');
