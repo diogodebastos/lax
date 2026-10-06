@@ -268,7 +268,7 @@ function feed(line, kind = 'tool', project, session = '') {
 // ---------- bubble ----------
 let bubbles = []; // newest last; the one with actions wins
 const elB = $('#bubble');
-const TAGS = { question: 'question', permission: 'needs you', waiting: 'waiting', done: 'done', reply: 'lax', error: 'uh oh', levelup: '★ level up', you: 'you' };
+const TAGS = { question: 'question', permission: 'needs you', waiting: 'waiting', done: 'done', reply: 'lax', error: 'uh oh', levelup: '★ level up', you: 'you', learned: '✦ learned' };
 function showBubble(b) {
   bubbles = bubbles.filter((x) => x.id !== b.id); bubbles.push(b);
   b.sticky = b.actions || b.kind === 'question';
@@ -277,6 +277,7 @@ function showBubble(b) {
   if (b.kind === 'permission' || b.kind === 'question') { sfx([660, 880, 660]); buzz([80, 60, 80]); }
   else if (b.kind === 'levelup') { sfx([523, 659, 784, 1046]); setReact('happy', 2500); }
   else if (b.kind === 'done') { sfx([784, 1046]); setReact('happy'); }
+  else if (b.kind === 'learned') { sfx([659, 988]); setReact('happy', 1200); }
   else if (b.kind === 'error') { sfx([220, 160]); setReact('error'); }
   if (b.speak || (b.kind === 'done' && settings.speakDone)) speak(b.kind === 'permission' ? 'I need you. ' + b.text : b.kind === 'question' ? 'Question. ' + b.questions[0].question : b.say || b.text);
 }
@@ -291,7 +292,7 @@ function renderBubble() {
   elB.querySelector('.actions').style.display = b.actions ? 'flex' : 'none';
   elB.querySelector('.more').style.display = b.details ? '' : 'none';
   const det = elB.querySelector('.det'); det.textContent = b.details || ''; det.style.display = b.details && b.showDetails ? 'block' : 'none';
-  if (b.kind !== 'question') { elB.querySelector('.text').textContent = b.text; elB.dataset.key = ''; return; }
+  if (b.kind !== 'question') { elB.querySelector('.text').textContent = b.text + (b.details && !b.actions && !b.showDetails ? ' ⋯' : ''); elB.dataset.key = ''; return; }
   // Question: one at a time; only rebuild when something changed (the 1s refresh would wipe selections).
   b.qi ??= 0; b.answers ??= {}; b.picked ??= [];
   const q = b.questions[b.qi], key = `${b.id}:${b.qi}:${b.picked.join('|')}:${answerHook ? 1 : 0}`;
@@ -330,6 +331,8 @@ elB.addEventListener('click', (e) => {
     else if (t.matches('.other')) { answerHook = (text) => answerQuestion(b, text); renderBubble(); startListening(); }
     else if (t.matches('.pass')) { clearBubble(id); if (!DEMO) api('/api/decide', { id, decision: 'pass' }); }
   }
+  // A bubble with more to show (e.g. what Lax learned): the first tap opens it, the next closes it.
+  else if (!b.actions && b.details && !b.showDetails) { b.showDetails = true; b.expires = performance.now() + 20000; renderBubble(); }
   else if (!b.actions) clearBubble(id);
 });
 

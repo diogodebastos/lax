@@ -25,7 +25,27 @@ const entry = process.env.CLAUDE_CODE_ENTRYPOINT || '';
 input.lax_where = process.env.LAX_VOICE === '1' || entry.startsWith('sdk') ? 'api'
   : entry === 'claude-desktop' ? 'mac' : process.env.CLAUDE_CODE_REMOTE ? 'web' : 'cli';
 
+// Lax reflecting on a session (lib/brain.mjs): fenced in. It may read and write only inside its mind; nothing
+// else (no shell, no web, not its body), and it isn't a session of yours: no tab, no feed, no XP.
+if (process.env.LAX_REFLECT === '1') {
+  if (ev === 'PreToolUse') {
+    const ti = input.tool_input || {}, f = ti.file_path || ti.path || ti.notebook_path || '';
+    const inMind = !!f && (path.resolve(f) + path.sep).startsWith(MIND + path.sep);
+    const ok = /^(Read|Edit|Write|MultiEdit|Glob|Grep)$/.test(input.tool_name) && (inMind || (!f && /^(Glob|Grep)$/.test(input.tool_name)));
+    console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: ok ? 'allow' : 'deny',
+      permissionDecisionReason: ok ? 'Lax\'s own mind.' : 'While reflecting, Lax only reads and writes its own mind.' } }));
+  }
+  process.exit(0);
+}
+
 try {
+  // A new session starts with what Lax knows about its project (and about you), if anything.
+  if (ev === 'SessionStart' && process.env.LAX_VOICE !== '1') {
+    const project = path.basename(input.cwd || '');
+    const r = await fetch(`${URL_BASE}/api/brief?project=${encodeURIComponent(project)}`, { headers: { 'x-lax-token': token }, signal: AbortSignal.timeout(400) })
+      .then((x) => x.json()).catch(() => ({}));
+    if (r.text) console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: r.text } }));
+  }
   // Tie the session to its claude process (rare events only; ps costs a few ms) so the phone can match
   // session chips to live lax-channel sessions.
   if (ev === 'SessionStart' || ev === 'UserPromptSubmit' || ev === 'Stop') input.lax_session_pid = claudePid();
