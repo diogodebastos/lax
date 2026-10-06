@@ -59,6 +59,10 @@ Pixel Lax (squash and stretch, Super Meat Boy energy) with idle / working / wait
 - Text opens the chat with the message typed in; with `app: any`, the macOS share sheet.
 - "…on my phone": the Lax app does the same on the phone.
 
+### Phase 3.7: easter egg 🥚 [diogodebastos/lax#14](https://github.com/diogodebastos/lax/issues/14)
+- Lax levels up to 100 on a familiar fire-starter's curve (Medium Slow), and evolves at 16 and 36, then 50 and 100.
+- No names in the UI; those who know, know. Lax never de-evolves: it keeps the stage it has reached.
+
 ### Phase 4: Lax on the cover screen [diogodebastos/lax#3](https://github.com/diogodebastos/lax/issues/3)
 This is the product: glance, don't open.
 - Run the app full-screen on the Flip 3's cover strip, through Good Lock MultiStar or CoverScreen OS.
