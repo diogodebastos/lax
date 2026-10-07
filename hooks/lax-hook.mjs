@@ -6,6 +6,7 @@ import path from 'node:path';
 import { claudePid } from '../lib/claude-pid.mjs';
 import { MIND, SECRETS, DB, readToken } from '../lib/paths.mjs';
 import { bashKind } from '../lib/allow.mjs';
+import { offLimits } from '../lib/guard.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const URL_BASE = process.env.LAX_URL || 'http://127.0.0.1:7777';
@@ -25,6 +26,36 @@ const ev = input.hook_event_name;
 const entry = process.env.CLAUDE_CODE_ENTRYPOINT || '';
 input.lax_where = process.env.LAX_VOICE === '1' || entry.startsWith('sdk') ? 'api'
   : entry === 'claude-desktop' ? 'mac' : process.env.CLAUDE_CODE_REMOTE ? 'web' : 'cli';
+
+// Lax building something it learns (lib/learn.mjs), in a worktree of its body: fenced in. It may read (never its secrets
+// or database), edit only inside that worktree and never what's off limits (lib/guard.mjs), and run only looking
+// commands, tests and local git commits. Nothing leaves the Mac; your yes merges it later. Not a session of yours either.
+// Drafting a wish (LAX_DRAFT) is the same fence, read-only.
+if (process.env.LAX_BUILD) {
+  if (ev === 'PreToolUse') {
+    const WT = path.resolve(process.env.LAX_BUILD), ti = input.tool_input || {}, t = input.tool_name;
+    const f = ti.file_path || ti.path || ti.notebook_path || '', abs = f && path.resolve(input.cwd || WT, f);
+    const inside = (p, dir) => (p + path.sep).startsWith(dir + path.sep);
+    const secret = (abs && (inside(abs, SECRETS) || abs === DB)) || [SECRETS, DB, '.lax/secrets', 'life.db'].some((p) => String(ti.command || '').includes(p));
+    let ok = false, why = 'While building, Lax only reads, edits its worktree, runs tests and commits locally.';
+    if (secret) why = 'Lax\'s secrets and database are never touched.';
+    else if (/^(Read|Glob|Grep|LS|TodoWrite|Task|Agent|ToolSearch|WebSearch|WebFetch)$/.test(t)) ok = true;
+    else if (process.env.LAX_DRAFT === '1') { // drafting a wish: it reads its body, changes nothing
+      ok = t === 'Bash' && bashKind(String(ti.command || ''), input.cwd || WT) === 'read';
+      why = 'While drafting a wish, Lax only reads.';
+    } else if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(t)) {
+      ok = !!abs && inside(abs, WT) && !offLimits(path.relative(WT, abs));
+      if (abs && inside(abs, WT) && !ok) why = `${path.relative(WT, abs)} is off limits: Lax never changes it by itself.`;
+    } else if (t === 'Bash') {
+      const cmd = String(ti.command || ''), cwd = input.cwd || WT;
+      const step = (p) => /^(npm (run )?test|node (--no-warnings )?scripts\/test-[\w-]+\.mjs|node --check \S+|git (add|commit|status|diff|log|show)\b.*)$/.test(p.trim());
+      ok = inside(path.resolve(cwd), WT) && !!bashKind(cmd, cwd) && cmd.split(/&&|\|\||[|;]/).every((p) => !p.trim() || bashKind(p, cwd) === 'read' || step(p));
+    }
+    console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: ok ? 'allow' : 'deny',
+      permissionDecisionReason: ok ? 'Lax\'s own worktree.' : why } }));
+  }
+  process.exit(0);
+}
 
 // Lax reflecting on a session (lib/brain.mjs): fenced in. It may read and write only inside its mind; nothing
 // else (no shell, no web, not its body), and it isn't a session of yours: no tab, no feed, no XP.
@@ -75,7 +106,9 @@ try {
     || [SECRETS, DB, '.lax/secrets', 'life.db', 'lax.db'].some((p) => cmd.includes(p));
   const decide = (permissionDecision, permissionDecisionReason) =>
     console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision, permissionDecisionReason } }));
-  if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && privateHit) {
+  if (ev === 'PreToolUse' && input.tool_name === 'mcp__lax__gap') { // "I can't" → a wish: it only writes to Lax's wish list
+    decide('allow', 'It only adds to Lax\'s wish list.');
+  } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && privateHit) {
     decide('deny', 'Off limits: Lax\'s secrets and database are never touched by the assistant.');
   } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && /^(Edit|Write|MultiEdit)$/.test(input.tool_name) && within(MIND)) {
     decide('allow', 'Lax\'s own mind.');
