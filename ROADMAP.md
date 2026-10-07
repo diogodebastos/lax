@@ -84,7 +84,8 @@ The session tabs on the open phone (and `lax watch` on the Mac) show a step the 
 - Edits as `+3 -1` with the changed lines; reads, searches and connector calls folded into one line; a subagent's steps indented under it; failures show what they said.
 - Answers with light markdown. Hold a step to copy its command and output.
 - A status row under the open tab: mode, context, model, working or idle (context and model come from the status line, so CLI sessions only).
-- Later: the same for Lax's own tab.
+- Lax's own tab is a conversation: its work shows live while it runs and folds under its answer ("used 2 tools", tap for the steps); your yeses stay where you gave them; answers in markdown.
+- It survives restarts (rebuilt from Lax's own transcript), with time dividers and Lax's diary in between: what it learned, levels, streaks. Live sessions opening and closing fold into one line.
 
 ### Phase 5: Lax learns [diogodebastos/lax#13](https://github.com/diogodebastos/lax/issues/13)
 What makes Lax a personal agent. Everything it learns lives in `~/.lax`, and you approve each step.

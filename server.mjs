@@ -16,7 +16,7 @@ import { createBrain, ensureBrain, brief } from './lib/brain.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus, tabCommand } from './lib/actions.mjs';
 import { readUsage, usageText } from './lib/usage.mjs';
 import { openTerminal, q, ON_MAC } from './lib/terminal.mjs';
-import { tailRecords, newAssistantText } from './lib/transcript.mjs';
+import { tailRecords, newAssistantText, conversation } from './lib/transcript.mjs';
 import { editDiff } from './lib/diff.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
@@ -90,7 +90,7 @@ function updateSettings(b) {
 }
 function rebirth() {
   db.exec('DELETE FROM events; DELETE FROM milestones;');
-  pet = newPet(); voiceSessions = {}; kvSet('pet', pet); kvSet('voiceSessions', voiceSessions);
+  pet = newPet(); voiceSessions = {}; kvSet('pet', pet); kvSet('voiceSessions', voiceSessions); kvSet('diary', []); laxFeed.length = 0;
   milestone(`${settings.name} was born`);
 }
 
@@ -145,7 +145,7 @@ function gainXp(n) {
     const st = stageOf(after);
     const text = after === MAX_LEVEL ? `${settings.name} reached level 100! A legend.`
       : grew ? `${settings.name} evolved into a ${st}!` : `${settings.name} reached level ${after}!`;
-    milestone(text);
+    milestone(text); diary(text.replace(`${settings.name} `, '').replace(/!.*$/, ''));
     broadcast('bubble', { id: 'lvl' + Date.now(), kind: 'levelup', text, speak: true });
   }
 }
@@ -155,7 +155,7 @@ function touchDay() {
     const y = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
     pet.streak = pet.lastDay === y ? pet.streak + 1 : 1;
     pet.lastDay = today;
-    if ([3, 7, 14, 30, 100].includes(pet.streak)) milestone(`${pet.streak}-day streak`);
+    if ([3, 7, 14, 30, 100].includes(pet.streak)) { milestone(`${pet.streak}-day streak`); diary(`${pet.streak}-day streak`); }
   }
   pet.lastSeen = Date.now();
 }
@@ -210,12 +210,36 @@ function narrate(h, project, skip = '') {
 const recentFeed = []; // what the assistant knows about your sessions
 // own: Lax's assistant's own work (its commands and their output), which `lax watch` shows as Lax's.
 // extra: the step's parts (desc, cmd, out, diff, agent…) so the phone can lay it out like Claude Code; `line` is the plain version.
+// Lax's own work (its assistant's steps) has no tab of its own: it goes in Lax's tab, inside the turn it belongs to.
+// Lax's tab keeps its own history too (laxFeed), so busy sessions never push your conversation out of the backlog.
+const laxFeed = [];
 const feed = (line, kind = 'tool', project, session, extra) => {
   const f = { line, kind, project, session, ts: Date.now(), ...extra };
-  if (session && session === voiceSessions[ASSISTANT]) f.own = true;
+  if (session && session === voiceSessions[ASSISTANT]) { f.own = true; f.session = undefined; }
   recentFeed.push(f); if (recentFeed.length > 300) recentFeed.shift();
+  if (!f.session) { laxFeed.push(f); if (laxFeed.length > 300) laxFeed.shift(); }
   broadcast('feed', f);
 };
+// Lax's diary: what it did by itself (learned, levelled up, a streak). Kept, so its tab still has it after a restart.
+function diary(text) {
+  const d = [...kvGet('diary', []), { ts: Date.now(), text }].slice(-100); kvSet('diary', d);
+  feed(`+ ${text}`, 'diary', settings.name.toLowerCase(), undefined, { text });
+}
+// Lax's tab after a restart: the last turns of its own conversation (from its transcript) and its diary, in time order.
+function laxHistory() {
+  const sid = voiceSessions[ASSISTANT]; if (!sid) return;
+  const file = path.join(os.homedir(), '.claude', 'projects', MIND.replace(/[^a-zA-Z0-9]/g, '-'), sid + '.jsonl');
+  const name = settings.name.toLowerCase(), lines = [];
+  for (const it of conversation(tailRecords(file, 512 * 1024), 25)) {
+    const base = { project: name, ts: it.ts, history: true };
+    if (it.kind === 'prompt') lines.push({ ...base, line: `> ${short(it.text, 90)}`, kind: 'prompt' });
+    else if (it.kind === 'say') lines.push({ ...base, line: `● ${short(it.text, 200)}`, kind: 'say', own: true, text: clip(it.text, 1500) });
+    else if (it.kind === 'tool') lines.push({ ...base, line: describeTool(it.tool, it.input), kind: 'tool', own: true, ...stepParts(it.tool, it.input) });
+    else lines.push({ ...base, line: `↩ ${clip(it.text)}`, kind: 'done', text: clip(it.text), answer: true });
+  }
+  for (const d of kvGet('diary', [])) lines.push({ project: name, ts: d.ts, history: true, line: `+ ${d.text}`, kind: 'diary', text: d.text });
+  laxFeed.unshift(...lines.sort((a, b) => a.ts - b.ts).slice(-250));
+}
 // The hook-side session a lax channel runs in (matched by the claude process pid).
 const channelSession = (c) => c?.sessionPid ? [...sessions.entries()].find(([, s]) => s.pid === c.sessionPid)?.[0] : undefined;
 // The terminal shows replies and results in full (capped), so you can check them on the phone; bubbles stay short.
@@ -269,7 +293,7 @@ function onHook(h) {
   switch (h.hook_event_name) {
     case 'SessionStart':
       pet.sessions++; gainXp(2); s.status = 'idle';
-      feed(`● session ${project}`, 'session', project, sid); logEvent(sid, project, 'session', h.source || 'start');
+      if (!mine) feed(`● session ${project}`, 'session', project, sid); logEvent(sid, project, 'session', h.source || 'start');
       break;
     case 'UserPromptSubmit':
       s.status = 'working'; if (!mine) feed(`> ${short(h.prompt, 90)}`, 'prompt', project, sid); else if (laxOnMac) feed(`> ${short(h.prompt, 90)}`, 'prompt', settings.name.toLowerCase());
@@ -314,14 +338,14 @@ function onHook(h) {
     case 'Stop': {
       s.status = 'done'; pet.turns++; gainXp(5);
       const msg = h.last_assistant_message || '';
-      if (!mine) { narrate(h, project, msg); feed(`✓ ${project}: ${clip(msg, 1500) || 'done'}`, 'done', project, sid, { text: clip(msg, 1500) || 'done' }); } else if (laxOnMac) feed(`↩ ${clip(msg) || 'done'}`, 'done', settings.name.toLowerCase());
+      if (!mine) { narrate(h, project, msg); feed(`✓ ${project}: ${clip(msg, 1500) || 'done'}`, 'done', project, sid, { text: clip(msg, 1500) || 'done' }); } else if (laxOnMac) feed(`↩ ${clip(msg) || 'done'}`, 'done', settings.name.toLowerCase(), undefined, { answer: true, text: clip(msg) || 'done' });
       logEvent(sid, project, 'done', short(msg, 1000));
       if (!(voiceRun && voiceRun.sessionId === sid)) // voice runs speak their own result
         broadcast('bubble', { id: 'done-' + sid + Date.now(), kind: 'done', text: `${project}: ${spoken(msg) || 'done!'}`, session: sid, speak: false });
       break;
     }
     case 'SessionEnd':
-      sessions.delete(sid); feed(`○ ${project} ended`, 'session', project, sid);
+      sessions.delete(sid); if (!mine) feed(`○ ${project} ended`, 'session', project, sid); // Lax's own runs start and end every time you talk
       break;
   }
   save(); pushState();
@@ -447,10 +471,11 @@ async function openOnMac() {
   } catch (e) { laxOnMac = false; return `I couldn't open it on the Mac. ${short(e.message, 120)}`; }
 }
 const ASSISTANT = 'assistant:' + MIND; // its key in voiceSessions (a conversation only resumes in the folder it started in)
+laxHistory(); // Lax's tab starts with your last conversation, not empty
 
 // ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
 ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addMemoryLayout(); addToolsAdvice();
-const brain = createBrain({ db, settings: () => settings, feed, broadcast, gainXp: (n) => { gainXp(n); save(); pushState(); },
+const brain = createBrain({ db, settings: () => settings, feed, diary: (t) => diary(t), broadcast, gainXp: (n) => { gainXp(n); save(); pushState(); },
   sessionInfo: (sid) => sessions.get(sid), skip: (sid) => sid === voiceSessions[ASSISTANT], claude: process.env.LAX_CLAUDE,
   log: (...a) => console.log('[brain]', ...a) });
 const tabLabel = (s) => `${s.project}·${s.where || 'cli'}`;
@@ -561,7 +586,7 @@ function talk(text) {
   const child = spawn(process.env.LAX_CLAUDE || 'claude', args, { cwd, env: { ...process.env, LAX_VOICE: '1', LAX_HOME: HOME }, stdio: ['ignore', 'pipe', 'pipe'] });
   voiceRun = { child, cwd, sessionId: voiceSessions[ASSISTANT] || null };
   broadcast('react', { state: 'thinking' }); pushState();
-  let buf = '', result = null;
+  let buf = '', result = null, pendingSay = null;
   child.stdout.on('data', (d) => {
     buf += d; let i;
     while ((i = buf.indexOf('\n')) >= 0) {
@@ -569,6 +594,10 @@ function talk(text) {
       let m; try { m = JSON.parse(line); } catch { continue; }
       if (m.type === 'system' && m.subtype === 'init') { voiceSessions[ASSISTANT] = m.session_id; voiceRun.sessionId = m.session_id; save(); }
       if (m.type === 'result') result = m;
+      if (m.type === 'assistant' && !m.parent_tool_use_id) for (const b of m.message?.content || []) {
+        if (b.type === 'text' && b.text?.trim()) pendingSay = b.text.trim();
+        else if (b.type === 'tool_use' && pendingSay) { feed(`● ${short(pendingSay, 200)}`, 'say', name, undefined, { own: true, text: clip(pendingSay, 1500) }); pendingSay = null; }
+      }
     }
   });
   let err = ''; child.stderr.on('data', (d) => { err += d; });
@@ -578,7 +607,7 @@ function talk(text) {
     const ok = result && !result.is_error;
     const say = ok ? spoken(result.result) : `Something went wrong. ${short(err || result?.result, 120)}`;
     broadcast('bubble', { id: 'voice' + Date.now(), kind: ok ? 'reply' : 'error', text: say, speak: true });
-    feed(`↩ ${ok ? clip(result.result) : say}`, ok ? 'done' : 'error', name); // the full answer; the bubble says the short one
+    feed(`↩ ${ok ? clip(result.result) : say}`, ok ? 'done' : 'error', name, undefined, { answer: true, text: ok ? clip(result.result) : undefined }); // the full answer; the bubble says the short one
     if (!ok) { pet.errors++; if (voiceSessions[ASSISTANT] && /session|resume/i.test(err)) delete voiceSessions[ASSISTANT]; }
     save(); pushState();
   });
@@ -632,7 +661,9 @@ http.createServer(async (req, res) => {
     res.write(`event: state\ndata: ${JSON.stringify(stateMsg())}\n\n`);
     // ?backlog=N: the last N feed lines first (`lax watch`; the phone keeps its own).
     const n = Math.min(300, Number(url.searchParams.get('backlog')) || 0);
-    for (const f of n ? recentFeed.slice(-n) : []) res.write(`event: feed\ndata: ${JSON.stringify(f)}\n\n`);
+    // Lax's own tab always comes with its history, whatever the sessions said meanwhile.
+    const backlog = n ? [...new Set([...laxFeed.slice(-200), ...recentFeed.slice(-n)])].sort((a, b) => a.ts - b.ts) : [];
+    for (const f of backlog) res.write(`event: feed\ndata: ${JSON.stringify(f)}\n\n`);
     for (const p of pending.values()) res.write(`event: bubble\ndata: ${JSON.stringify(p.bubble)}\n\n`);
     const ping = setInterval(() => res.write(': ping\n\n'), 20000); req.on('close', () => clearInterval(ping));
     return;
