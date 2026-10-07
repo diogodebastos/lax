@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { voiceAction, sendAction, screenMode, readStatus } from '../lib/actions.mjs';
+import { voiceAction, sendAction, screenMode, readStatus, tabCommand } from '../lib/actions.mjs';
 
 const pty = createRequire(import.meta.url)('node-pty');
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -39,6 +39,16 @@ check('"sonnet" / "use opus" / "Haiku model" / "model fable" switch models', voi
 check('"sonnet is great" is a message', voiceAction('sonnet is great') === null);
 check('"clear up the README" is a message', voiceAction('clear up the README') === null);
 check('"rm -rf" is not an action', voiceAction('rm -rf') === null);
+
+// Changing tabs by voice: only when the words name a tab (or Lax).
+const TABS = [{ id: 's1', project: 'edge-cava', where: 'cli' }, { id: 's2', project: 'side-project', where: 'mac' }, { id: 's3', project: 'lax', where: 'cli' }];
+check('"Talk to edge cava" goes to that tab', tabCommand('Talk to edge cava.', TABS) === 's1');
+check('"switch to the side-project session" / "go to side project mac" go to that tab', tabCommand('switch to the side-project session', TABS) === 's2' && tabCommand('go to side project mac', TABS) === 's2');
+check('"go to edge kava" (misheard) still finds it', tabCommand('go to edge kava', TABS) === 's1');
+check('"back to you" / "talk to Pip" (its name) go to Lax\'s own tab', tabCommand('Back to you.', TABS) === 'all' && tabCommand('talk to Pip', TABS, 'Pip') === 'all');
+check('"go to the store" is a message', tabCommand('go to the store', TABS) === null);
+check('"talk to me about lax" is a message', tabCommand('talk to me about lax', TABS) === null);
+check('"switch to plan mode" is not a tab', tabCommand('switch to plan mode', TABS) === null);
 
 // Reading Claude Code's screen (shapes copied from the real thing, v2.1).
 const FOOT = (m) => `❯ \n────\n  ⚠ Transcript saving is off\n  ${m} (shift+tab to cycle)`;
