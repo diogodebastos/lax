@@ -30,6 +30,7 @@
   #dots b.working { background:var(--blue); animation:blink .5s steps(2) infinite; }
   #dots b.waiting { background:var(--amber); animation:blink .3s steps(2) infinite; }
   #dots b.done { background:var(--green); }
+  #tab { display:none; color:var(--coral); letter-spacing:1px; white-space:nowrap; } /* cover screen: the open tab, in place of the menu */
   @keyframes blink { 50% { opacity:.25 } }
 
   /* Pixel speech bubble */
@@ -136,11 +137,23 @@
   body.wide #app { width:512px; height:260px; flex-direction:row; }
   /* Exactly half: held sideways and open, the terminal starts on the hinge (the page is centred, so 256 of 512 = mid-screen). */
   body.wide #top { width:256px; height:260px; }
-  body.wide #stage { inset:auto; left:24px; top:44px; width:208px; height:204px; }
-  body.wide #bottom { border-left:2px solid var(--line); }
-  body.wide #term { border-top:0; font-size:15px; line-height:14px; }
-  body.wide #bubble { position:relative; left:auto; right:auto; top:auto; margin:10px 12px 4px 14px; flex:none; }
+  /* No terminal and no chat here: Lax, a mark per session, and a bubble only when something needs you (then Lax moves
+     left to make room). With captions on, the ground line carries what Lax heard or said. Settings live in the open app. */
+  body.wide #stage { inset:auto; left:-28px; top:-50px; width:312px; height:306px; }
+  body.wide.solo #top { width:512px; } body.wide.solo #stage { left:100px; } body.wide.solo #bottom { display:none; }
+  body.wide #bottom { justify-content:center; }
+  body.wide #term { display:none; }
+  body.wide #hud { font-size:19px; } body.wide #nameBtn { display:none; } body.wide #tab { display:block; }
+  body.wide #xp { min-width:24px; }
+  body.wide #dots { gap:5px; } body.wide #dots b { width:11px; height:11px; outline:2px solid #000; }
+  body.wide #hint { font-size:16px; }
+  body.wide #hint.heard { color:var(--amber); font-size:23px; }
+  body.wide #hint.said { color:var(--fg); font-size:23px; } #hint .who { color:var(--coral); margin-right:6px; }
+  #hint .cap { overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  body.wide #bubble { position:relative; left:auto; right:auto; top:auto; margin:0 14px 0 6px; padding:8px 10px 10px; flex:none; }
   body.wide #bubble::after { left:-9px; bottom:auto; top:12px; border-right:0; border-left:3px solid #000; }
+  body.wide #bubble .tag { font-size:17px; } body.wide #bubble .text { font-size:26px; line-height:22px; max-height:66px; }
+  body.wide #bubble .actions { gap:10px; margin-top:10px; } body.wide #bubble button { font-size:28px; padding:10px 0 12px; }
 
   /* Open phone held sideways: Lax on the left half, tabs + terminal on the right; the hinge is the seam. */
   body.side #app { flex-direction:row; }
@@ -178,7 +191,7 @@
 <div id="app">
   <div id="top">
     <canvas id="stage" width="52" height="51"></canvas>
-    <div id="hud"><span class="name" id="nameBtn">LAX</span><span id="lvl">Lv1</span><div id="xp"><i></i></div><div id="dots"></div></div>
+    <div id="hud"><span id="tab"></span><span class="name" id="nameBtn">LAX</span><span id="lvl">Lv1</span><div id="xp"><i></i></div><div id="dots"></div></div>
     <div id="bubble"><span class="tag"></span><div class="text"></div><div class="choices"></div><pre class="det"></pre><div class="actions"><button class="yes">✓ yes</button><button class="no">✗ no</button><button class="more">⋯</button></div></div>
     <div id="hint">tap Lax to talk</div>
   </div>
@@ -200,6 +213,7 @@
     <label>speaks out loud <button class="tog" data-k="voice"></button></label>
     <label>pitch <input type="range" id="sPitch" min="0.5" max="2" step="0.1"></label>
     <label>reads every "done" <button class="tog" data-k="speakDone"></button></label>
+    <label>captions on the cover screen <button class="tog" data-k="captions"></button></label>
     <h3>learning</h3>
     <label>learns from your sessions <button class="tog" data-k="learns"></button></label>
     <h3>talk goes to</h3>
@@ -222,6 +236,6 @@
   </div>
 </div>
 <div id="wake"><div>tap to wake <span id="wakeName">Lax</span><small>(unlocks sound + mic)</small></div></div>
-<script src="lax.js?v=13"></script>
+<script src="lax.js?v=14"></script>
 </body>
 </html>
