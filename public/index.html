@@ -174,9 +174,9 @@
   body.wide #top { width:256px; height:260px; }
   /* No terminal and no chat here: Lax, a mark per session, and a bubble only when something needs you (then Lax moves
      left to make room). With captions on, the ground line carries what Lax heard or said. Settings live in the open app. */
-  body.wide #stage { inset:auto; left:-28px; top:-50px; width:312px; height:306px; }
+  body.wide #stage { inset:auto; left:-67px; top:-136px; width:390px; height:383px; } /* 7.5 screen px per Lax pixel; its shadow stays above the captions */
   /* Only Lax moves: the top line and the ground line keep the whole strip; the bubble floats over the right half. */
-  body.wide #top { width:512px; } body.wide.solo #stage { left:100px; } body.wide.solo #bottom { display:none; }
+  body.wide #top { width:512px; } body.wide.solo #stage { left:61px; } body.wide.solo #bottom { display:none; }
   body.wide #bottom { position:absolute; right:0; top:28px; bottom:28px; width:256px; justify-content:center; pointer-events:none; z-index:3; }
   body.wide #bubble { pointer-events:auto; }
   body.wide #term { display:none; }
@@ -186,7 +186,9 @@
   /* Tappable on the cover: the transparent border makes each square a 23px target; the open tab's square is ringed. */
   body.wide #dots b { width:23px; height:23px; border:6px solid transparent; background-clip:padding-box; cursor:pointer; }
   body.wide #dots b.on { box-shadow:inset 0 0 0 2px var(--fg); }
-  body.wide #hint { font-size:16px; }
+  /* The cover's ground line is only for captions and errors: no resting hint, no talking instructions, no dots. */
+  body.wide #hint { justify-content:center; padding:0 20px; bottom:6px; } /* clear of the rounded corners, like the HUD */ body.wide #hint::before, body.wide #hint::after { display:none; }
+  body.wide #hint:not(.heard):not(.said) { visibility:hidden; }
   body.wide #hint.heard { color:var(--amber); font-size:23px; }
   body.wide #hint.said { color:var(--fg); font-size:23px; } #hint .who { color:var(--coral); margin-right:6px; }
   #hint .cap { overflow:hidden; text-overflow:ellipsis; min-width:0; }
@@ -277,6 +279,6 @@
   </div>
 </div>
 <div id="wake"><div>tap to wake <span id="wakeName">Lax</span><small>(unlocks sound + mic)</small></div></div>
-<script src="lax.js?v=22"></script>
+<script src="lax.js?v=24"></script>
 </body>
 </html>
