@@ -16,6 +16,8 @@ import { createBrain, ensureBrain, brief } from './lib/brain.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus, tabCommand } from './lib/actions.mjs';
 import { readUsage, usageText } from './lib/usage.mjs';
 import { openTerminal, q, ON_MAC } from './lib/terminal.mjs';
+import { tailRecords, newAssistantText } from './lib/transcript.mjs';
+import { editDiff } from './lib/diff.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 // Lax itself lives in ~/.lax (lib/paths.mjs): memory, secrets, mind, logs. This repo is only its body.
@@ -188,11 +190,27 @@ function setUsage(rl) {
   return true;
 }
 const pushState = () => broadcast('state', stateMsg());
+// A session's status line (hooks/lax-status.mjs): its model and how full its context is, for the tab's status row.
+function sessionInfo(b) {
+  const s = b.session_id && sessions.get(b.session_id); if (!s) return;
+  const ctx = Number.isFinite(b.ctx) ? Math.round(b.ctx) : s.ctx, model = b.model ? String(b.model).slice(0, 30) : s.model;
+  if (ctx === s.ctx && model === s.model) return;
+  s.ctx = ctx; s.model = model; pushState();
+}
+// What the assistant said between steps, from its transcript (lib/transcript.mjs). `skip`: text already shown another way.
+const saidUpTo = new Map(); // session id -> uuid of the last text shown
+function narrate(h, project, skip = '') {
+  if (!h.transcript_path || h.agent_id) return;
+  const { texts, last } = newAssistantText(tailRecords(h.transcript_path), saidUpTo.get(h.session_id));
+  saidUpTo.set(h.session_id, last);
+  for (const t of texts) if (t !== skip.trim()) feed(`● ${short(t, 200)}`, 'say', project, h.session_id, { text: clip(t, 1500) });
+}
 // session: which Claude Code session a line belongs to, so the phone can show one session's tab at a time.
 const recentFeed = []; // what the assistant knows about your sessions
 // own: Lax's assistant's own work (its commands and their output), which `lax watch` shows as Lax's.
-const feed = (line, kind = 'tool', project, session) => {
-  const f = { line, kind, project, session, ts: Date.now() };
+// extra: the step's parts (desc, cmd, out, diff, agent…) so the phone can lay it out like Claude Code; `line` is the plain version.
+const feed = (line, kind = 'tool', project, session, extra) => {
+  const f = { line, kind, project, session, ts: Date.now(), ...extra };
   if (session && session === voiceSessions[ASSISTANT]) f.own = true;
   recentFeed.push(f); if (recentFeed.length > 300) recentFeed.shift();
   broadcast('feed', f);
@@ -204,6 +222,15 @@ const clip = (t, n = 4000) => { t = String(t ?? '').trim(); return t.length > n 
 const proj = (cwd) => (cwd ? path.basename(cwd) : '?');
 const short = (s, n = 60) => { s = String(s ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 
+// A step's parts for the phone's terminal: why (the Bash description), the full command, the file, and whose it is
+// (agent: set when a subagent made the call, so it shows under its Agent step).
+function stepParts(name, input = {}, h = {}) {
+  const p = { tool: name, agent: h.agent_id };
+  if (name === 'Bash') { p.desc = input.description ? short(input.description, 120) : undefined; p.cmd = String(input.command || '').slice(0, 600); }
+  if (/^(Read|Edit|Write|MultiEdit|NotebookEdit)$/.test(name)) p.file = path.basename(input.file_path || input.notebook_path || '');
+  if (name === 'Task' || name === 'Agent') p.desc = short(input.description || input.prompt, 80);
+  return p;
+}
 function describeTool(name, input = {}) {
   switch (name) {
     case 'Bash': return `$ ${short(input.command, 80)}`;
@@ -228,7 +255,7 @@ const spoken = (text) => {
 function onHook(h) {
   const sid = h.session_id, project = proj(h.cwd);
   const s = sessions.get(sid) || { project, status: 'idle', ts: 0 };
-  s.ts = Date.now(); s.project = project; if (h.cwd) s.cwd = h.cwd; if (h.lax_where) s.where = h.lax_where; if (h.lax_session_pid) s.pid = h.lax_session_pid;
+  s.ts = Date.now(); s.project = project; if (h.permission_mode) s.mode = h.permission_mode; if (h.cwd) s.cwd = h.cwd; if (h.lax_where) s.where = h.lax_where; if (h.lax_session_pid) s.pid = h.lax_session_pid;
   sessions.set(sid, s);
   touchDay();
   const mine = sid && sid === voiceSessions[ASSISTANT]; // Lax's own assistant: talk() already shows what you said and the answer
@@ -253,17 +280,28 @@ function onHook(h) {
       if (n === 'Bash' && /\b(test|pytest|jest|vitest|cargo test|go test)\b/.test(h.tool_input?.command || '')) pet.tools.__tests = (pet.tools.__tests || 0) + 1;
       const ext = (h.tool_input?.file_path || '').split('.').pop();
       if (/^(Edit|Write|MultiEdit)$/.test(n) && LANG[ext]) pet.langs[LANG[ext]] = (pet.langs[LANG[ext]] || 0) + 1;
-      feed(describeTool(n, h.tool_input), 'tool', project, sid); logEvent(sid, project, 'tool', describeTool(n, h.tool_input));
+      if (!mine) narrate(h, project);
+      feed(describeTool(n, h.tool_input), 'tool', project, sid, stepParts(n, h.tool_input, h)); logEvent(sid, project, 'tool', describeTool(n, h.tool_input));
       break;
     }
     case 'PostToolUse': {
       const r = h.tool_response; const err = r && (r.is_error || r.interrupted || (typeof r.exit_code === 'number' && r.exit_code !== 0));
-      if (err) { pet.errors++; feed(`  ✗ ${h.tool_name} failed`, 'error', project, sid); broadcast('react', { state: 'error' }); }
+      const diff = /^(Edit|Write|MultiEdit)$/.test(h.tool_name) && !err ? editDiff(h.tool_name, h.tool_input, r) : null;
+      if (diff) feed(`  +${diff.add} -${diff.del}`, 'diff', project, sid, { diff, agent: h.agent_id });
       // A shell command's output, like a terminal: the first lines under the command.
       if (h.tool_name === 'Bash' && r) {
         const out = String(r.stdout || r.stderr || '').replace(/\s+$/, ''), lines = out ? out.split('\n') : [];
-        if (lines.length) feed(lines.slice(0, 12).map((l) => '  ' + short(l, 160)).join('\n') + (lines.length > 12 ? `\n  … ${lines.length - 12} more lines` : ''), 'out', project, sid);
+        if (lines.length) feed(lines.slice(0, 12).map((l) => '  ' + short(l, 160)).join('\n') + (lines.length > 12 ? `\n  … ${lines.length - 12} more lines` : ''), 'out', project, sid,
+          { out: lines.slice(0, 40).map((l) => l.slice(0, 300)), total: lines.length, agent: h.agent_id });
       }
+      if (err) { pet.errors++; feed(`  ✗ ${h.tool_name} failed`, 'error', project, sid, { agent: h.agent_id }); broadcast('react', { state: 'error' }); }
+      break;
+    }
+    case 'PostToolUseFailure': { // a step that failed (a command's non-zero exit, a refused edit): what it said, then ✗
+      if (h.is_interrupt) break;
+      const lines = String(h.error || '').replace(/\s+$/, '').split('\n').filter(Boolean);
+      if (lines.length) feed(lines.slice(0, 12).map((l) => '  ' + short(l, 160)).join('\n'), 'out', project, sid, { out: lines.slice(0, 40).map((l) => l.slice(0, 300)), total: lines.length, agent: h.agent_id });
+      pet.errors++; feed(`  ✗ ${h.tool_name} failed`, 'error', project, sid, { agent: h.agent_id }); broadcast('react', { state: 'error' });
       break;
     }
     case 'Notification':
@@ -275,7 +313,7 @@ function onHook(h) {
     case 'Stop': {
       s.status = 'done'; pet.turns++; gainXp(5);
       const msg = h.last_assistant_message || '';
-      if (!mine) feed(`✓ ${project}: ${clip(msg, 1500) || 'done'}`, 'done', project, sid); else if (laxOnMac) feed(`↩ ${clip(msg) || 'done'}`, 'done', settings.name.toLowerCase());
+      if (!mine) { narrate(h, project, msg); feed(`✓ ${project}: ${clip(msg, 1500) || 'done'}`, 'done', project, sid, { text: clip(msg, 1500) || 'done' }); } else if (laxOnMac) feed(`↩ ${clip(msg) || 'done'}`, 'done', settings.name.toLowerCase());
       logEvent(sid, project, 'done', short(msg, 1000));
       if (!(voiceRun && voiceRun.sessionId === sid)) // voice runs speak their own result
         broadcast('bubble', { id: 'done-' + sid + Date.now(), kind: 'done', text: `${project}: ${spoken(msg) || 'done!'}`, session: sid, speak: false });
@@ -312,7 +350,7 @@ function ask(h) {
     const questions = h.tool_name === 'AskUserQuestion' && Array.isArray(h.tool_input?.questions) ? h.tool_input.questions : null;
     const bubble = questions
       ? { id, kind: 'question', session: h.session_id, project, questions, text: `${project}: ${questions[0].question}`, speak: true }
-      : { id, kind: 'permission', session: h.session_id, project, gist: describeTool(h.tool_name, h.tool_input), text: `${project} wants to: ${describeTool(h.tool_name, h.tool_input)}`, speak: true, actions: true,
+      : { id, kind: 'permission', session: h.session_id, project, gist: h.tool_name === 'Bash' && h.tool_input?.description ? `${short(h.tool_input.description, 50)}: ${describeTool(h.tool_name, h.tool_input)}` : describeTool(h.tool_name, h.tool_input), text: `${project} wants to: ${describeTool(h.tool_name, h.tool_input)}`, speak: true, actions: true,
         ...(grant?.startsWith('edit:') && { details: `A yes also lets it edit the rest of ${path.basename(grant.slice(5))} until it finishes this answer.` }) };
     // Questions are worth waiting longer for: they need reading.
     const timer = setTimeout(() => finish('none'), Math.min(600, settings.askTimeout * (questions ? 4 : 1)) * 1000);
@@ -638,7 +676,7 @@ http.createServer(async (req, res) => {
     case '/api/diag': console.log(`[phone ${new Date().toISOString().slice(11, 19)}] ${JSON.stringify(b).slice(0, 600)}`); return json(res, { ok: true });
     case '/api/brain/reflect': return json(res, { ok: isLocal(req) && !!b.session && (brain.enqueue(String(b.session)), true) }); // local only: reflect now
     case '/api/channel/event': return json(res, { ok: isLocal(req) && channelEvent(b) });
-    case '/api/usage': return json(res, { ok: isLocal(req) && setUsage(b.rate_limits) });
+    case '/api/usage': if (isLocal(req)) sessionInfo(b); return json(res, { ok: isLocal(req) && setUsage(b.rate_limits) });
     case '/api/target':
       voiceTarget = b.target === 'auto' || channels.has(b.target) ? b.target : 'background'; pushState();
       return json(res, { ok: true, voiceTarget });

@@ -61,10 +61,34 @@
   #term { flex:1; min-height:0; border-top:2px solid var(--line); padding:5px 6px; font-size:14px; line-height:13px; overflow-y:auto; overscroll-behavior:contain; display:flex; flex-direction:column; -webkit-overflow-scrolling:touch; }
   #term::before { content:''; flex:1 0 0; } /* lines sit at the bottom, even when a tab hides the first ones */
   #term div { flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--text2); }
-  body.big #term div { white-space:pre-wrap; word-break:break-word; margin-bottom:3px; }
+  body.big #term div { white-space:pre-wrap; word-break:break-word; } body.big #term > div { margin-bottom:3px; }
   #term .prompt { color:var(--fg); } #term .done { color:var(--green); } #term .error { color:var(--red); }
   #term .session { color:var(--dim); } #term .out { color:var(--dim); white-space:pre; overflow-x:auto; } #term .tool::before { content:''; }
   #term div[hidden] { display:none; }
+  /* Steps, like Claude Code: "● why" in front, the command dim under it, a few lines of output, then "read 3 files" folded.
+     Hanging indent: wrapped lines line up under the text, never back at the edge. */
+  #term .say, #term .head, #term .cmd, #term .sum, #term .done.md, #term .prompt.turn { padding-left:1.2em; text-indent:-1.2em; }
+  #term .say { color:var(--fg); } #term .step .head { color:var(--fg); } #term .mk { color:var(--dim); }
+  #term .step.run .head .mk { color:var(--blue); } #term .step.bad .head .mk { color:var(--red); }
+  #term .head .n { color:var(--dim); } #term .head .n.a { color:var(--green); } #term .head .n.d { color:var(--red); }
+  #term .cmd { color:var(--dim); margin-left:1.2em; }
+  #term .step .out, #term .step .diff { margin-left:1.2em; padding-left:1.2em; position:relative; cursor:pointer; }
+  #term .step .out::before, #term .step .diff::before { content:'└'; position:absolute; left:0; top:0; color:var(--dim); }
+  #term .out div, #term .diff div { white-space:pre !important; overflow:hidden; text-overflow:ellipsis; color:var(--dim); }
+  #term .diff .a { color:var(--green); } #term .diff .d { color:var(--red); }
+  #term .more { color:var(--dim); font-style:italic; } #term .fold > .x { display:none; } #term .fold.open > .x { display:block; }
+  #term .sum { color:var(--dim); margin-left:1.2em; cursor:pointer; } #term .sum .x { display:none; margin-left:1.2em; } #term .sum.open .x { display:block; }
+  #term .sub { margin-left:1.2em; padding-left:.8em; border-left:2px solid var(--line2); }
+  #term .step > .error { margin-left:1.2em; }
+  #term .prompt.turn { margin-top:8px; }
+  #term .md b { color:var(--fg); } #term .md code { color:var(--coral); font:inherit; } #term .md .h { color:var(--fg); text-decoration:underline; }
+  #term .md .fence { color:var(--dim); white-space:pre !important; overflow-x:auto; text-indent:0; display:block; }
+  #term .copied { outline:1px dashed var(--coral); }
+  /* Tall cover (no tabs): one row per step, no commands or output under it. */
+  body:not(.big) #term .cmd, body:not(.big) #term .out, body:not(.big) #term .diff, body:not(.big) #term .sub { display:none; }
+  /* The open tab's status, under the terminal: mode · context · model · working/idle. */
+  #status { display:none; } body.big #status.on { display:block; padding:3px 14px 4px; border-top:1px dashed var(--line2); color:var(--dim); font-size:17px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #status .hot { color:var(--amber); } #status .full { color:var(--red); } #status .plan { color:var(--blue); } #status .auto { color:var(--amber); }
   #cursor { display:inline-block; width:6px; height:10px; background:var(--green); animation:blink 1s steps(2) infinite; vertical-align:-1px; }
 
   /* Life menu */
@@ -203,6 +227,7 @@
   <div id="bottom">
   <div id="chips"></div>
   <div id="term"><div class="session">lax v0.4 — waiting for claude code…</div><div><span id="cursor"></span></div></div>
+  <div id="status"></div>
   </div>
   <div id="life">
     <header><span><span id="menuName">LAX</span> ≡</span><button id="lifeClose">✕</button></header>

@@ -89,6 +89,8 @@ let pet = { name: 'Lax', level: 1, stage: 'sprout', traits: [], mood: 'happy', x
 let sessions = [], voiceBusy = false, thinking = false, lastWork = 0, channels = [], voiceTarget = 'background', usage = null;
 // The Mac is asleep or off (no link): Lax sleeps too. ASLEEP = the app's offline copy of this page (no Mac at all).
 const ASLEEP = qs.has('asleep'); let macAsleep = ASLEEP;
+// No key: Lax hasn't hatched. Just an egg that wobbles now and then (and when tapped).
+const EGG = !DEMO && !ASLEEP && !TOKEN; let eggTapAt = -1e9;
 let listening = false, speaking = false, react = null, reactUntil = 0;
 const body = { y: 0, vy: 0, s: 0, sv: 0, look: 0, blinkAt: 0, nextHop: 3 };
 const parts = [];
@@ -201,8 +203,20 @@ function formTop(f, x0, y0, w, h, eyeY, m, t) {
     if (Math.round(t / 900) % 4 === 0) px(cx - 1, y0 - 4, 1, 1, '#fff8d0');
     for (const y of [eyeY + 3, eyeY + 5]) { px(x0 - 4, y, 4, 1, C.dust); px(x0 + w, y, 4, 1, C.dust); } }
 }
+function drawEgg(t) {
+  const rows = [4, 6, 8, 8, 10, 10, 12, 12, 12, 12, 12, 10, 8, 6], h = rows.length, y0 = GROUND - h;
+  const since = t - eggTapAt, k = since < 900 ? 1 : t % 3200 < 600 ? 0.6 : 0; // tapped, or every few seconds
+  const tilt = k * Math.sin(t / 60) * 2;
+  px(CX - 5, GROUND + 1, 10, 1, C.shadow);
+  rows.forEach((w, i) => { const x = CX - w / 2 + Math.round(tilt * (h - i) / h); px(x - 1, y0 + i, w + 2, 1, C.out); });
+  px(CX - 1 + Math.round(tilt), y0 - 1, 2, 1, C.out);
+  rows.forEach((w, i) => { const x = CX - w / 2 + Math.round(tilt * (h - i) / h); px(x, y0 + i, w, 1, '#f3e6cf');
+    if (i > 2) px(x + w - 2, y0 + i, 2, 1, '#cdbb9c'); if (i > 1 && i < 6) px(x + 1, y0 + i, 1, 1, '#fffaf0'); });
+  for (const [dx, dy] of [[-2, 4], [2, 7], [-3, 9], [1, 11], [3, 3]]) px(CX + dx + Math.round(tilt * (h - dy) / h), y0 + dy, 1, 1, C.body);
+}
 function draw(m, t) {
   g.clearRect(0, 0, W, H);
+  if (EGG) return drawEgg(t);
   // ground: the dotted line is the hint's line in the page (#hint), so text never sits on it
   const [bw, bh] = SIZES[pet.stage] || SIZES.cube;
   let s = body.s;
@@ -316,6 +330,7 @@ function renderHud() {
   $('#xp i').style.width = Math.round(100 * (pet.xp - pet.prevXp) / Math.max(1, pet.nextXp - pet.prevXp)) + '%';
   // Cover screen: the open tab's name in place of the menu (settings live in the open app).
   const vi = shown.findIndex((s) => s.id === view); $('#tab').textContent = vi < 0 ? settings.name.toLowerCase() : labels[vi];
+  renderStatus();
   $('#dots').innerHTML = shown.map((s) => `<b class="${s.status}${s.id === view ? ' on' : ''}" data-view="${esc(s.id)}" title="${esc(s.project)}"></b>`).join('');
 }
 const term = $('#term');
@@ -338,14 +353,135 @@ function setView(v) {
   term.scrollTop = term.scrollHeight;
   renderBubble(); renderHud();
 }
-function feed(line, kind = 'tool', project, session = '') {
-  const d = document.createElement('div'); d.className = kind; d.dataset.s = session; d.hidden = !visible(d);
+// The terminal reads like Claude Code: what the assistant says (●), each step with why it runs and the command dim
+// under it, a few lines of output (tap for more), edits as +/- lines, reads and searches folded into one line, and a
+// subagent's steps indented under it. x: the step's parts from the Mac (server.mjs stepParts); without them, the plain line.
+// Built with textContent only: nothing from a session ever becomes HTML.
+const el = (cls, ...kids) => { const d = document.createElement('div'); if (cls) d.className = cls; d.append(...kids.filter((k) => k != null)); return d; };
+const span = (cls, text) => { const e = document.createElement('span'); if (cls) e.className = cls; e.textContent = text; return e; };
+const where = new Map(); // session -> what new lines attach to, per agent ('' = the session itself): its last step, an open "read 3 files" row, its box
+const FOLD = /^(Read|Grep|Glob|LS|NotebookRead|mcp__.*)$/;
+// A connector's calls count under its name: mcp__Claude_Browser__computer → "browser". Ids for names become "connector".
+const mcpName = (t) => { const n = t.split('__')[1] || ''; return /^[0-9a-f-]{20,}$/.test(n) ? 'connector' : n.replace(/^claude[_-]/i, '').replace(/[_-]+/g, ' ').toLowerCase(); };
+let lastSay = null; // the open tab's latest narration, for the cover's captions
+const plural = (n, w) => `${n} ${w}${n > 1 ? 's' : ''}`;
+// A long command (a heredoc, a script) shows its first lines; the whole of it is what a long press copies.
+const firstLines = (t, n) => { const l = t.split('\n'); return l.length > n ? l.slice(0, n).join('\n') + `\n… ${plural(l.length - n, 'more line')}` : t; };
+function feed(line, kind = 'tool', project, session = '', x = {}) {
   // Follow new lines only if you're already at the bottom (so scrolling back to read isn't yanked away).
   const stick = term.scrollHeight - term.scrollTop - term.clientHeight < 40;
-  d.append(line); term.insertBefore(d, term.lastElementChild);
+  if (!where.has(session)) where.set(session, new Map());
+  const lanes = where.get(session);
+  // A subagent's lines go in a box under its Agent step (the latest one not taken yet), else at the top level.
+  let key = '';
+  if (x.agent) {
+    if (!lanes.has(x.agent)) {
+      const free = [...term.querySelectorAll('.step.agent')].reverse().find((s) => s.dataset.s === session && !s.dataset.agent);
+      if (free) { free.dataset.agent = x.agent; const box = el('sub'); free.append(box); lanes.set(x.agent, { box }); }
+    }
+    if (lanes.has(x.agent)) key = x.agent;
+  }
+  if (!lanes.has(key)) lanes.set(key, {});
+  const at = lanes.get(key);
+  const add = (d) => { if (at.box) return at.box.appendChild(d); d.dataset.s = session; d.hidden = !visible(d); return term.insertBefore(d, term.lastElementChild); };
+
+  if (kind === 'tool' && x.tool && FOLD.test(x.tool)) { // reads and searches in a row: one line that counts up
+    let g = at.group;
+    if (!g) { g = at.group = add(el('sum')); g.counts = {}; g.label = span('', ''); g.list = el('x'); g.append(g.label, g.list); }
+    const k = /^(Read|NotebookRead)$/.test(x.tool) ? 'read' : x.tool === 'LS' ? 'listed' : x.tool.startsWith('mcp__') ? mcpName(x.tool) : 'searched';
+    g.counts[k] = (g.counts[k] || 0) + 1;
+    g.label.textContent = Object.entries(g.counts).map(([w, c]) => w === 'read' ? 'read ' + plural(c, 'file') : w === 'searched' ? 'searched ' + plural(c, 'pattern')
+      : w === 'listed' ? 'listed ' + plural(c, 'folder') : `${w} ${plural(c, 'call')}`).join(' · ');
+    g.list.append(el('', line));
+  } else if (kind === 'tool' && x.tool) { // a step: ● why (or what), the command dim under it
+    at.group = null; at.step?.classList.remove('run');
+    const label = x.tool === 'Bash' ? x.desc || '$ ' + (x.cmd || '').split('\n')[0]
+      : /^(Edit|MultiEdit)$/.test(x.tool) ? `Update ${x.file}` : x.tool === 'Write' ? `Write ${x.file}`
+      : /^(Task|Agent)$/.test(x.tool) ? `Agent: ${x.desc || ''}` : line;
+    const s = el('step run' + (/^(Task|Agent)$/.test(x.tool) ? ' agent' : ''));
+    s.head = el('head', span('mk', '● '), label); s.append(s.head);
+    if (x.tool === 'Bash' && x.desc && x.cmd) s.append(el('cmd', '$ ' + firstLines(x.cmd, 3)));
+    s.copy = x.cmd || label;
+    at.step = add(s);
+  } else if ((kind === 'out' && x.out) || (kind === 'diff' && x.diff)) { // under the step it belongs to; tap for more
+    at.group = null;
+    const s = at.step, isOut = kind === 'out';
+    const rows = isOut ? x.out.map((l) => el('', l)) : x.diff.lines.map((l) => el(l[0] === '+' ? 'a' : 'd', l));
+    const shown = isOut ? 3 : 4, total = isOut ? x.total : x.diff.add + x.diff.del;
+    rows.forEach((r, i) => i >= shown && r.classList.add('x'));
+    const box = el(kind + ' fold', ...rows), left = (open) => total - (open ? rows.length : Math.min(shown, rows.length));
+    if (left(false) > 0 || rows.length > shown) {
+      const more = el('more', ''); box.append(more);
+      const label = () => { const o = box.classList.contains('open'), n = left(o); more.textContent = n > 0 ? `… ${plural(n, 'more line')}` : o ? 'less' : ''; };
+      label(); box.addEventListener('click', () => { box.classList.toggle('open'); label(); });
+    }
+    if (!isOut && s) s.head.append(span('n', '  '), span('n a', `+${x.diff.add}`), span('n', ' '), span('n d', `-${x.diff.del}`));
+    if (s) { s.insertBefore(box, s.fail || null); if (isOut) s.copy += '\n' + x.out.join('\n'); } else add(box);
+  } else if (kind === 'error' && at.step && /failed$/.test(line)) { // "✗ Bash failed" marks its step
+    at.step.classList.replace('run', 'bad') || at.step.classList.add('bad'); at.step.append(at.step.fail = el('error', '✗ failed'));
+  } else if (kind === 'say') {
+    at.group = null; add(el('say md', span('mk', '● '), ...md(x.text || line.replace(/^● /, ''))));
+    if (session && session === view) lastSay = { text: x.text || line, at: performance.now() };
+  } else if (kind === 'done' && x.text) {
+    at.group = null; at.step?.classList.remove('run');
+    add(el('done md', span('mk', '✓ '), ...md(x.text)));
+  } else if (kind === 'prompt' && line.startsWith('> ')) {
+    at.group = null; at.step?.classList.remove('run');
+    add(el('prompt turn', span('mk', '› '), line.slice(2)));
+  } else {
+    at.group = null; add(el(kind, line));
+  }
   while (term.children.length > 400) term.firstElementChild.remove();
   if (stick) term.scrollTop = term.scrollHeight;
   if (kind === 'tool') lastWork = performance.now();
+}
+// Just enough markdown for an answer: **bold**, `code`, # headings and ``` fences. Returns nodes, never HTML.
+function md(text) {
+  const out = [];
+  for (const p of String(text).split(/(```[\s\S]*?(?:```|$))/)) {
+    if (p.startsWith('```')) { out.push(el('fence', p.replace(/^```[^\n]*\n?/, '').replace(/\n?```$/, ''))); continue; }
+    p.split('\n').forEach((ln, i, all) => {
+      const h = ln.match(/^#{1,6}\s+(.*)/);
+      if (h) out.push(span('h', h[1]));
+      else for (const t of ln.split(/(\*\*[^*\n]+\*\*|`[^`\n]+`)/)) {
+        if (/^\*\*[^*]+\*\*$/.test(t)) { const b = document.createElement('b'); b.textContent = t.slice(2, -2); out.push(b); }
+        else if (/^`[^`]+`$/.test(t)) { const c = document.createElement('code'); c.textContent = t.slice(1, -1); out.push(c); }
+        else if (t) out.push(t);
+      }
+      if (i < all.length - 1) out.push('\n');
+    });
+  }
+  return out;
+}
+// Hold a step half a second to copy its command and output (to paste it in a message from the phone).
+{ let timer = null, held = false;
+  term.addEventListener('pointerdown', (e) => {
+    const s = e.target.closest('.step'); held = false; if (!s) return;
+    timer = setTimeout(async () => {
+      timer = null; held = true; s.classList.add('copied'); setTimeout(() => s.classList.remove('copied'), 900); buzz([30]);
+      try { await navigator.clipboard.writeText(s.copy || s.textContent); hint.textContent = 'copied'; }
+      catch { const r = document.createRange(); r.selectNodeContents(s); getSelection().removeAllRanges(); getSelection().addRange(r); hint.textContent = 'selected'; }
+      setTimeout(() => { if (!listening) hint.textContent = IDLE_HINT; }, 1500);
+    }, 500);
+  });
+  const stop = () => { clearTimeout(timer); timer = null; };
+  term.addEventListener('pointerup', stop); term.addEventListener('pointercancel', stop);
+  term.addEventListener('pointermove', (e) => Math.abs(e.movementY) > 3 && stop()); // scrolling isn't holding
+  // The tap that ends a long press doesn't also open or close the output under it.
+  term.addEventListener('click', (e) => { if (held) { held = false; e.stopPropagation(); } }, true);
+  term.addEventListener('click', (e) => e.target.closest('.sum')?.classList.toggle('open'));
+}
+// The open session tab's status, under the terminal: its mode, how full its context is, its model, working or idle.
+const MODES = { acceptEdits: 'accept edits', plan: 'plan mode', auto: 'auto mode', bypassPermissions: 'bypass', dontAsk: "don't ask" };
+function renderStatus() {
+  const st = $('#status'), s = view !== 'all' && sessions.find((x) => x.id === view);
+  st.classList.toggle('on', !!s); if (!s) return;
+  const bits = [];
+  if (MODES[s.mode]) bits.push(span(s.mode === 'plan' ? 'plan' : s.mode === 'acceptEdits' ? '' : 'auto', MODES[s.mode]));
+  if (Number.isFinite(s.ctx)) bits.push(span(s.ctx >= 90 ? 'full' : s.ctx >= 70 ? 'hot' : '', `ctx ${s.ctx}%`));
+  if (s.model) bits.push(span('', s.model.toLowerCase()));
+  bits.push(span('', s.status === 'working' ? 'working' : s.status === 'waiting' ? 'waiting for you' : 'idle'));
+  st.replaceChildren(...bits.flatMap((b, i) => (i ? [' · ', b] : [b])));
 }
 
 // ---------- bubble ----------
@@ -415,6 +551,8 @@ function renderCaption(here, now) {
   if (!cover()) { if (was && !listening) hint.textContent = IDLE_HINT; return; }
   if (listening) { if (settings.captions) { hint.className = 'heard'; hint.innerHTML = `<span class="cap">“${esc(words() || '…')}”</span>`; } return; }
   const c = here.findLast((x) => !needsYou(x) && !['listening', 'you'].includes(x.kind) && now - x.at < 8000 && (settings.captions || x.kind === 'error'));
+  // Nothing said to you lately: what the open session's assistant is doing ("Running the tests now."), if captions are on.
+  if (!c && settings.captions && lastSay && now - lastSay.at < 8000) { hint.className = 'said'; hint.innerHTML = `<span class="cap">${esc(lastSay.text.split(/(?<=[.!?])\s/)[0])}</span>`; return; }
   if (!c) { if (was) hint.textContent = IDLE_HINT; return; }
   hint.className = 'said';
   hint.innerHTML = `<span class="cap"><span class="who">${esc(c.kind === 'reply' ? settings.name.toLowerCase() : TAGS[c.kind] || '')}</span>${esc(c.text.split(/(?<=[.!?])\s/)[0])}</span>`;
@@ -510,7 +648,7 @@ function routeChannel() {
   return voiceTarget === 'background' ? null : channels.find((c) => c.cid === voiceTarget) || [...channels].sort((a, b) => b.active - a.active)[0] || null;
 }
 function setTarget(v) { voiceTarget = v; updateHint(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); if (!DEMO) api('/api/target', { target: v }); }
-function updateHint() { IDLE_HINT = macAsleep ? `zzz… ${settings.name.toLowerCase()} is asleep` : voiceBroken ? `tap ${settings.name} to type` : `tap or hold ${settings.name} to talk`; if (!listening) hint.textContent = IDLE_HINT; }
+function updateHint() { IDLE_HINT = EGG ? 'no key yet: open the link from npm start' : macAsleep ? `zzz… ${settings.name.toLowerCase()} is asleep` : voiceBroken ? `tap ${settings.name} to type` : `tap or hold ${settings.name} to talk`; if (!listening) hint.textContent = IDLE_HINT; }
 const MIC_ERRORS = {
   'not-allowed': 'Mic is blocked. Tap the icon left of the address → Permissions → Microphone → Allow, then reload.',
   'service-not-allowed': 'This browser has no speech recognition. Use Chrome.',
@@ -629,6 +767,7 @@ const topEl = $('#top');
   const inside = (e) => { const r = topEl.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
   topEl.addEventListener('pointerdown', (e) => {
     if (e.target.closest('#hud, #bubble') || wakeEl.isConnected || lifeEl.classList.contains('open')) return;
+    if (EGG) { eggTapAt = performance.now(); return; }
     try { topEl.setPointerCapture(e.pointerId); } catch {}
     const p = press = { id: e.pointerId, held: false, out: false };
     p.timer = setTimeout(() => { p.held = true; if (!listening) beginListening('hold'); }, 350);
@@ -646,7 +785,7 @@ const topEl = $('#top');
 }
 topEl.addEventListener('contextmenu', (e) => e.preventDefault());
 // Desktop: hold space to talk.
-addEventListener('keydown', (e) => { if (e.code === 'Space' && !e.repeat && !listening && e.target === document.body) { e.preventDefault(); beginListening('hold'); } });
+addEventListener('keydown', (e) => { if (e.code === 'Space' && !EGG && !e.repeat && !listening && e.target === document.body) { e.preventDefault(); beginListening('hold'); } });
 addEventListener('keyup', (e) => { if (e.code === 'Space') releaseHold(true); });
 
 // ---------- wake (audio unlock, fullscreen, keep screen on) ----------
@@ -684,11 +823,11 @@ else connect();
 function connect() {
   const es = new EventSource('/api/stream?t=' + encodeURIComponent(TOKEN) + (linkedOnce ? '' : '&backlog=150'));
   es.addEventListener('state', (e) => { applyState(JSON.parse(e.data)); remember(); });
-  es.addEventListener('feed', (e) => { const f = JSON.parse(e.data); feed(f.line, f.kind, f.project, f.session); });
+  es.addEventListener('feed', (e) => { const f = JSON.parse(e.data); feed(f.line, f.kind, f.project, f.session, f); });
   es.addEventListener('bubble', (e) => showBubble(JSON.parse(e.data)));
   es.addEventListener('clear', (e) => clearBubble(JSON.parse(e.data).id));
   es.addEventListener('tab', (e) => { const v = JSON.parse(e.data).view, chip = $('#chips').querySelector(`[data-view="${CSS.escape(v)}"]`); if (chip) goTab(chip); });
-  es.addEventListener('reborn', () => { [...term.children].slice(0, -1).forEach((d) => d.remove()); parts.length = 0; hop(1.8);
+  es.addEventListener('reborn', () => { [...term.children].slice(0, -1).forEach((d) => d.remove()); where.clear(); parts.length = 0; hop(1.8);
     showBubble({ id: 'born', kind: 'reply', text: `Hi! I'm ${settings.name}. Nice to meet you.`, speak: true }); });
   es.addEventListener('react', (e) => { const r = JSON.parse(e.data); if (r.state === 'thinking') voiceBusy = true; else setReact(r.state); });
   es.onopen = () => { linkedOnce = true; if (macAsleep) { setAsleep(false); hop(1.4); } feed('linked to mac ✓', 'session', undefined, '*'); };
@@ -710,19 +849,22 @@ function asleep() {
 // ---------- demo mode (?demo) — cycles every state without a server ----------
 function demo() {
   pet = { name: 'Lax', level: 7, stage: 'cube', traits: ['headband'], mood: 'happy', xp: 400, prevXp: 360, nextXp: 490, streak: 4 };
-  sessions = [{ id: 'd1', project: 'api', where: 'mac', status: 'working' }, { id: 'd2', project: 'web', where: 'cli', status: 'done' }];
+  sessions = [{ id: 'd1', project: 'api', where: 'mac', status: 'working', mode: 'acceptEdits', ctx: 41, model: 'Opus 5.5' }, { id: 'd2', project: 'web', where: 'cli', status: 'done' }];
   settings = { ...settings, captions: true }; view = 'd1'; applyLook(); renderHud(); // the api tab is open, so its feed shows
   setTimeout(() => showBubble({ id: 'hi', kind: 'reply', text: 'Hi, I\'m Lax. Tap me and talk.' }), 400);
   const steps = [
     () => feed('> fix the flaky auth test', 'prompt', 'api', 'd1'),
-    () => feed('Read auth.test.ts', 'tool', 'api', 'd1'), () => feed('Grep "refreshToken"', 'tool', 'api', 'd1'),
-    () => feed('Edit auth.ts', 'tool', 'api', 'd1'), () => feed('$ npm test -- auth', 'tool', 'api', 'd1'),
-    () => feed('  ✗ Bash failed', 'error', 'api', 'd1') || setReact('error'),
-    () => feed('Edit auth.ts', 'tool', 'api', 'd1'),
+    () => feed('● Let me find where the token gets refreshed.', 'say', 'api', 'd1', { text: 'Let me find where the token gets refreshed.' }),
+    () => feed('Read auth.test.ts', 'tool', 'api', 'd1', { tool: 'Read' }) || feed('Grep "refreshToken"', 'tool', 'api', 'd1', { tool: 'Grep' }),
+    () => feed('Read auth.ts', 'tool', 'api', 'd1', { tool: 'Read' }),
+    () => feed('$ npm test -- auth', 'tool', 'api', 'd1', { tool: 'Bash', desc: 'Run the auth tests', cmd: 'npm test -- auth --reporter=dot' }),
+    () => { feed('  ✗ Bash failed', 'error', 'api', 'd1'); feed('', 'out', 'api', 'd1', { out: ['FAIL auth.test.ts', '  refresh › keeps the session when two tabs refresh at once', '    expected 200, got 401', '    at auth.test.ts:88:14', 'Tests: 1 failed, 41 passed'], total: 5 }); setReact('error'); },
+    () => feed('● Two refreshes race: the second uses a token the first just revoked. One shared refresh fixes it.', 'say', 'api', 'd1', { text: 'Two refreshes race: the second uses a token the first just revoked. One shared refresh fixes it.' }),
+    () => { feed('Edit auth.ts', 'tool', 'api', 'd1', { tool: 'Edit', file: 'auth.ts' }); feed('  +3 -1', 'diff', 'api', 'd1', { diff: { add: 3, del: 1, lines: ['- const t = await refresh(old);', '+ inflight ??= refresh(old).finally(() => (inflight = null));', '+ const t = await inflight;', '+ // two tabs, one refresh'] } }); },
     () => showBubble({ id: 'perm', kind: 'permission', project: 'api', gist: '$ rm -rf dist && npm run build', text: 'api wants to: $ rm -rf dist && npm run build', actions: true }),
     () => {}, () => {}, () => clearBubble('perm') || feed('  ✓ approved from phone', 'done', 'api', 'd1'),
-    () => feed('$ npm run build', 'tool', 'api', 'd1'),
-    () => feed('✓ api: Fixed the race in token refresh; all 42 tests pass.', 'done', 'api', 'd1') || showBubble({ id: 'd', kind: 'done', text: 'api: Fixed the race in token refresh; all 42 tests pass.' }),
+    () => feed('$ npm run build', 'tool', 'api', 'd1', { tool: 'Bash', desc: 'Clean build', cmd: 'rm -rf dist && npm run build' }),
+    () => feed('✓ api: Fixed the race in token refresh; all 42 tests pass.', 'done', 'api', 'd1', { text: 'Fixed the **race in token refresh**: both tabs now share one `refresh()` call. All 42 tests pass.' }) || showBubble({ id: 'd', kind: 'done', text: 'api: Fixed the race in token refresh; all 42 tests pass.' }),
     () => showBubble({ id: 'lv', kind: 'levelup', text: 'Lax reached level 8!' }),
     () => {}, () => { voiceBusy = true; }, () => {}, () => { voiceBusy = false; pet = { ...pet, mood: 'sleepy' }; },
     () => {}, () => { pet = { ...pet, mood: 'happy', traits: ['headband', 'goggles', 'flame'] }; },
