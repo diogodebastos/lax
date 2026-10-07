@@ -805,6 +805,7 @@ function releaseHold(inside) {
 // The app's speech recognizer calls these (LaxBridge.kt).
 window.laxOnSpeech = (text, final) => { if (!listening) return; final ? stretchEnded(text) : partial(text); };
 window.laxOnSpeechBegin = () => { if (listening) speechBegan(); };
+window.laxOnSpeaking = (on) => { speaking = !!on; }; // the app's TTS started or stopped: Lax's mouth moves
 window.laxOnSpeechError = (error) => {
   if (!listening || error === 'aborted') return; // aborted: one of ours (a restart or a cancel)
   diag('sr-error', { error, native: true });
