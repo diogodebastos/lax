@@ -47,6 +47,9 @@ check('"switch to the job-hunt session" / "go to job hunt mac" go to that tab', 
 check('"go to edge kava" (misheard) still finds it', tabCommand('go to edge kava', TABS) === 's1');
 check('"back to you" / "talk to Pip" (its name) go to Lax\'s own tab', tabCommand('Back to you.', TABS) === 'all' && tabCommand('talk to Pip', TABS, 'Pip') === 'all');
 check('"Go to Lax CLI to session" (as heard) goes to lax·cli', tabCommand('Go to Lax CLI to session', TABS) === 's3');
+const TWO = [...TABS, { id: 's4', project: 'lax', where: 'cli' }];
+check('two lax·cli tabs: "go to lax cli two" / "lax cli 2" / "lax cli to" (as heard) go to the second', tabCommand('go to lax cli two', TWO) === 's4' && tabCommand('talk to lax cli 2', TWO) === 's4' && tabCommand('go to lax cli to session', TWO) === 's4');
+check('two lax·cli tabs: "go to lax cli" goes to the first', tabCommand('go to lax cli', TWO) === 's3');
 check('"go to the store" is a message', tabCommand('go to the store', TABS) === null);
 check('"talk to me about lax" is a message', tabCommand('talk to me about lax', TABS) === null);
 check('"switch to plan mode" is not a tab', tabCommand('switch to plan mode', TABS) === null);
