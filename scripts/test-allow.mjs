@@ -29,6 +29,20 @@ for (const c of ['rm /Users/ketchum/Desktop/Hairdresser.ics', 'npm install', 'ec
   'git commit -m "$(cat <<EOF\nx\nEOF\n)"', 'git commit -m "unclosed && rm x', 'node -e "1"', 'node server.mjs', 'npm run build',
   `mkdir ${NOREPO}`, 'git -C /nonexistent/x commit -m x', 'P=/tmp/x; mkdir -p $P'])
   assert.equal(bashKind(c, REPO), null, c);
+// WhatsApp: opening, reading and drafting through lib/share.mjs don't ask; sending and raw osascript do.
+const SHARE = path.join(REPO, 'lib', 'share.mjs'), OCR = path.join(os.homedir(), '.lax', 'bin', 'ocr');
+for (const c of [`node ${SHARE} open "Vera"`, `node ${SHARE} read "Carlos Sequeira"`, `node ${SHARE} draft "Carlos" "olá, tudo bem? 5 > 3"`,
+  'node lib/share.mjs draft Vera --file /tmp/x.png', `cd ${REPO} && node lib/share.mjs read Vera`,
+  'screencapture -x /tmp/lax-shot.png', 'screencapture -x -o -R10,20,300,40 /tmp/a.png', `${OCR} /tmp/a.png`, '~/.lax/bin/ocr /tmp/a.png'])
+  assert.notEqual(bashKind(c, REPO), null, c);
+for (const c of [`node ${SHARE} send Vera`, `node ${SHARE}`, `node ${SHARE} open`.replace('open', 'oops'), 'node /tmp/share.mjs open Vera',
+  `node ${SHARE} open Vera; osascript -e x`, `node ${SHARE} draft Vera "$(cat secret)"`, `node ${SHARE} read Vera > out.txt`,
+  'osascript -e \'tell application "WhatsApp" to activate\'', 'osascript -e \'tell application "System Events" to key code 36\'',
+  'screencapture -x ~/Desktop/a.png', 'screencapture -i /tmp/a.png', 'screencapture -P /tmp/a.png', 'screencapture -x',
+  `${OCR} /tmp/a.png > ~/notes.txt`])
+  assert.equal(bashKind(c, REPO), null, c);
+assert.equal(grantKey('Bash', { command: `node ${SHARE} send Vera` }), null, 'a yes to send never covers the next send');
+
 assert.equal(bashKind('npm test', OUT), null, 'npm test outside a repo asks');
 assert.equal(bashKind('git add x', OUT), null, 'git add outside a repo asks');
 
