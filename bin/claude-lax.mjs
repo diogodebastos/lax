@@ -41,13 +41,23 @@ if (!pty || !process.stdin.isTTY || !process.stdout.isTTY) {
   process.stdin.setRawMode(true); process.stdin.setEncoding('utf8'); process.stdin.resume();
   process.stdin.on('data', (d) => term.write(d));
   const vt = Terminal && new Terminal({ cols: term.cols, rows: term.rows, scrollback: 500, allowProposedApi: true });
-  term.onData((d) => { process.stdout.write(d); vt?.write(d); });
+  term.onData((d) => { process.stdout.write(d); vt?.write(d, skipDevWarning); });
   process.stdout.on('resize', () => { term.resize(process.stdout.columns, process.stdout.rows); vt?.resize(process.stdout.columns, process.stdout.rows); });
   const screen = () => { // the last 200 lines as text: enough for /context even in a short window
     const b = vt.buffer.active, out = [];
     for (let i = Math.max(0, b.length - 200); i < b.length; i++) out.push(b.getLine(i)?.translateToString(true) ?? '');
     return out.join('\n').replace(/\n+$/, '');
   };
+  // The --dangerously-load-development-channels warning at start: answer "1. I am using this for local development"
+  // (already selected) for you. Only once, only in the first 30s, only when the warning and that option are on screen.
+  let devAsked = false;
+  function skipDevWarning() { // runs once the screen copy has taken in new output
+    if (devAsked || process.uptime() > 30) return;
+    const s = screen();
+    if (s.includes('Loading development channels') && /1\.\s*I am using this for local development/.test(s)) {
+      devAsked = true; setTimeout(() => term.write('\r'), 100);
+    }
+  }
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const type = async (text) => { term.write(text); await sleep(150); term.write('\r'); };
 
