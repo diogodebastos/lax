@@ -1,0 +1,8 @@
+#!/bin/sh
+# Pushing main redeploys the public demo (lax.diogodebastos.com/demo) from the commit being pushed.
+# A failed deploy warns but never blocks the push. Enabled by: git config core.hooksPath scripts/git-hooks
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$remote_ref" = "refs/heads/main" ] && [ "$local_sha" != "0000000000000000000000000000000000000000" ] || continue
+  node scripts/demo.mjs "$local_sha" --deploy || echo "lax: demo deploy failed (the push goes on). Retry: node scripts/demo.mjs --deploy"
+done
+exit 0
