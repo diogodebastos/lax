@@ -111,20 +111,31 @@ function pinColor() {
 pinColor();
 // Traits (headband, glasses, cape…) show from level 10: a young Lax is just itself.
 const TRAITS_FROM = 10;
+// The kind of work you do most gives one: headband, glasses or monocle.
+const TOOL_TRAIT = { Bash: 'headband', Edit: 'glasses', Write: 'glasses', MultiEdit: 'glasses', NotebookEdit: 'glasses',
+  Read: 'monocle', Grep: 'monocle', Glob: 'monocle' };
+// A command that runs tests (not one that only mentions them, like grep '"test"' package.json).
+const TEST_RUN = /\b(?:(?:npm|pnpm|yarn|bun)(?: run)? test|pytest|jest|vitest|cargo test|go test|node --test|swift test|gradlew? test|make test)\b|scripts\/test-[\w-]+\.m?js/;
+const uses = (p, ...tools) => tools.reduce((a, t) => a + (p.tools[t] || 0), 0);
 function traits(p) {
   if (levelOf(p.xp) < TRAITS_FROM) return [];
   const t = [];
-  const top = Object.entries(p.tools).sort((a, b) => b[1] - a[1])[0];
-  const total = Object.values(p.tools).reduce((a, b) => a + b, 0);
-  if (total >= 30 && top) {
-    const cls = { Bash: 'headband', Edit: 'glasses', Write: 'glasses', MultiEdit: 'glasses',
-      WebFetch: 'antenna', WebSearch: 'antenna', Read: 'monocle', Grep: 'monocle', Glob: 'monocle', Task: 'cape', Agent: 'cape' }[top[0]];
-    if (cls) t.push(cls);
+  // A trait's tools added up. Bash counts a tenth: nearly everything runs through it, so otherwise every Lax wore the headband.
+  const kinds = {};
+  for (const [tool, n] of Object.entries(p.tools)) {
+    const k = TOOL_TRAIT[tool];
+    if (k) kinds[k] = (kinds[k] || 0) + (tool === 'Bash' ? n / 10 : n);
   }
-  if ((p.tools.__tests || 0) >= 10) t.push('goggles');
+  const top = Object.entries(kinds).sort((a, b) => b[1] - a[1])[0];
+  if (top && top[1] >= 30) t.push(top[0]);
+  // Extras, on top of it. Goggles: tests are a real share of your commands, not just a few ever run.
+  const tests = p.tools.__tests || 0;
+  if (tests >= 50 && tests >= uses(p, 'Bash') * 0.15) t.push('goggles');
+  if (uses(p, 'WebFetch', 'WebSearch') >= 25) t.push('antenna');
+  if (uses(p, 'Agent', 'Task') >= 10) t.push('cape');
   if (p.errors >= 10) t.push('scar');
   if (p.streak >= 5) t.push('flame');
-  return [...new Set(t)];
+  return t;
 }
 function mood(p) {
   const idleH = (Date.now() - p.lastSeen) / 36e5;
@@ -302,7 +313,7 @@ function onHook(h) {
     case 'PreToolUse': {
       s.status = 'working'; const n = h.tool_name;
       pet.tools[n] = (pet.tools[n] || 0) + 1; gainXp(1);
-      if (n === 'Bash' && /\b(test|pytest|jest|vitest|cargo test|go test)\b/.test(h.tool_input?.command || '')) pet.tools.__tests = (pet.tools.__tests || 0) + 1;
+      if (n === 'Bash' && TEST_RUN.test(h.tool_input?.command || '')) pet.tools.__tests = (pet.tools.__tests || 0) + 1;
       const ext = (h.tool_input?.file_path || '').split('.').pop();
       if (/^(Edit|Write|MultiEdit)$/.test(n) && LANG[ext]) pet.langs[LANG[ext]] = (pet.langs[LANG[ext]] || 0) + 1;
       if (!mine) narrate(h, project);

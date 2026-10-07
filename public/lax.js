@@ -55,7 +55,7 @@ addEventListener('error', (e) => diag('js-error', { msg: e.message, at: `${e.fil
 const api = (p, body) => fetch(p, { method: 'POST', headers: { 'content-type': 'application/json', 'x-lax-token': TOKEN }, body: JSON.stringify(body || {}) }).then((r) => r.json());
 
 // ---------- palette ----------
-const C = { bg: '#000', shadow: '#2a2521', ink: '#000', out: '#120c0a', body: '#D97757', hi: '#F2A585', lo: '#A9522F', eye: '#fff8ee', red: '#ff4b3e', band: '#e0302a',
+const C = { bg: '#000', shadow: '#2a2521', ink: '#000', out: '#120c0a', body: '#D97757', hi: '#F2A585', lo: '#A9522F', eye: '#fff8ee', red: '#ff4b3e', band: '#e0302a', stick: '#d9d2c4',
   glass: '#7fd3ff', gold: '#ffd25a', green: '#6fd36f', ground: '#1f1c19', dust: '#5b544b', cape: '#3b4cc0' };
 const SIZES = { sprout: [10, 9], blob: [13, 12], cube: [15, 14], brick: [17, 16], legend: [19, 18] };
 
@@ -72,6 +72,7 @@ function applyTheme() {
   document.documentElement.dataset.theme = t;
   const css = getComputedStyle(document.documentElement);
   C.bg = css.getPropertyValue('--bg').trim(); C.shadow = css.getPropertyValue('--dot').trim();
+  C.stick = t === 'light' ? '#6b645a' : '#d9d2c4'; // the antenna's stick: light on dark, dark on light
   try { localStorage.lax_theme = settings.theme || 'system'; } catch {}
 }
 try { if (localStorage.lax_theme) settings.theme = localStorage.lax_theme; } catch {}
@@ -246,10 +247,10 @@ function draw(m, t) {
   if (pet.traits.includes('cape')) { const fl = Math.round(Math.sin(t / 120) * 2); px(x0 - 3 + fl, y0 + 3, 3, h - 2, C.cape); px(x0 - 4 + fl * 2, y0 + 5, 2, h - 5, C.cape); }
   if (form) formBack(form, x0, y0, w, h, m, t);
 
-  // feet
+  // feet: the body's shade, not its outline colour, so they show on a dark background too
   const run = m === 'working' ? Math.round(Math.sin(t / 50)) : 0;
-  px(x0 + 2, GROUND - feetH - Math.max(0, run) - by, 3, 2, C.out);
-  px(x0 + w - 5, GROUND - feetH - Math.max(0, -run) - by, 3, 2, C.out);
+  px(x0 + 2, GROUND - feetH - Math.max(0, run) - by, 3, 2, C.lo);
+  px(x0 + w - 5, GROUND - feetH - Math.max(0, -run) - by, 3, 2, C.lo);
 
   // body: thick outline, flat fill, light top-left, shade bottom-right (Meat Boy-ish chunk)
   px(x0 - 1, y0 - 1, w + 2, h + 2, C.out);
@@ -282,8 +283,11 @@ function draw(m, t) {
     px(ex + 1 + Math.max(-1, Math.min(1, look)) * (look > 0 ? 1 : 1), py, 1 + (big ? 1 : 0) - (look > 0 && big ? 1 : 0), 2, C.out);
   };
   eye(ex1); eye(ex2);
-  if (pet.traits.includes('glasses')) { px(ex1 - 1, eyeY - 1, 5, 1, C.out); px(ex2 - 1, eyeY - 1, 5, 1, C.out); px(ex1 + 4, eyeY, ex2 - ex1 - 4, 1, C.out); }
-  if (pet.traits.includes('monocle')) { px(ex2 - 1, eyeY - 1, 5, 1, C.gold); px(ex2 - 1, eyeY + 4, 5, 1, C.gold); px(ex2 + 3, eyeY + 4, 1, 4, C.gold); }
+  // A frame all round an eye (5 x 6, just outside it).
+  const frame = (ex, c) => { px(ex - 1, eyeY - 1, 5, 1, c); px(ex - 1, eyeY + 4, 5, 1, c); px(ex - 1, eyeY, 1, 4, c); px(ex + 3, eyeY, 1, 4, c); };
+  if (pet.traits.includes('glasses')) { frame(ex1, C.out); frame(ex2, C.out); px(ex1 + 4, eyeY + 1, ex2 - ex1 - 5, 1, C.out); // bridge
+    px(x0, eyeY + 1, ex1 - 1 - x0, 1, C.out); px(ex2 + 4, eyeY + 1, x0 + w - ex2 - 4, 1, C.out); } // arms to the sides
+  if (pet.traits.includes('monocle')) { frame(ex2, C.gold); px(ex2 + 3, eyeY + 5, 1, 3, C.gold); } // and its chain
 
   // mouth
   const my = eyeY + 6, mx = cx - 2;
@@ -296,7 +300,7 @@ function draw(m, t) {
   if (pet.traits.includes('headband')) { px(x0, y0 + 1, w, 2, C.band); const fl = Math.round(Math.sin(t / 80) * 1.5);
     px(x0 - 3, y0 + 1 + fl, 3, 1, C.band); px(x0 - 5, y0 + 2 - fl, 2, 1, C.band); }
   if (pet.traits.includes('goggles')) { px(x0 + 1, y0, w - 2, 1, C.out); px(ex1, y0 - 1, 3, 2, C.glass); px(ex2, y0 - 1, 3, 2, C.glass); }
-  if (pet.traits.includes('antenna')) { px(cx, y0 - 5, 1, 4, C.out); px(cx - 1, y0 - 7, 3, 2, Math.sin(t / 200) > 0 ? C.red : C.gold); }
+  if (pet.traits.includes('antenna')) { px(cx, y0 - 5, 1, 4, C.stick); px(cx - 1, y0 - 7, 3, 2, Math.sin(t / 200) > 0 ? C.gold : '#fff1a8'); }
   if (pet.stage === 'sprout') { px(cx, y0 - 3, 1, 2, C.green); px(cx + 1, y0 - 4, 2, 1, C.green); px(cx - 2, y0 - 3, 2, 1, C.green); }
   if (form) formTop(form, x0, y0, w, h, eyeY, m, t);
   if (pet.stage === 'legend') { const cy = y0 - crownLift; px(cx - 4, cy - 3, 9, 2, C.gold); px(cx - 4, cy - 5, 1, 2, C.gold); px(cx, cy - 5, 1, 2, C.gold); px(cx + 4, cy - 5, 1, 2, C.gold); }
