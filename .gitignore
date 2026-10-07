@@ -4,3 +4,4 @@ demo/dist/
 demo/.wrangler/
 .wrangler/
 previews/
+.DS_Store
