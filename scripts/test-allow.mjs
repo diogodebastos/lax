@@ -43,6 +43,14 @@ for (const c of [`node ${SHARE} send Vera`, `node ${SHARE}`, `node ${SHARE} open
   assert.equal(bashKind(c, REPO), null, c);
 assert.equal(grantKey('Bash', { command: `node ${SHARE} send Vera` }), null, 'a yes to send never covers the next send');
 
+// A new live session: `node lib/terminal.mjs lax <folder>` doesn't ask; anything else through it does.
+const TERM = path.join(REPO, 'lib', 'terminal.mjs');
+for (const c of [`node ${TERM} lax ${REPO}`, `node ${TERM} lax /tmp`, `cd ${REPO} && node lib/terminal.mjs lax .`])
+  assert.notEqual(bashKind(c, REPO), null, c);
+for (const c of [`node ${TERM} lax /nonexistent/folder`, `node ${TERM} rm ${REPO}`, `node ${TERM} lax ${REPO} extra`, `node ${TERM}`,
+  `node ${TERM} lax ${REPO}; osascript -e x`, `node ${TERM} lax "$(pwd)"`, 'node /tmp/terminal.mjs lax /tmp', `node ${TERM} lax "${REPO}"`]) // quoted: masked, can't check the folder
+  assert.equal(bashKind(c, REPO), null, c);
+
 assert.equal(bashKind('npm test', OUT), null, 'npm test outside a repo asks');
 assert.equal(bashKind('git add x', OUT), null, 'git add outside a repo asks');
 
