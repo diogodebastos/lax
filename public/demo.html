@@ -39,10 +39,10 @@
   .landscape .punch { left:30px; top:calc(50% - 6px); } .landscape .crease { top:14px; bottom:14px; left:50%; width:2px;
     background:linear-gradient(180deg,transparent,rgba(255,255,255,.07),transparent); }
 
-  /* Closed phone, top half: the 1.9" cover strip (512 × 260) next to the two cameras. */
+  /* Closed phone, top half: the 1.9" cover strip (512 × 260), with the two cameras on its right. */
   .cover { background:linear-gradient(160deg,#3a3f44,var(--shell)); padding:22px; border-radius:54px; box-shadow:0 20px 50px rgba(0,0,0,.6), inset 0 0 0 2px var(--edge); }
-  .cover .glass { background:#050505; border-radius:34px; padding:22px 26px 22px 110px; position:relative; box-shadow:inset 0 0 0 2px #222; }
-  .cover .cam { position:absolute; left:26px; width:62px; height:62px; border-radius:50%; background:radial-gradient(circle at 40% 40%,#334 0 20%,#000 45%); box-shadow:0 0 0 5px #1a1a1a, 0 0 0 8px #333; }
+  .cover .glass { background:#050505; border-radius:34px; padding:22px 110px 22px 26px; position:relative; box-shadow:inset 0 0 0 2px #222; }
+  .cover .cam { position:absolute; right:26px; width:62px; height:62px; border-radius:50%; background:radial-gradient(circle at 40% 40%,#334 0 20%,#000 45%); box-shadow:0 0 0 5px #1a1a1a, 0 0 0 8px #333; }
   .cover .cam.a { top:46px; } .cover .cam.b { bottom:46px; }
   .cover .screen { border-radius:8px; overflow:hidden; } .cover iframe { width:512px; height:260px; }
 </style>
