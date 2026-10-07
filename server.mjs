@@ -8,12 +8,14 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { ensureHome, commitMind, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice } from './lib/home.mjs';
-import { HOME, MIND, DB, OLD_DB, SETTINGS, secret, ensureDirs, readEnv } from './lib/paths.mjs';
+import { ensureHome, commitMind, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice } from './lib/home.mjs';
+import { HOME, MIND, DB, OLD_DB, SETTINGS } from './lib/paths.mjs';
+import { HOST, TOKEN, authed, isLocal, phoneUrl, pairPage } from './lib/auth.mjs'; // first: it loads Lax's home and local config
 import { grantKey, repoRoot } from './lib/allow.mjs';
 import { MAX_LEVEL, STAGES, levelOf as levelOn, stageIdx, barFor as barOn } from './lib/levels.mjs';
 import { SPECIES, BRANCHES, BARS, BRICK, EGG_XP, RARE, LIMIT_PCT, signals, ratios, pick, branch, dayNight, dayKey, eggProgress, shouldHatch, formFor, nameFor, curveFor, replayEgg, aName, selfLine } from './lib/species.mjs';
 import { createBrain, ensureBrain, brief } from './lib/brain.mjs';
+import { createLearn } from './lib/learn.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus, tabCommand } from './lib/actions.mjs';
 import { readUsage, usageText } from './lib/usage.mjs';
 import { openTerminal, q, ON_MAC } from './lib/terminal.mjs';
@@ -21,19 +23,9 @@ import { tailRecords, newAssistantText, conversation } from './lib/transcript.mj
 import { editDiff } from './lib/diff.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
-// Lax itself lives in ~/.lax (lib/paths.mjs): memory, secrets, mind, logs. This repo is only its body.
-ensureDirs();
-// Local config, a secret: { LAX_PUBLIC_URL, CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET, ... }
-for (const [k, v] of Object.entries(readEnv())) process.env[k] ??= String(v);
 const PORT = Number(process.env.LAX_PORT || 7777);
-// Tunnel only by default: nothing on the LAN can reach Lax, cloudflared connects over loopback.
-const HOST = process.env.LAX_HOST || '127.0.0.1';
-const PUBLIC_URL = (process.env.LAX_PUBLIC_URL || '').replace(/\/$/, '');
+const STARTED = Date.now(); // for /api/health: a restart is over when a newer server answers
 const DEFAULT_WORKDIR = process.env.LAX_WORKDIR || path.join(os.homedir(), 'REPOS');
-
-const tokenFile = secret('token');
-if (!fs.existsSync(tokenFile)) fs.writeFileSync(tokenFile, crypto.randomBytes(12).toString('hex'), { mode: 0o600 });
-const TOKEN = fs.readFileSync(tokenFile, 'utf8').trim();
 
 // ---------- memory ----------
 // lax.db became life.db (what Lax has lived); settings moved out to settings.json. Once, before opening it.
@@ -535,6 +527,7 @@ function clearRelays(match) {
   for (const [id, p] of pending) if (p.relay?.settles && match(channels.get(p.relay.cid) || {})) p.finish('none');
 }
 function channelEvent(b) {
+  if (b.type === 'gap') return learn.gap({ ...b, project: proj(b.cwd) }); // from a live session, or from Lax's own assistant
   const c = channels.get(b.cid); if (!c) return false;
   c.active = Date.now();
   if (b.type === 'reply') {
@@ -596,10 +589,19 @@ const ASSISTANT = 'assistant:' + MIND; // its key in voiceSessions (a conversati
 laxHistory(); // Lax's tab starts with your last conversation, not empty
 
 // ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
-ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addMemoryLayout(); addToolsAdvice();
+ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addMemoryLayout(); addToolsAdvice(); addWishAdvice();
 const brain = createBrain({ db, settings: () => settings, feed, diary: (t) => diary(t), broadcast, gainXp: (n) => { gainXp(n); save(); pushState(); },
   sessionInfo: (sid) => sessions.get(sid), skip: (sid) => sid === voiceSessions[ASSISTANT], claude: process.env.LAX_CLAUDE,
   log: (...a) => console.log('[brain]', ...a) });
+// ---------- what it couldn't do: wishes, offered by voice, built on a branch, merged on your yes (lib/learn.mjs) ----------
+// A quiet moment to offer one: the phone is there, nothing is waiting on you, and no session is busy.
+const quiet = () => clients.size > 0 && !voiceRun && !channelWait && !laxOnMac && pending.size === 0
+  && ![...sessions.values()].some((s) => s.status === 'working' && Date.now() - s.ts < 120e3);
+const learn = createLearn({ settings: () => settings, feed, diary: (t) => diary(t), broadcast, pending, quiet,
+  gainXp: (n) => { gainXp(n); save(); pushState(); }, body: process.env.LAX_BODY || ROOT, claude: process.env.LAX_CLAUDE,
+  say: (text, kind = 'reply') => broadcast('bubble', { id: 'learn' + Date.now(), kind, text, speak: true }),
+  record: (kind, text) => logEvent('', 'mind', 'learning', `${kind}: ${text}`), // its learning record, for the weekly review
+  log: (...a) => console.log('[learn]', ...a) });
 const tabLabel = (s) => `${s.project}·${s.where || 'cli'}`;
 function sessionsBrief() {
   const list = sessionList().filter((s) => s.id !== voiceSessions[ASSISTANT]);
@@ -681,6 +683,8 @@ function askPick(cid, pickId, question, labels) {
   broadcast('bubble', bubble);
 }
 function talk(text) {
+  // Answering a wish question, "any wishes?", "merge it" (lib/learn.mjs).
+  if (learn.hears(text, { toLax: !pickChannel() })) return true;
   // "Talk to edge cava" / "back to you": the phone changes tab, as if you'd tapped it (whichever tab you said it in).
   const tab = voiceAction(text) ? null : tabCommand(text, sessionList().slice(0, 8), settings.name);
   if (tab) { feed(`> ${short(text, 90)}`, 'prompt', settings.name.toLowerCase()); broadcast('tab', { view: tab }); return true; }
@@ -738,27 +742,13 @@ function talk(text) {
 }
 
 // ---------- http ----------
-const lanIp = () => Object.values(os.networkInterfaces()).flat().find((i) => i && i.family === 'IPv4' && !i.internal)?.address;
-const phoneUrl = () => `${PUBLIC_URL || `http://${lanIp()}:${PORT}`}/?t=${TOKEN}`;
-// The Android app's pairing link: Lax URL + the Cloudflare Access service token for its background link.
-const appPairUrl = () => 'lax://pair?' + new URLSearchParams({ u: phoneUrl(),
-  id: process.env.CF_ACCESS_CLIENT_ID || '', s: process.env.CF_ACCESS_CLIENT_SECRET || '' });
-// Truly local: loopback AND not proxied. cloudflared also connects from 127.0.0.1, but adds cf-* headers.
-const isLocal = (req) => /^(::1|127\.0\.0\.1|::ffff:127\.0\.0\.1)$/.test(req.socket.remoteAddress)
-  && !['cf-connecting-ip', 'cf-ray', 'x-forwarded-for', 'cf-access-jwt-assertion'].some((h) => h in req.headers);
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
 const body = (req) => new Promise((res) => { let b = ''; req.on('data', (d) => (b += d)); req.on('end', () => { try { res(JSON.parse(b || '{}')); } catch { res({}); } }); });
 const json = (res, obj, code = 200) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
-  const authed = (req.headers['x-lax-token'] || url.searchParams.get('t')) === TOKEN;
-
-  if (url.pathname === '/pair') {
-    if (!isLocal(req)) { res.writeHead(403); return res.end(); }
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-    return res.end(fs.readFileSync(path.join(ROOT, 'public', 'pair.html'), 'utf8').replace('%%URL%%', phoneUrl()).replace('%%APP%%', appPairUrl()));
-  }
+  if (url.pathname === '/pair') return pairPage(req, res, { root: ROOT, port: PORT });
   // The demo, live from the working folder (a local preview). Publicly, Cloudflare serves /demo itself from the last push
   // to main (scripts/demo.mjs), so it never reaches here. A fixed list from public/; the app runs in ?demo mode.
   if (req.method === 'GET' && (url.pathname === '/demo' || url.pathname.startsWith('/demo/'))) {
@@ -776,7 +766,11 @@ http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': MIME[path.extname(f)] || 'application/octet-stream', 'cache-control': 'no-store' });
     return fs.createReadStream(f).pipe(res);
   }
-  if (!authed) return json(res, { error: 'bad token' }, 401);
+  if (url.pathname === '/api/health' && isLocal(req)) { // scripts/after-merge.mjs: am I back, and fine?
+    let ok = false; try { ok = !!db.prepare('SELECT 1 AS x').get().x && fs.existsSync(MIND); } catch {}
+    return json(res, { ok, started: STARTED }, ok ? 200 : 500);
+  }
+  if (!authed(req, url)) return json(res, { error: 'bad token' }, 401);
 
   if (url.pathname === '/api/stream') {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache, no-transform', connection: 'keep-alive', 'x-accel-buffering': 'no' });
@@ -831,6 +825,7 @@ http.createServer(async (req, res) => {
     case '/api/rebirth': rebirth(); broadcast('reborn', {}); pushState(); return json(res, { ok: true });
     case '/api/diag': console.log(`[phone ${new Date().toISOString().slice(11, 19)}] ${JSON.stringify(b).slice(0, 600)}`); return json(res, { ok: true });
     case '/api/brain/reflect': return json(res, { ok: isLocal(req) && !!b.session && (brain.enqueue(String(b.session)), true) }); // local only: reflect now
+    case '/api/learn/merged': return json(res, { ok: isLocal(req) && learn.merged({ id: String(b.id || ''), ok: !!b.ok, why: String(b.why || '') }) });
     case '/api/channel/event': return json(res, { ok: isLocal(req) && channelEvent(b) });
     case '/api/usage': if (isLocal(req)) sessionInfo(b); return json(res, { ok: isLocal(req) && setUsage(b.rate_limits) });
     case '/api/target':
@@ -841,7 +836,7 @@ http.createServer(async (req, res) => {
     default: return json(res, { error: 'not found' }, 404);
   }
 }).listen(PORT, HOST, () => {
-  console.log(`Lax is awake on ${HOST}:${PORT}.\n  Mac:   http://localhost:${PORT}/?t=${TOKEN}\n  Phone: ${phoneUrl()}\n  Pair:  http://localhost:${PORT}/pair  (QR code)`);
+  console.log(`Lax is awake on ${HOST}:${PORT}.\n  Mac:   http://localhost:${PORT}/?t=${TOKEN}\n  Phone: ${phoneUrl(PORT)}\n  Pair:  http://localhost:${PORT}/pair  (QR code)`);
 });
 
 // Species (lib/species.mjs): a Lax from before them hatches again, and an egg checks whether its third day is over.

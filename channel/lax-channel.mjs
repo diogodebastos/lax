@@ -23,7 +23,10 @@ const SESSION_PID = claudePid();
 // Registered at user level, so this server starts in every session. Only sessions launched with the lax channel
 // (`claude --dangerously-load-development-channels server:lax` / `--channels …lax…`) receive channel events;
 // everywhere else stay dormant: no tools, no link to Lax (voice would vanish into a session that can't hear it).
-const CHANNEL_MODE = process.env.LAX_CHANNEL_FORCE === '1' || /--(dangerously-load-development-)?channels\b[^]*\blax\b/.test(processArgs(SESSION_PID));
+const CHANNEL_MODE = process.env.LAX_CHANNEL_FORCE ? process.env.LAX_CHANNEL_FORCE === '1' // tests: on or off
+  : /--(dangerously-load-development-)?channels\b[^]*\blax\b/.test(processArgs(SESSION_PID));
+// Lax's own assistant (a voice run, lib/server talk()) gets only `gap`: it talks back through its answer, not `reply`.
+const VOICE_MODE = !CHANNEL_MODE && process.env.LAX_VOICE === '1' && !process.env.LAX_REFLECT && !process.env.LAX_BUILD;
 const log = (...a) => process.stderr.write(`[lax-channel] ${a.join(' ')}\n`); // stdout belongs to MCP
 
 const post = (body) => fetch(`${LAX}/api/channel/event`, {
@@ -43,12 +46,30 @@ const mcp = new Server(
       'a pixel companion on their phone (they may be away from the keyboard). Treat them like normal user messages ' +
       'and do the work in this session. When done (or if you need to ask something), call the lax `reply` tool with the ' +
       'chat_id. Lax reads the reply aloud: make the first sentence short, plain and speakable (no markdown, no code); ' +
-      'details may follow.',
+      'details may follow. ' +
+      'If you can\'t do what they asked through Lax (no tool, no access, not built yet), or they say "you should be able to…" ' +
+      'or "learn to…", call the lax `gap` tool once, then answer as usual: Lax keeps a wish list and may offer to learn it.',
   },
 );
 
+const GAP = {
+  name: 'gap',
+  description: 'Tell Lax about something the user asked for that you can\'t do (no tool, no access, not built yet), or that they ' +
+    'said Lax should learn. Call it once per ask, then answer the user as usual. Lax keeps a wish list and may later offer, by voice, ' +
+    'to learn it (on a branch the user merges).',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      asked: { type: 'string', description: 'What the user asked for, in a few plain words ("share this to WhatsApp")' },
+      why: { type: 'string', description: 'Why it couldn\'t be done ("no way to reach WhatsApp from here")' },
+      idea: { type: 'string', description: 'How Lax could learn it, if you see a way (optional)' },
+    },
+    required: ['asked', 'why'],
+  },
+};
+
 mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: !CHANNEL_MODE ? [] : [{
+  tools: VOICE_MODE ? [GAP] : !CHANNEL_MODE ? [] : [GAP, {
     name: 'reply',
     description: 'Reply to the user through Lax (shown in a speech bubble on their phone and read aloud).',
     inputSchema: {
@@ -99,7 +120,12 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
     const { done, pick, ...r } = await shareAndTell(req.params.arguments || {});
     return { content: [{ type: 'text', text: JSON.stringify(r) }], isError: !r.ok };
   }
-  if (req.params.name !== 'reply') throw new Error(`unknown tool: ${req.params.name}`);
+  if (req.params.name === 'gap' && (CHANNEL_MODE || VOICE_MODE)) {
+    const { asked, why, idea } = req.params.arguments || {};
+    const r = await post({ type: 'gap', asked: String(asked || ''), why: String(why || ''), idea: String(idea || ''), cwd: process.cwd(), voice: VOICE_MODE });
+    return { content: [{ type: 'text', text: r.ok ? 'Noted on Lax\'s wish list. Now answer the user as usual.' : 'Lax is not reachable; answer the user as usual.' }] };
+  }
+  if (req.params.name !== 'reply' || !CHANNEL_MODE) throw new Error(`unknown tool: ${req.params.name}`);
   const { chat_id, text } = req.params.arguments || {};
   const r = await post({ type: 'reply', chat_id: String(chat_id || ''), text: String(text || '') });
   return { content: [{ type: 'text', text: r.ok ? 'sent to Lax' : 'Lax is not reachable; the user did not get this reply' }] };
