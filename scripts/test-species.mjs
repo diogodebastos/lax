@@ -1,6 +1,6 @@
 // Lax's species (lib/species.mjs): what it hatches as, its lines, the egg, the copier, the fox's branches.
 import fs from 'node:fs';
-import { SPECIES, BRANCHES, signals, ratios, pick, branch, dayNight, eggProgress, shouldHatch, formFor, nameFor, replayEgg, dayKey, aName, curveFor } from '../lib/species.mjs';
+import { SPECIES, BRANCHES, signals, ratios, pick, branch, dayNight, eggProgress, shouldHatch, formFor, nameFor, replayEgg, dayKey, aName, curveFor, selfLine } from '../lib/species.mjs';
 
 let failed = 0;
 const check = (name, got, want) => { const ok = JSON.stringify(got) === JSON.stringify(want);
@@ -90,6 +90,16 @@ check('local days', dayKey(new Date('2026-10-05T23:59').getTime()), '2026-10-05'
 const ui = fs.readFileSync(new URL('../public/lax.js', import.meta.url), 'utf8');
 const forms = new Set(['grass', 'fire', 'water', 'electric', 'fox'].flatMap((id) => line({ id })).concat(Object.values(BRANCHES).map((b) => b.form), ['float']));
 check('the phone draws every form', [...forms].filter((f) => !ui.includes(`f === '${f}'`)), []);
+
+// What Lax's mind is told it is (selfLine).
+check('an egg knows it is an egg, and what leads', selfLine({ hatched: false, egg: { pct: 62, lead: 'water' } }).split('.')[0],
+  'an egg, 62% of the way to hatching; the water speckles lead so far');
+check('a hatched one knows its species, form and level', selfLine({ hatched: true, species: { id: 'fire', name: 'fire' }, look: { form: 'ember' }, level: 7, stage: 'sprout', picked: true }).split('. ')[0],
+  'a fire Lax (ember form), level 7, sprout stage; your species was picked by hand in the Life menu');
+check('the fox by its branch name', selfLine({ hatched: true, species: { id: 'fox', name: 'moon' }, look: { form: 'rings' }, level: 52, stage: 'brick' }).split('. ')[0],
+  'a moon Lax (rings form), level 52, brick stage');
+check('no species: just a colour', selfLine({ hatched: true, species: { id: 'plain', name: 'plain' }, look: {}, level: 3, stage: 'sprout' }).split('. ')[0],
+  'a Lax with no species, just a colour, level 3, sprout stage');
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nall species checks passed');
 process.exit(failed ? 1 : 0);

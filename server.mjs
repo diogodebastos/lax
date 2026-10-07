@@ -8,11 +8,11 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { ensureHome, commitMind, syncMindName, addMemoryLayout, addToolsAdvice } from './lib/home.mjs';
+import { ensureHome, commitMind, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice } from './lib/home.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS, secret, ensureDirs, readEnv } from './lib/paths.mjs';
 import { grantKey, repoRoot } from './lib/allow.mjs';
 import { MAX_LEVEL, STAGES, levelOf as levelOn, stageIdx, barFor as barOn } from './lib/levels.mjs';
-import { SPECIES, BRANCHES, BARS, BRICK, EGG_XP, RARE, LIMIT_PCT, signals, ratios, pick, branch, dayNight, dayKey, eggProgress, shouldHatch, formFor, nameFor, curveFor, replayEgg, aName } from './lib/species.mjs';
+import { SPECIES, BRANCHES, BARS, BRICK, EGG_XP, RARE, LIMIT_PCT, signals, ratios, pick, branch, dayNight, dayKey, eggProgress, shouldHatch, formFor, nameFor, curveFor, replayEgg, aName, selfLine } from './lib/species.mjs';
 import { createBrain, ensureBrain, brief } from './lib/brain.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus, tabCommand } from './lib/actions.mjs';
 import { readUsage, usageText } from './lib/usage.mjs';
@@ -701,6 +701,7 @@ function talk(text) {
   if (laxOnMac) { broadcast('bubble', { id: 'onmac' + Date.now(), kind: 'reply', text: `I'm open on the Mac right now. Quit there and I'll hear you here again.`, speak: true }); return true; }
   const cwd = MIND;
   ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name });
+  syncMindSelf(selfLine(petView())); // it knows what it is right now: species, form, level (or still an egg)
   const args = ['-p', text, '--output-format', 'stream-json', '--verbose', '--add-dir', DEFAULT_WORKDIR, '--append-system-prompt', assistantPrompt()];
   if (voiceSessions[ASSISTANT]) args.push('--resume', voiceSessions[ASSISTANT]);
   pet.voice++; gainXp(3); save();
