@@ -800,3 +800,13 @@ $('#chips').addEventListener('click', (e) => {
   if (chip.dataset.view !== 'all') showBubble({ id: 'notlive', kind: 'reply', text: `${chip.dataset.label} can't hear me, so I'll answer you myself. Start it with "lax" to talk to it.` });
 });
 setView(view); addEventListener('resize', () => setView(view)); // folding the phone shows or hides the tabs
+// Cover screen: no tabs to see, so tap the tab's name (top left) to go to the next one, exactly like tapping it in the
+// open app. Lax says where you are, since you may not be looking.
+$('#tab').addEventListener('click', () => {
+  const tabs = [...$('#chips').children]; if (tabs.length < 2) return;
+  const next = tabs[(tabs.findIndex((t) => t.dataset.view === view) + 1) % tabs.length];
+  next.click();
+  const who = next.dataset.view === 'all' ? settings.name : next.dataset.label.split('·')[0].replace(/-/g, ' ');
+  if (next.dataset.view !== 'all' && !next.dataset.cid) showBubble({ id: 'notlive', kind: 'reply', text: `${next.dataset.label} can't hear me. I'll answer.` }); // fits the strip
+  speak(next.dataset.view === 'all' || next.dataset.cid ? who : `${who}. It can't hear me, so I'll answer.`);
+});

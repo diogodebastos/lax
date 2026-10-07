@@ -30,7 +30,7 @@
   #dots b.working { background:var(--blue); animation:blink .5s steps(2) infinite; }
   #dots b.waiting { background:var(--amber); animation:blink .3s steps(2) infinite; }
   #dots b.done { background:var(--green); }
-  #tab { display:none; color:var(--coral); letter-spacing:1px; white-space:nowrap; } /* cover screen: the open tab, in place of the menu */
+  #tab { display:none; color:var(--coral); letter-spacing:1px; white-space:nowrap; cursor:pointer; padding:6px 10px 6px 0; margin:-6px 0; } /* cover screen: the open tab, in place of the menu */
   @keyframes blink { 50% { opacity:.25 } }
 
   /* Pixel speech bubble */
@@ -238,6 +238,6 @@
   </div>
 </div>
 <div id="wake"><div>tap to wake <span id="wakeName">Lax</span><small>(unlocks sound + mic)</small></div></div>
-<script src="lax.js?v=15"></script>
+<script src="lax.js?v=16"></script>
 </body>
 </html>
