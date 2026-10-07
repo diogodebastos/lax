@@ -315,7 +315,7 @@ function renderHud() {
   $('#xp i').style.width = Math.round(100 * (pet.xp - pet.prevXp) / Math.max(1, pet.nextXp - pet.prevXp)) + '%';
   // Cover screen: the open tab's name in place of the menu (settings live in the open app).
   const vi = shown.findIndex((s) => s.id === view); $('#tab').textContent = vi < 0 ? settings.name.toLowerCase() : labels[vi];
-  $('#dots').innerHTML = shown.map((s) => `<b class="${s.status}" title="${s.project}"></b>`).join('');
+  $('#dots').innerHTML = shown.map((s) => `<b class="${s.status}${s.id === view ? ' on' : ''}" data-view="${esc(s.id)}" title="${esc(s.project)}"></b>`).join('');
 }
 const term = $('#term');
 // Which tab is open: 'all' or a session id. Per device, so it lives here, not on the Mac.
@@ -800,13 +800,19 @@ $('#chips').addEventListener('click', (e) => {
   if (chip.dataset.view !== 'all') showBubble({ id: 'notlive', kind: 'reply', text: `${chip.dataset.label} can't hear me, so I'll answer you myself. Start it with "lax" to talk to it.` });
 });
 setView(view); addEventListener('resize', () => setView(view)); // folding the phone shows or hides the tabs
-// Cover screen: no tabs to see, so tap the tab's name (top left) to go to the next one, exactly like tapping it in the
-// open app. Lax says where you are, since you may not be looking.
+// Cover screen: no tabs to see, so tap the tab's name (top left) to go to the next one, or a session's square to go
+// straight to it: exactly like tapping its tab in the open app. Lax says where you are, since you may not be looking.
 $('#tab').addEventListener('click', () => {
   const tabs = [...$('#chips').children]; if (tabs.length < 2) return;
-  const next = tabs[(tabs.findIndex((t) => t.dataset.view === view) + 1) % tabs.length];
+  goTab(tabs[(tabs.findIndex((t) => t.dataset.view === view) + 1) % tabs.length]);
+});
+$('#dots').addEventListener('click', (e) => {
+  const sq = e.target.closest('b'); if (!cover() || !sq || sq.dataset.view === view) return;
+  const chip = $('#chips').querySelector(`[data-view="${CSS.escape(sq.dataset.view)}"]`); if (chip) goTab(chip);
+});
+function goTab(next) {
   next.click();
   const who = next.dataset.view === 'all' ? settings.name : next.dataset.label.split('·')[0].replace(/-/g, ' ');
   if (next.dataset.view !== 'all' && !next.dataset.cid) showBubble({ id: 'notlive', kind: 'reply', text: `${next.dataset.label} can't hear me. I'll answer.` }); // fits the strip
   speak(next.dataset.view === 'all' || next.dataset.cid ? who : `${who}. It can't hear me, so I'll answer.`);
-});
+}
