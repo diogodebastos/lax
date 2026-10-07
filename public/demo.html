@@ -8,7 +8,7 @@
 <meta name="description" content="Lax: a pixel companion for Claude Code that lives on an old phone.">
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 <style>
-  /* The public demo (/demo-portrait, /demo-landscape, /demo-cover): the real Lax page in demo mode, inside a Galaxy Z
+  /* The public demo (/demo): the real Lax page in demo mode, inside a Galaxy Z
      Flip 3 drawn at its real proportions and scaled to fit the visitor's screen. Served by server.mjs. */
   :root { --bg:#121110; --fg:#e8e2d6; --dim:#8a8378; --coral:#D97757; --shell:#1b1e21; --edge:#4a4f55; }
   * { box-sizing:border-box; margin:0; }
@@ -19,8 +19,8 @@
   h1 { color:var(--coral); font-weight:400; font-size:34px; line-height:1; }
   .sub { color:var(--dim); font-size:19px; margin-top:4px; max-width:560px; }
   nav { display:flex; gap:8px; justify-content:center; margin-top:12px; flex-wrap:wrap; }
-  nav a { color:var(--dim); text-decoration:none; font-size:20px; border:2px solid #2c2824; padding:2px 12px 3px; }
-  nav a.on { color:var(--coral); border-color:var(--coral); }
+  nav button { font:inherit; background:none; cursor:pointer; color:var(--dim); font-size:20px; border:2px solid #2c2824; padding:2px 12px 3px; }
+  nav button.on { color:var(--coral); border-color:var(--coral); }
   #fit { flex:1; min-height:0; width:100%; position:relative; overflow:hidden; }
   /* Out of the flow, so the phone's real size never widens the page; fit() scales it into the box. */
   #device { position:absolute; left:50%; top:50%; transform-origin:center; }
@@ -51,7 +51,7 @@
 <header>
   <h1>Lax</h1>
   <p class="sub">A pixel companion for Claude Code that lives on an old phone. You talk, it answers, and it grows with how you work.</p>
-  <nav><a href="/demo-portrait">open</a><a href="/demo-landscape">sideways</a><a href="/demo-cover">closed</a></nav>
+  <nav><button data-pose="portrait">open</button><button data-pose="landscape">sideways</button><button data-pose="cover">closed</button></nav>
 </header>
 <div id="fit"><div id="device"></div></div>
 <p class="note"></p>
@@ -61,24 +61,27 @@
     landscape: { layout: 'side', cls: 'open landscape', note: '<b>Phone open, held sideways.</b> Lax on the left half; tabs and the terminal on the right.' },
     cover: { layout: 'wide', cls: 'cover', note: '<b>Phone closed.</b> Just Lax on the cover screen: you talk, it answers. A bubble only when a session needs your yes, and one square per session on top.' },
   };
-  const pose = location.pathname.replace('/demo-', '');
-  const p = POSES[pose] || POSES.portrait;
-  document.querySelector(`nav a[href="/demo-${pose in POSES ? pose : 'portrait'}"]`).classList.add('on');
-  document.querySelector('.note').innerHTML = p.note + ' Tap Lax to talk (it only says hi back: this is a demo).';
-  const src = `/demo-app?demo&awake&layout=${p.layout}`;
-  const frame = `<iframe src="${src}" title="Lax" allow="microphone; autoplay"></iframe>`;
   const dev = document.querySelector('#device');
-  dev.className = p.cls;
-  dev.innerHTML = p.cls === 'cover'
-    ? `<div class="glass"><div class="cam a"></div><div class="cam b"></div><div class="screen">${frame}</div></div>`
-    : `<div class="punch"></div><div class="screen">${frame}</div><div class="crease"></div>`;
+  // One page, three poses: the buttons swap the phone (and restart the demo inside it in that layout).
+  function show(pose) {
+    const p = POSES[pose];
+    document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.pose === pose));
+    document.querySelector('.note').innerHTML = p.note + ' Tap Lax to talk (it only says hi back: this is a demo).';
+    const frame = `<iframe src="/demo/app?demo&awake&layout=${p.layout}" title="Lax" allow="microphone; autoplay"></iframe>`;
+    dev.className = p.cls;
+    dev.innerHTML = p.cls === 'cover'
+      ? `<div class="glass"><div class="cam a"></div><div class="cam b"></div><div class="screen">${frame}</div></div>`
+      : `<div class="punch"></div><div class="screen">${frame}</div><div class="crease"></div>`;
+    fit();
+  }
+  document.querySelector('nav').addEventListener('click', (e) => e.target.dataset.pose && show(e.target.dataset.pose));
   // Scale the phone to the space between the header and the note, never above its real size times 1.4.
   function fit() {
     const box = document.querySelector('#fit').getBoundingClientRect();
     const k = Math.min(box.width / dev.offsetWidth, box.height / dev.offsetHeight, 1.4);
     dev.style.transform = `translate(-50%, -50%) scale(${k})`;
   }
-  addEventListener('resize', fit); fit(); document.fonts?.ready.then(fit);
+  addEventListener('resize', fit); show('cover'); document.fonts?.ready.then(fit);
 </script>
 </body>
 </html>
