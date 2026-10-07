@@ -15,6 +15,7 @@ import { MAX_LEVEL, STAGES, levelOf as levelOn, stageIdx, barFor as barOn, curve
 import { createBrain, ensureBrain, brief } from './lib/brain.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus } from './lib/actions.mjs';
 import { readUsage, usageText } from './lib/usage.mjs';
+import { openTerminal, q, ON_MAC } from './lib/terminal.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 // Lax itself lives in ~/.lax (lib/paths.mjs): memory, secrets, mind, logs. This repo is only its body.
@@ -189,8 +190,10 @@ function setUsage(rl) {
 const pushState = () => broadcast('state', stateMsg());
 // session: which Claude Code session a line belongs to, so the phone can show one session's tab at a time.
 const recentFeed = []; // what the assistant knows about your sessions
+// own: Lax's assistant's own work (its commands and their output), which `lax watch` shows as Lax's.
 const feed = (line, kind = 'tool', project, session) => {
   const f = { line, kind, project, session, ts: Date.now() };
+  if (session && session === voiceSessions[ASSISTANT]) f.own = true;
   recentFeed.push(f); if (recentFeed.length > 300) recentFeed.shift();
   broadcast('feed', f);
 };
@@ -232,13 +235,16 @@ function onHook(h) {
   if (/^(PostToolUse|PostToolUseFailure|Stop|UserPromptSubmit)$/.test(h.hook_event_name)) clearRelays((c) => c.cwd === h.cwd);
   if (/^(Stop|SessionEnd)$/.test(h.hook_event_name)) grants.delete(sid); // the answer is done: your yeses were for that one
   brain.onEvent(sid, h.hook_event_name); // a quiet session after real work → Lax reflects on it
+  // Lax's conversation came up outside a voice run: it's open in a terminal on the Mac (until that ends).
+  if (mine && h.hook_event_name === 'SessionStart' && !voiceRun) laxOnMac = true;
+  if (mine && h.hook_event_name === 'SessionEnd' && laxOnMac) { laxOnMac = false; feed('○ back on the phone', 'session', settings.name.toLowerCase()); }
   switch (h.hook_event_name) {
     case 'SessionStart':
       pet.sessions++; gainXp(2); s.status = 'idle';
       feed(`● session ${project}`, 'session', project, sid); logEvent(sid, project, 'session', h.source || 'start');
       break;
     case 'UserPromptSubmit':
-      s.status = 'working'; if (!mine) feed(`> ${short(h.prompt, 90)}`, 'prompt', project, sid);
+      s.status = 'working'; if (!mine) feed(`> ${short(h.prompt, 90)}`, 'prompt', project, sid); else if (laxOnMac) feed(`> ${short(h.prompt, 90)}`, 'prompt', settings.name.toLowerCase());
       logEvent(sid, project, 'prompt', short(h.prompt, 500));
       break;
     case 'PreToolUse': {
@@ -269,7 +275,7 @@ function onHook(h) {
     case 'Stop': {
       s.status = 'done'; pet.turns++; gainXp(5);
       const msg = h.last_assistant_message || '';
-      if (!mine) feed(`✓ ${project}: ${clip(msg, 1500) || 'done'}`, 'done', project, sid);
+      if (!mine) feed(`✓ ${project}: ${clip(msg, 1500) || 'done'}`, 'done', project, sid); else if (laxOnMac) feed(`↩ ${clip(msg) || 'done'}`, 'done', settings.name.toLowerCase());
       logEvent(sid, project, 'done', short(msg, 1000));
       if (!(voiceRun && voiceRun.sessionId === sid)) // voice runs speak their own result
         broadcast('bubble', { id: 'done-' + sid + Date.now(), kind: 'done', text: `${project}: ${spoken(msg) || 'done!'}`, session: sid, speak: false });
@@ -386,6 +392,20 @@ function channelEvent(b) {
 // Voice goes into a live session (a tab started with `lax`), or else to Lax itself: an assistant you can ask anything.
 // It's one long-running headless Claude in LAX_WORKDIR that also knows what your sessions are doing.
 let voiceRun = null;
+let laxOnMac = false; // Lax's conversation is open in a terminal on the Mac: the phone waits until it ends
+// "open on mac": the same conversation, continued in a real terminal on the Mac (lib/terminal.mjs).
+async function openOnMac() {
+  const id = voiceSessions[ASSISTANT], name = settings.name;
+  if (!id) return `There's nothing to continue yet. Talk to me first.`;
+  if (voiceRun) return `I'm still answering. Try again when I'm done.`;
+  if (laxOnMac) return `I'm already open on the Mac.`;
+  laxOnMac = true; // before the terminal's SessionStart, so a quick word from the phone can't race it
+  try {
+    const app = await openTerminal(MIND, `exec claude --resume ${id} --add-dir ${q(DEFAULT_WORKDIR)}`);
+    feed(`○ open on the mac (${app}): the phone waits until you quit there`, 'session', name.toLowerCase());
+    return `Opened on the Mac. Quit there to talk to me here again.`;
+  } catch (e) { laxOnMac = false; return `I couldn't open it on the Mac. ${short(e.message, 120)}`; }
+}
 const ASSISTANT = 'assistant:' + MIND; // its key in voiceSessions (a conversation only resumes in the folder it started in)
 
 // ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
@@ -486,7 +506,10 @@ function talk(text) {
     return true;
   }
   if (voiceRun) return false;
-  const cwd = MIND, name = settings.name.toLowerCase();
+  const name = settings.name.toLowerCase();
+  if (ON_MAC.test(text.trim())) { feed(`> ${short(text, 90)}`, 'prompt', name); openOnMac().then((say) => broadcast('bubble', { id: 'onmac' + Date.now(), kind: 'reply', text: say, speak: true })); return true; }
+  if (laxOnMac) { broadcast('bubble', { id: 'onmac' + Date.now(), kind: 'reply', text: `I'm open on the Mac right now. Quit there and I'll hear you here again.`, speak: true }); return true; }
+  const cwd = MIND;
   ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name });
   const args = ['-p', text, '--output-format', 'stream-json', '--verbose', '--add-dir', DEFAULT_WORKDIR, '--append-system-prompt', assistantPrompt()];
   if (voiceSessions[ASSISTANT]) args.push('--resume', voiceSessions[ASSISTANT]);
@@ -554,6 +577,9 @@ http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache, no-transform', connection: 'keep-alive', 'x-accel-buffering': 'no' });
     clients.add(res); req.on('close', () => clients.delete(res));
     res.write(`event: state\ndata: ${JSON.stringify(stateMsg())}\n\n`);
+    // ?backlog=N: the last N feed lines first (`lax watch`; the phone keeps its own).
+    const n = Math.min(300, Number(url.searchParams.get('backlog')) || 0);
+    for (const f of n ? recentFeed.slice(-n) : []) res.write(`event: feed\ndata: ${JSON.stringify(f)}\n\n`);
     for (const p of pending.values()) res.write(`event: bubble\ndata: ${JSON.stringify(p.bubble)}\n\n`);
     const ping = setInterval(() => res.write(': ping\n\n'), 20000); req.on('close', () => clearInterval(ping));
     return;

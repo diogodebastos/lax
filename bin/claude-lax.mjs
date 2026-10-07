@@ -15,6 +15,9 @@ import { createRequire } from 'node:module';
 import { HOME } from '../lib/paths.mjs';
 import { ACTIONS, screenMode } from '../lib/actions.mjs';
 
+// `lax watch`: follow what Lax sees, in this terminal (bin/lax-watch.mjs). Nothing else starts.
+if (process.argv[2] === 'watch') { process.argv.splice(2, 1); await import('./lax-watch.mjs'); } // runs until ctrl-c
+
 const CLAUDE = process.env.LAX_CLAUDE || 'claude';
 const args = ['--dangerously-load-development-channels', 'server:lax', ...process.argv.slice(2)];
 const env = { ...process.env };
