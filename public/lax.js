@@ -942,7 +942,7 @@ function asleep() {
 // ---------- demo mode (?demo) — cycles every state without a server ----------
 function demo() {
   pet = { name: 'Lax', level: 7, stage: 'cube', traits: ['headband'], mood: 'happy', xp: 400, prevXp: 360, nextXp: 490, streak: 4,
-    species: { id: 'fire', name: 'fire' }, look: { form: 'blaze', color: '#D97757', lift: 0 } };
+    species: { id: 'plain', name: 'plain', color: '#D97757' }, look: { form: null, color: '#D97757', lift: 0 } };
   sessions = [{ id: 'd1', project: 'api', where: 'mac', status: 'working', mode: 'acceptEdits', ctx: 41, model: 'Opus 5.5' }, { id: 'd2', project: 'web', where: 'cli', status: 'done' }];
   settings = { ...settings, captions: true }; view = 'd1'; applyLook(); renderHud(); // the api tab is open, so its feed shows
   setTimeout(() => showBubble({ id: 'hi', kind: 'reply', text: 'Hi, I\'m Lax. Tap me and talk.' }), 400);
