@@ -50,6 +50,16 @@ class MainActivity : Activity() {
         /** Where Lax was just moved, and when: covered there right after (the cover's clock), it comes back at once. */
         @Volatile private var movedTo = -1
         @Volatile private var movedAt = 0L
+        /** The hinge's last word (null: not read yet). LaxService opens Lax on the cover when something needs you. */
+        @Volatile var folded: Boolean? = null
+        /** Lax on the cover, from anywhere in the app ("display over other apps" lets it come up from the background). */
+        fun openOnCover(ctx: android.content.Context) = try {
+            ctx.startActivity(Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                ActivityOptions.makeBasic().setLaunchDisplayId(coverDisplay(ctx)).toBundle()); true
+        } catch (e: Exception) { Log.w("Lax", "open on cover: $e"); false }
+        // Apps don't see the cover in DisplayManager's list (it's "own content only"); on the Flip it's display 1.
+        fun coverDisplay(ctx: android.content.Context) =
+            ctx.getSystemService(DisplayManager::class.java).displays.firstOrNull { it.displayId != Display.DEFAULT_DISPLAY }?.displayId ?: 1
     }
 
     private lateinit var web: WebView
@@ -119,7 +129,6 @@ class MainActivity : Activity() {
     // unfold while it's on the cover → back to the main screen. Lax not in front: nothing happens. The hinge says
     // folded or open (the screens' on/off states can't tell a fold from the power button). Watched here, by the screen
     // you're looking at: a background service doesn't get the hinge's readings.
-    private var folded: Boolean? = null
     private val hinge = object : SensorEventListener {
         override fun onAccuracyChanged(s: Sensor?, a: Int) {}
         override fun onSensorChanged(e: SensorEvent) {
@@ -129,8 +138,7 @@ class MainActivity : Activity() {
             val was = folded; folded = now
             Log.w("Lax", "hinge ${angle.toInt()}°: ${if (now) "folded" else "open"}, lax on $front (in front: $resumed)")
             if (was == null) return // the first reading only tells where we start
-            // Apps don't see the cover in DisplayManager's list (it's "own content only"); on the Flip it's display 1.
-            val cover = getSystemService(DisplayManager::class.java).displays.firstOrNull { it.displayId != Display.DEFAULT_DISPLAY }?.displayId ?: 1
+            val cover = coverDisplay(this@MainActivity)
             if (now && wasOn(Display.DEFAULT_DISPLAY)) moveTo(cover)
             else if (!now && wasOn(cover)) moveTo(Display.DEFAULT_DISPLAY)
         }
