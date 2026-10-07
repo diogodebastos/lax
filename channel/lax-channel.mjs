@@ -64,6 +64,8 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
     description: 'Share a file or text from this Mac. Default (app "whatsapp"): opens the contact\'s chat in WhatsApp ' +
       'Desktop with the text typed in or the file pasted in; Lax then asks the user on the phone and sends only on their yes. ' +
       'If several contacts match, Lax asks the user which one on the phone and carries on by itself. ' +
+      'Someone not in the Mac\'s Contacts is found with WhatsApp\'s own search (first match); the result then has "check", ' +
+      'a screenshot: Read it and make sure the open chat is the right person before telling the user. ' +
       'Other apps: "airdrop", "messages", "mail" open that app with it; "any" opens the macOS share menu to pick an app. ' +
       'Returns what to tell the user (say it with reply).',
     inputSchema: {
@@ -71,7 +73,7 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
       properties: {
         file: { type: 'string', description: 'Absolute path of the file or image to share' },
         text: { type: 'string', description: 'Text to put in the chat' },
-        to: { type: 'string', description: 'WhatsApp: contact name as the user said it ("Ritalicious"); looked up in macOS Contacts' },
+        to: { type: 'string', description: 'WhatsApp: contact name as the user said it ("Ritalicious"); looked up in macOS Contacts, then WhatsApp' },
         app: { type: 'string', enum: ['whatsapp', 'airdrop', 'messages', 'mail', 'any'], description: 'Where to share (default whatsapp)' },
       },
     },
