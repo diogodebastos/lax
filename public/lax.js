@@ -91,12 +91,12 @@ let sessions = [], voiceBusy = false, thinking = false, lastWork = 0, channels =
 const ASLEEP = qs.has('asleep'); let macAsleep = ASLEEP;
 // No key: Lax hasn't hatched. Just an egg that wobbles now and then (and when tapped).
 const EGG = !DEMO && !ASLEEP && !TOKEN; let eggTapAt = -1e9;
-// Every start (the app opening, a reload) begins as an egg too, and the first tap hatches it.
-let shell = !DEMO && !ASLEEP, hatchAt = 0;
+// A new Lax (first life or a rebirth) is an egg too, until the first tap hatches it. The Mac remembers (pet.hatched).
+let shell = false, hatchAt = 0;
 function hatch() {
   if (EGG || !shell || hatchAt) return;
   hatchAt = performance.now(); sfx([392, 523]);
-  setTimeout(() => { shell = false; updateHint(); sfx([523, 659, 784]); hop(1.8);
+  setTimeout(() => { shell = false; hatchAt = 0; updateHint(); api('/api/hatch', {}); sfx([523, 659, 784]); hop(1.8);
     for (let i = 0; i < 16; i++) spark(CX, GROUND - 8, i % 3 ? '#f3e6cf' : '#cdbb9c', 1.3, 45); }, 550);
 }
 let listening = false, speaking = false, react = null, reactUntil = 0;
@@ -820,7 +820,7 @@ wakeEl.addEventListener('click', async () => {
 });
 
 // ---------- live link ----------
-function applyState(s) { pet = s.pet; sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; usage = s.usage || null; updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
+function applyState(s) { pet = s.pet; if (s.pet.hatched === false && !hatchAt) shell = true; sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; usage = s.usage || null; updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
 // Remember how Lax looks, so the app's offline page can show the same Lax asleep.
 const remember = () => { try { NATIVE?.remember(JSON.stringify({ pet, settings })); } catch {} };
 function setAsleep(v) { if (macAsleep === v) return; macAsleep = v; updateHint(); }
