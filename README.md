@@ -5,7 +5,7 @@ A pixel companion for Claude Code that lives on an old phone (designed for the G
 - **Top half:** Lax, plus a speech bubble showing the one thing that needs you, with ✓/✗ for permission prompts.
 - **Bottom half:** a terminal-style live feed of what your Claude Code sessions are doing.
 - **Voice:** hold the top half to talk. What you say goes to Claude Code, and Lax reads the answer aloud.
-- **Evolves:** XP, stages (sprout → blob → cube → brick → legend) and traits come from how you actually use Claude Code. It's all rules, with no model calls.
+- **Evolves:** it starts as an egg and hatches into a species read from how you work (several sessions at once, many tools an hour, long sessions, long back and forth, many repos, or none of these: a brown fox). Each species has its own forms through the stages (sprout → blob → cube → brick → legend); traits come from the last 7 days of work. It's all rules, with no model calls (`lib/species.mjs`).
 
 No API credits. Voice runs `claude -p` with your normal Claude Code login. Speech recognition and the voice are the phone browser's built-in Web Speech features.
 
@@ -23,7 +23,7 @@ The repo is Lax's **body** (code only). **Lax itself** lives in `~/.lax` on your
 ~/.lax/
   mind/          what Lax knows: where the assistant works. CLAUDE.md (who it is, its body, notes about you). Git-tracked.
   life.db        what Lax has lived: XP, level, stats, milestones, a journal of every session it saw (rebirth wipes it)
-  settings.json  your preferences for it: name, colour, voice, theme… (rebirth keeps them)
+  settings.json  your preferences for it: name, voice, theme… (rebirth keeps them)
   secrets/       token, env.json, tunnel-token (0700, never readable by the assistant)
   logs/          server.log, tunnel.log   (npm run logs)
 ```
@@ -62,7 +62,7 @@ These files are created on first use and never overwritten.
 ## Life menu
 
 Tap **LAX ≡** to open the menu. It reads top to bottom:
-- **Settings**: name, color, theme (system / light / dark), voice and pitch, whether it reads every "done", where talk goes, phone approvals and the wait time
+- **Settings**: name, species (what it hatched as and why; "pick it myself" while the bars get tuned), theme (system / light / dark), voice and pitch, whether it reads every "done", where talk goes, phone approvals and the wait time
 - **♥ Lax's life** (read-only): stats (level, stage, XP, streak, mood, traits…), favorite tools, milestones
 - **Rebirth**: hold for 2s to start a new life. Its life (`life.db`) is wiped; your settings stay
 

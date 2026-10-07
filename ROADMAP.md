@@ -87,6 +87,27 @@ The session tabs on the open phone (and `lax watch` on the Mac) show a step the 
 - Lax's own tab is a conversation: its work shows live while it runs and folds under its answer ("used 2 tools", tap for the steps); your yeses stay where you gave them; answers in markdown.
 - It survives restarts (rebuilt from Lax's own transcript), with time dividers and Lax's diary in between: what it learned, levels, streaks. Live sessions opening and closing fold into one line.
 
+### Phase 4.2: species, from how you work
+Replaces picking a colour (designed 2026-10-07; built in `lib/species.mjs`, tests in `scripts/test-species.mjs`). Still to do: tune the bars on real eggs, then drop the hand pick so species stay set.
+- **An egg first.** It gets no XP; a bar shows how close it is to hatching: 3 worked days (days off don't count), or the XP that would be Lv10, whichever comes first. Its speckles take the colour that's leading. It hatches at Lv1 with 0 XP, as the species the egg time showed, and keeps it.
+- **The species** is the one furthest past its bar (first guesses, to tune on real eggs). "Busy" means something happened in the session in the last 10 minutes; open but idle time never counts.
+  - electric: 3+ sessions busy at once, 25% of busy time
+  - fire: 150 tool calls per busy hour
+  - water: a median session of 45 busy minutes
+  - grass: 10 prompts per session
+  - pink: 4+ repos (a worktree counts as its repo; scratch and temp folders don't count)
+  - brown fox: none of these
+- **Lines.** Each species changes at Lv16, Lv36 and Lv50 (today's colour forms become the Lv50 forms), and gets the crown at Lv100.
+  - grass: seed → bud → bloom
+  - fire: ember → horn and flame → wings
+  - water: shell → fluffy ears → cannons
+  - electric: big ears → bolt tail → big bolt
+  - fox: kit → ruff → at Lv50 coin cat (hit the 5-hour limit on 3+ days), otherwise sun or moon by busy hours 06–18 vs 18–06
+- **Pink is a copier.** It never evolves; each day it takes yesterday's species (in that stage's form), and a day with no work keeps the last one. 1 in 100 pinks is the rare one: it copies like the others until Lv50, then shows its true form (floating) for good. Never explained.
+- **Traits read only the last 7 days**, so they change with the work and fade after a week away. The species is who Lax is; the traits are what it's been doing lately. They read different signals (how you work vs. which tools), so a species doesn't always wear the same trait.
+- **Existing Laxes re-hatch** under these rules.
+- **While the bars get tuned**, the Life menu's species section shows each number against its bar, and "pick it myself" chooses a species (and the fox's branch, or the rare pink) by hand. It wins everywhere until switched off.
+
 ### Phase 5: Lax learns [diogodebastos/lax#13](https://github.com/diogodebastos/lax/issues/13)
 What makes Lax a personal agent. Everything it learns lives in `~/.lax`, and you approve each step.
 - **What it couldn't do.** When a session that hears you has to say "I can't", it reports the gap. Lax keeps a wish list, proposes by voice ("you asked me to share to WhatsApp; I can learn it like this. Want me to?"), opens an issue on your yes, builds it on a branch with tests, and **you merge**.
@@ -145,24 +166,6 @@ The Mac stays the brain; Cloudflare becomes the always-on link and Lax's public 
 ## Later (ideas, not yet scheduled)
 
 **Lax itself**
-- **Species from how you work, with evolution lines** (designed 2026-10-07; preview in `previews/lines.mjs`, git-ignored). Replaces picking a colour.
-  - **An egg first.** It gets no XP; a bar shows how close it is to hatching: 3 worked days (days off don't count), or the XP that would be Lv10, whichever comes first. Its speckles take the colour that's leading. It hatches at Lv1 with 0 XP, as the species the egg time showed, and keeps it.
-  - **The species** is the one furthest past its bar (first guesses, to tune on real eggs). "Busy" means something happened in the session in the last 10 minutes; open but idle time never counts.
-    - electric: 3+ sessions busy at once, 25% of busy time
-    - fire: 150 tool calls per busy hour
-    - water: a median session of 45 busy minutes
-    - grass: 10 prompts per session
-    - pink: 4+ repos (a worktree counts as its repo; scratch and temp folders don't count)
-    - brown fox: none of these
-  - **Lines.** Each species changes at Lv16, Lv36 and Lv50 (today's colour forms become the Lv50 forms), and gets the crown at Lv100.
-    - grass: seed → bud → bloom
-    - fire: ember → horn and flame → wings
-    - water: shell → fluffy ears → cannons
-    - electric: big ears → bolt tail → big bolt
-    - fox: kit → ruff → at Lv50 coin cat (hit the 5-hour limit on 3+ days), otherwise sun or moon by busy hours 06–18 vs 18–06
-  - **Pink is a copier.** It never evolves; each day it takes yesterday's species (in that stage's form), and a day with no work keeps the last one. 1 in 100 pinks is the rare one: it copies like the others until Lv50, then shows its true form (floating) for good. Never explained.
-  - **Traits read only the last 7 days**, so they change with the work and fade after a week away. The species is who Lax is; the traits are what it's been doing lately. They read different signals (how you work vs. which tools), so a species doesn't always wear the same trait.
-  - **Existing Laxes re-hatch** under these rules.
 - Traits from languages (colors and accessories per language you write most) and from projects.
 - Per-session personality: Lax reacts differently to long-running, failing, or very chatty sessions.
 
