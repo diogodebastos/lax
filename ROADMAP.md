@@ -78,6 +78,14 @@ This is the product: glance, don't open.
 - Phone closed and something needs you: Lax comes up on the cover with the bubble, and ✓ approves right there.
 - A shareable demo at [lax.diogodebastos.com/demo](https://lax.diogodebastos.com/demo), served by Cloudflare. Photos of the real phone: [#18](https://github.com/diogodebastos/lax/issues/18).
 
+### Phase 4.1: a terminal that reads like Claude Code ✅
+The session tabs on the open phone (and `lax watch` on the Mac) show a step the way Claude Code does, for Mac app and CLI sessions alike.
+- What the assistant says between steps; each command under why it runs (its description), output folded to three lines (tap for more).
+- Edits as `+3 -1` with the changed lines; reads, searches and connector calls folded into one line; a subagent's steps indented under it; failures show what they said.
+- Answers with light markdown. Hold a step to copy its command and output.
+- A status row under the open tab: mode, context, model, working or idle (context and model come from the status line, so CLI sessions only).
+- Later: the same for Lax's own tab.
+
 ### Phase 5: Lax learns [diogodebastos/lax#13](https://github.com/diogodebastos/lax/issues/13)
 What makes Lax a personal agent. Everything it learns lives in `~/.lax`, and you approve each step.
 - **What it couldn't do.** When a session that hears you has to say "I can't", it reports the gap. Lax keeps a wish list, proposes by voice ("you asked me to share to WhatsApp; I can learn it like this. Want me to?"), opens an issue on your yes, builds it on a branch with tests, and **you merge**.
