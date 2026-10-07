@@ -705,7 +705,9 @@ function asleep() {
 // ---------- demo mode (?demo) — cycles every state without a server ----------
 function demo() {
   pet = { name: 'Lax', level: 7, stage: 'cube', traits: ['headband'], mood: 'happy', xp: 400, prevXp: 360, nextXp: 490, streak: 4 };
-  sessions = [{ id: 'd1', project: 'api', where: 'mac', status: 'working' }, { id: 'd2', project: 'web', where: 'cli', status: 'done' }]; applyLook(); renderHud();
+  sessions = [{ id: 'd1', project: 'api', where: 'mac', status: 'working' }, { id: 'd2', project: 'web', where: 'cli', status: 'done' }];
+  settings = { ...settings, captions: true }; view = 'd1'; applyLook(); renderHud(); // the api tab is open, so its feed shows
+  setTimeout(() => showBubble({ id: 'hi', kind: 'reply', text: 'Hi, I\'m Lax. Tap me and talk.' }), 400);
   const steps = [
     () => feed('> fix the flaky auth test', 'prompt', 'api', 'd1'),
     () => feed('Read auth.test.ts', 'tool', 'api', 'd1'), () => feed('Grep "refreshToken"', 'tool', 'api', 'd1'),
@@ -715,7 +717,7 @@ function demo() {
     () => showBubble({ id: 'perm', kind: 'permission', project: 'api', gist: '$ rm -rf dist && npm run build', text: 'api wants to: $ rm -rf dist && npm run build', actions: true }),
     () => {}, () => {}, () => clearBubble('perm') || feed('  ✓ approved from phone', 'done', 'api', 'd1'),
     () => feed('$ npm run build', 'tool', 'api', 'd1'),
-    () => feed('✓ api: Fixed the race in token refresh; all 42 tests pass.', 'done', 'api') || showBubble({ id: 'd', kind: 'done', text: 'api: Fixed the race in token refresh; all 42 tests pass.' }),
+    () => feed('✓ api: Fixed the race in token refresh; all 42 tests pass.', 'done', 'api', 'd1') || showBubble({ id: 'd', kind: 'done', text: 'api: Fixed the race in token refresh; all 42 tests pass.' }),
     () => showBubble({ id: 'lv', kind: 'levelup', text: 'Lax reached level 8!' }),
     () => {}, () => { voiceBusy = true; }, () => {}, () => { voiceBusy = false; pet = { ...pet, mood: 'sleepy' }; },
     () => {}, () => { pet = { ...pet, mood: 'happy', traits: ['headband', 'goggles', 'flame'] }; },
