@@ -118,16 +118,18 @@
   #life label { display:flex; justify-content:space-between; align-items:center; gap:8px; margin:5px 0; }
   #life input[type=text] { font:inherit; background:var(--field); color:var(--fg); border:2px solid var(--line2); padding:1px 5px; width:120px; }
   #life input[type=range] { width:110px; accent-color:var(--coral); }
-  #swatches { display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:2px; } /* room for the outline, which .scroll would clip */
-  #swatches button { width:24px; height:24px; border:2px solid #000; outline:2px solid var(--line2); cursor:pointer; }
-  #swatches button.on { outline-color:var(--fg); }
-  /* The custom picker is a rainbow swatch; the native colour well is hidden. Ringed when a custom colour is on. */
+  #species .name { display:flex; align-items:center; gap:8px; color:var(--fg); } #species .name i { width:14px; height:14px; border:2px solid #000; flex:none; }
+  #species .why { display:grid; grid-template-columns:1fr; gap:0; font-size:15px; color:var(--dim); margin:3px 0 2px; }
+  #species .why b { color:var(--text2); font-weight:400; } #species .why .over, #species .why .over b { color:var(--fg); } #species .why .dim { grid-column:1 / -1; }
+  #swatches { display:flex; flex-direction:column; gap:6px; padding:2px; } /* room for the outline, which .scroll would clip */
+  #swatches .row { display:flex; gap:6px; flex-wrap:wrap; } #swatches small { color:var(--dim); font-size:14px; }
+  #swatches .row button { width:24px; height:24px; border:2px solid #000; outline:2px solid var(--line2); cursor:pointer; }
+  #swatches .row button.on { outline-color:var(--fg); }
+  /* No species, just a colour: a rainbow swatch over the native colour well. Ringed when it's on. */
   #swatches input { -webkit-appearance:none; appearance:none; width:24px; height:24px; padding:0; border:2px solid #000; outline:2px solid var(--line2); cursor:pointer;
     background:conic-gradient(#ff4b3e, #ffc65a, #7CFC9A, #3ec1c9, #4a8fe0, #9b5de5, #ff5d8f, #ff4b3e); }
   #swatches input::-webkit-color-swatch-wrapper { padding:0; } #swatches input::-webkit-color-swatch { border:0; opacity:0; } #swatches input::-moz-color-swatch { border:0; opacity:0; }
   #swatches input.on { outline-color:var(--fg); }
-  #swatches .set { display:flex; align-items:center; gap:8px; color:var(--dim); }
-  #swatches .set i { width:24px; height:24px; border:2px solid #000; outline:2px solid var(--fg); }
   .tog { width:34px; height:16px; background:var(--line2); position:relative; cursor:pointer; flex:none; border:0; }
   .tog::after { content:''; position:absolute; left:2px; top:2px; width:12px; height:12px; background:var(--dim); transition:left .1s steps(2); }
   .tog.on { background:var(--coral); } .tog.on::after { left:20px; background:#fff; }
@@ -248,7 +250,9 @@
     <h2 class="group">settings</h2>
     <h3>who</h3>
     <label>name <input type="text" id="sName" maxlength="12"></label>
-    <h3>color</h3>
+    <h3>species</h3>
+    <div id="species"></div>
+    <label id="sPick">pick it myself <button class="tog" data-k="speciesPick"></button></label>
     <div id="swatches"></div>
     <h3>theme</h3>
     <div class="seg" id="sTheme"><button data-v="system">system</button><button data-v="light">light</button><button data-v="dark">dark</button></div>
@@ -279,6 +283,6 @@
   </div>
 </div>
 <div id="wake"><div>tap to wake <span id="wakeName">Lax</span><small>(unlocks sound + mic)</small></div></div>
-<script src="lax.js?v=25"></script>
+<script src="lax.js?v=27"></script>
 </body>
 </html>

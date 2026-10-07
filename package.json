@@ -17,7 +17,7 @@
     "install-channel": "node scripts/install-channel.mjs",
     "remove-channel": "node scripts/install-channel.mjs --remove",
     "android": "node scripts/android.mjs",
-    "test": "node scripts/test-levels.mjs && node --no-warnings scripts/test-channel.mjs && node --no-warnings scripts/test-brain.mjs && node --no-warnings scripts/test-actions.mjs && node scripts/test-share.mjs && node scripts/test-allow.mjs && node scripts/test-usage.mjs && node scripts/test-terminal.mjs && node scripts/test-transcript.mjs",
+    "test": "node scripts/test-levels.mjs && node scripts/test-species.mjs && node --no-warnings scripts/test-channel.mjs && node --no-warnings scripts/test-brain.mjs && node --no-warnings scripts/test-actions.mjs && node scripts/test-share.mjs && node scripts/test-allow.mjs && node scripts/test-usage.mjs && node scripts/test-terminal.mjs && node scripts/test-transcript.mjs",
     "move-home": "node scripts/move-home.mjs",
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true"
   },

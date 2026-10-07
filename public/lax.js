@@ -82,8 +82,9 @@ function applyLook() {
   applyTheme();
   try { updateHint(); } catch {} // (not ready on the very first call)
   const wakeName = document.querySelector('#wakeName'); if (wakeName) wakeName.textContent = settings.name;
-  C.body = settings.color; C.hi = shade(settings.color, 0.3); C.lo = shade(settings.color, -0.25);
-  document.documentElement.style.setProperty('--coral', settings.color);
+  const color = pet.look?.color || settings.color || '#D97757'; // the species' colour (an egg: whatever leads); no server: Lax's own
+  C.body = color; C.hi = shade(color, 0.3); C.lo = shade(color, -0.25);
+  document.documentElement.style.setProperty('--coral', color);
   $('#nameBtn').textContent = settings.name.toUpperCase(); $('#lifeName').textContent = settings.name.toUpperCase(); $('#menuName').textContent = settings.name.toUpperCase();
 }
 let pet = { name: 'Lax', level: 1, stage: 'sprout', traits: [], mood: 'happy', xp: 0, prevXp: 0, nextXp: 10 };
@@ -92,12 +93,13 @@ let sessions = [], voiceBusy = false, thinking = false, lastWork = 0, channels =
 const ASLEEP = qs.has('asleep'); let macAsleep = ASLEEP;
 // No key: Lax hasn't hatched. Just an egg that wobbles now and then (and when tapped).
 const EGG = !DEMO && !ASLEEP && !TOKEN; let eggTapAt = -1e9;
-// A new Lax (first life or a rebirth) is an egg too, until the first tap hatches it. The Mac remembers (pet.hatched).
+// A new Lax (first life or a rebirth) is an egg too, until 1000 XP or three worked days (lib/species.mjs). You can talk to it
+// meanwhile. When the Mac says it hatched, the shell cracks and its species hops out.
 let shell = false, hatchAt = 0;
 function hatch() {
   if (EGG || !shell || hatchAt) return;
   hatchAt = performance.now(); sfx([392, 523]);
-  setTimeout(() => { shell = false; hatchAt = 0; updateHint(); api('/api/hatch', {}); sfx([523, 659, 784]); hop(1.8);
+  setTimeout(() => { shell = false; hatchAt = 0; updateHint(); sfx([523, 659, 784]); hop(1.8);
     for (let i = 0; i < 16; i++) spark(CX, GROUND - 8, i % 3 ? '#f3e6cf' : '#cdbb9c', 1.3, 45); }, 550);
 }
 let listening = false, speaking = false, react = null, reactUntil = 0;
@@ -148,16 +150,22 @@ function step(dt, m, t) {
 const px = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
 // Outlined shapes: all the outlines first, then the fills, so touching rects read as one piece.
 const blk = (rects, c) => { for (const [x, y, w, h] of rects) px(x - 1, y - 1, w + 2, h + 2, C.out); for (const [x, y, w, h] of rects) px(x, y, w, h, c); };
-// At level 50 Lax evolves into its colour's form, after the familiar face that colour comes from
-// ([form, how far the level-100 crown rises to clear it]). A custom colour stays a plain brick.
-const FORMS = { '#5abf8e': ['bloom', 9], '#d97757': ['wings', 0], '#5aa7e6': ['cannons', 2], '#f6d23c': ['bolt', 4], '#a8754a': ['ruff', 4],
-  '#c58fd8': ['gem', 4], '#403e4a': ['rings', 4], '#f2ede3': ['coin', 6], '#f4a6c8': ['float', 0] };
-const formOf = () => (pet.stage === 'brick' || pet.stage === 'legend') && FORMS[String(settings.color).toLowerCase()] || [null, 0];
+// The species' form for this stage (lib/species.mjs, worked out on the Mac): [form, how far the level-100 crown rises to clear it].
+const formOf = () => (pet.look?.form ? [pet.look.form, pet.look.lift || 0] : [null, 0]);
 // Mirror a rect to the other side of the body.
 const mirror = (x0, w, rects) => rects.map(([x, y, rw, rh]) => [2 * x0 + w - x - rw, y, rw, rh]);
 // Behind the body: wings and tails.
 function formBack(f, x0, y0, w, h, m, t) {
   const R = x0 + w, B = y0 + h;
+  // On the way there: the ember tail, the turtle's shell and tail, the young bolt, the kit's tail.
+  if (f === 'ember' || f === 'blaze') { const big = f === 'blaze' ? 1 : 0, f2 = Math.round(t / 110) % 2;
+    blk([[R, B - 3, 3 + big, 2], [R + 2 + big, B - 6 - big, 2, 4 + big]], C.body);
+    if (m !== 'sleep') { blk([[R + 1 + big, B - 9 - big * 2 - f2, 4, 3 + big + f2]], C.gold); px(R + 2 + big, B - 7 - big * 2, 2, 1 + big, C.red); } }
+  if (f === 'shell0' || f === 'shell1') { const sh = [[x0 - 2, y0 + 3, 1, h - 5]]; blk([...sh, ...mirror(x0, w, sh)], '#a7774a');
+    if (f === 'shell0') blk([[R, B - 4, 3, 2], [R + 2, B - 7, 2, 4], [R, B - 8, 3, 2]], C.body);
+    else blk([[R, B - 5, 3, 3], [R + 2, B - 9, 3, 5], [R + 4, B - 11, 3, 4]], '#e6f1fb'); }
+  if (f === 'spark') { blk([[R + 1, B - 7, 2, 4], [R + 1, B - 8, 4, 2], [R + 3, B - 12, 2, 5]], C.body); blk([[R - 1, B - 4, 3, 2]], '#8a5a2b'); }
+  if (f === 'kit') { const sw = Math.round(Math.sin(t / 300)); blk([[x0 - 3, B - 6, 3, 2], [x0 - 5 + sw, B - 9, 3, 4]], C.body); px(x0 - 5 + sw, B - 9, 3, 1, '#f3e6c8'); }
   if (f === 'wings') { // the fire lizard's last form: teal wings with an orange rim, and its tail flame
     const fl = Math.sin(t / (m === 'working' ? 90 : 220)) > 0 ? 1 : 0;
     const wing = [[x0 - 3, y0 + 2, 3, 6], [x0 - 5, y0, 2, 7], [x0 - 7, y0 - 2 + fl, 2, 7], [x0 - 9, y0 - 4 + fl, 2, 7], [x0 - 11, y0 - 6 + fl * 2, 2, 6], [x0 - 12, y0 - 8 + fl * 2, 2, 3]];
@@ -182,6 +190,15 @@ const ringGlow = (m, t) => (m === 'sleep' || Math.sin(t / 500) > 0.6 ? '#fff0a0'
 function formFront(f, x0, y0, w, h, m, t) {
   const B = y0 + h, ears = (rects, inner, tip) => { blk([...rects, ...mirror(x0, w, rects)], C.body);
     if (inner) for (const r of [inner, ...mirror(x0, w, [inner])]) px(...r, tip || shade(C.body, -0.35)); };
+  const cxm = x0 + Math.floor(w / 2);
+  if (f === 'seed') { blk([[x0 + 2, y0 - 3, w - 4, 3], [x0 + 3, y0 - 5, w - 6, 2]], '#3f9a52'); px(x0 + 4, y0 - 4, 2, 1, '#7fd08a'); } // a bulb on its back
+  if (f === 'bud') { const leaf = [[x0 - 3, y0 - 2, 6, 2], [x0 - 5, y0 - 1, 2, 1]]; blk([...leaf, ...mirror(x0, w, leaf)], '#2f7a43'); blk([[cxm - 2, y0 - 3, 5, 2]], '#2f7a43');
+    blk([[cxm - 2, y0 - 7, 5, 4], [cxm - 1, y0 - 9, 3, 2]], '#ef7f9f'); px(cxm - 1, y0 - 6, 1, 2, '#fff2f5'); } // the bud before the bloom
+  if (f === 'blaze') blk([[x0 + w - 5, y0 - 2, 2, 2], [x0 + w - 4, y0 - 4, 2, 2]], C.body); // a horn
+  if (f === 'shell1') { const e = [[x0 - 2, y0 + 1, 3, 2], [x0 - 4, y0 - 1, 3, 3], [x0 - 5, y0 - 3, 2, 2]]; blk([...e, ...mirror(x0, w, e)], '#e6f1fb'); } // fluffy ears
+  if (f === 'pichu') ears([[x0 + 1, y0 - 2, 3, 2], [x0, y0 - 5, 4, 3]], [x0, y0 - 5, 4, 1], '#1a1410');
+  if (f === 'spark') ears([[x0 + 2, y0 - 3, 3, 3], [x0 + 1, y0 - 6, 2, 3]], [x0 + 1, y0 - 6, 2, 2], '#4a3020');
+  if (f === 'kit') ears([[x0, y0 - 3, 4, 3], [x0 + 1, y0 - 5, 2, 2]], [x0 + 1, y0 - 4, 1, 3], '#5b3a22');
   if (f === 'bloom') { // the seed's last form: a big flower on its back
     const sw = Math.round(Math.sin(t / 500));
     const leaf = [[x0 - 5, y0 - 3, 8, 3], [x0 - 8, y0 - 2, 3, 2]]; blk([...leaf, ...mirror(x0, w, leaf)], '#2f7a43'); blk([[x0 + w / 2 - 1, y0 - 3, 3, 3]], '#8a5a3c');
@@ -204,6 +221,7 @@ function formFront(f, x0, y0, w, h, m, t) {
 // Over the face: gems, coins, cheeks, whiskers.
 function formTop(f, x0, y0, w, h, eyeY, m, t) {
   const cx = x0 + Math.floor(w / 2);
+  if (f === 'pichu' || f === 'spark') { px(x0 + 1, eyeY + 4, 2, 2, C.red); px(x0 + w - 3, eyeY + 4, 2, 2, C.red); }
   if (f === 'bolt') { px(x0 + 1, eyeY + 4, 2, 2, C.red); px(x0 + w - 3, eyeY + 4, 2, 2, C.red);
     if ((m === 'happy' || m === 'working') && Math.random() < 0.15) spark(x0 + (Math.random() < .5 ? 1 : w - 2), eyeY + 4, C.gold, 0.7, 14); }
   if (f === 'gem') { blk([[cx - 1, y0 + 1, 3, 2]], '#e2304a'); px(cx - 1, y0 + 1, 1, 1, '#ffb3c0'); }
@@ -212,22 +230,22 @@ function formTop(f, x0, y0, w, h, eyeY, m, t) {
     if (Math.round(t / 900) % 4 === 0) px(cx - 1, y0 - 4, 1, 1, '#fff8d0');
     for (const y of [eyeY + 3, eyeY + 5]) { px(x0 - 4, y, 4, 1, C.dust); px(x0 + w, y, 4, 1, C.dust); } }
 }
-function drawEgg(t) {
+function drawEgg(t, m) {
   const rows = [4, 6, 8, 8, 10, 10, 12, 12, 12, 12, 12, 10, 8, 6], h = rows.length, y0 = GROUND - h;
-  const since = t - eggTapAt, k = hatchAt ? 1.5 : since < 900 ? 1 : t % 3200 < 600 ? 0.6 : 0; // hatching, tapped, or every few seconds
+  const since = t - eggTapAt, k = hatchAt ? 1.5 : since < 900 ? 1 : m === 'working' || m === 'talking' ? 0.5 : t % 3200 < 600 ? 0.6 : 0; // hatching, tapped, working, or every few seconds
   const tilt = k * Math.sin(t / (hatchAt ? 35 : 60)) * 2;
   px(CX - 5, GROUND + 1, 10, 1, C.shadow);
   rows.forEach((w, i) => { const x = CX - w / 2 + Math.round(tilt * (h - i) / h); px(x - 1, y0 + i, w + 2, 1, C.out); });
   px(CX - 1 + Math.round(tilt), y0 - 1, 2, 1, C.out);
   rows.forEach((w, i) => { const x = CX - w / 2 + Math.round(tilt * (h - i) / h); px(x, y0 + i, w, 1, '#f3e6cf');
     if (i > 2) px(x + w - 2, y0 + i, 2, 1, '#cdbb9c'); if (i > 1 && i < 6) px(x + 1, y0 + i, 1, 1, '#fffaf0'); });
-  for (const [dx, dy] of [[-2, 4], [2, 7], [-3, 9], [1, 11], [3, 3]]) px(CX + dx + Math.round(tilt * (h - dy) / h), y0 + dy, 1, 1, C.body);
+  for (const [dx, dy] of [[-2, 4], [2, 7], [-4, 9], [1, 10], [2, 2]]) px(CX + dx + Math.round(tilt * (h - dy) / h), y0 + dy, 2, 2, C.body); // what leads, so far
   if (hatchAt) { const n = Math.min(10, Math.floor((t - hatchAt) / 45)); // a zigzag crack runs across the middle
     for (let i = 0; i < n; i++) px(CX - 5 + i + Math.round(tilt * 0.5), y0 + 6 + (i % 2), 1, 1, C.out); }
 }
 function draw(m, t) {
   g.clearRect(0, 0, W, H);
-  if (EGG || shell) return drawEgg(t);
+  if (EGG || shell) return drawEgg(t, m);
   // ground: the dotted line is the hint's line in the page (#hint), so text never sits on it
   const [bw, bh] = SIZES[pet.stage] || SIZES.cube;
   let s = body.s;
@@ -301,7 +319,7 @@ function draw(m, t) {
     px(x0 - 3, y0 + 1 + fl, 3, 1, C.band); px(x0 - 5, y0 + 2 - fl, 2, 1, C.band); }
   if (pet.traits.includes('goggles')) { px(x0 + 1, y0, w - 2, 1, C.out); px(ex1, y0 - 1, 3, 2, C.glass); px(ex2, y0 - 1, 3, 2, C.glass); }
   if (pet.traits.includes('antenna')) { px(cx, y0 - 5, 1, 4, C.stick); px(cx - 1, y0 - 7, 3, 2, Math.sin(t / 200) > 0 ? C.gold : '#fff1a8'); }
-  if (pet.stage === 'sprout') { px(cx, y0 - 3, 1, 2, C.green); px(cx + 1, y0 - 4, 2, 1, C.green); px(cx - 2, y0 - 3, 2, 1, C.green); }
+  if (pet.stage === 'sprout' && !form) { px(cx, y0 - 3, 1, 2, C.green); px(cx + 1, y0 - 4, 2, 1, C.green); px(cx - 2, y0 - 3, 2, 1, C.green); }
   if (form) formTop(form, x0, y0, w, h, eyeY, m, t);
   if (pet.stage === 'legend') { const cy = y0 - crownLift; px(cx - 4, cy - 3, 9, 2, C.gold); px(cx - 4, cy - 5, 1, 2, C.gold); px(cx, cy - 5, 1, 2, C.gold); px(cx + 4, cy - 5, 1, 2, C.gold); }
   if (pet.traits.includes('flame') && m !== 'sleep') { const f = Math.round(t / 100) % 2; px(x0 + w + 2, y0 - 2 - f, 2, 3, C.gold); px(x0 + w + 2, y0, 2, 1, C.red); }
@@ -340,8 +358,8 @@ function renderHud() {
     const badge = open ? '' : bubbles.some((b) => b.session === s.id && needsYou(b)) ? ' ask' : unseen.has(s.id) ? ' new' : '';
     return `<span class="${s.status}${ch ? ' live' : ''}${open ? (ch ? ' sel' : ' front') : ''}${badge}" data-view="${esc(s.id)}" data-cid="${ch ? ch.cid : ''}" data-label="${esc(labels[i])}">${esc(labels[i])}</span>`;
   }).join('');
-  $('#lvl').textContent = `Lv${pet.level}`;
-  $('#xp i').style.width = Math.round(100 * (pet.xp - pet.prevXp) / Math.max(1, pet.nextXp - pet.prevXp)) + '%';
+  $('#lvl').textContent = pet.egg ? 'egg' : `Lv${pet.level}`; // an egg's bar: how close it is to hatching
+  $('#xp i').style.width = (pet.egg ? pet.egg.pct : Math.round(100 * (pet.xp - pet.prevXp) / Math.max(1, pet.nextXp - pet.prevXp))) + '%';
   // Cover screen: the open tab's name in place of the menu (settings live in the open app).
   const vi = shown.findIndex((s) => s.id === view); $('#tab').textContent = vi < 0 ? settings.name.toLowerCase() : labels[vi];
   renderStatus();
@@ -716,7 +734,7 @@ function routeChannel() {
   return voiceTarget === 'background' ? null : channels.find((c) => c.cid === voiceTarget) || [...channels].sort((a, b) => b.active - a.active)[0] || null;
 }
 function setTarget(v) { voiceTarget = v; updateHint(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); if (!DEMO) api('/api/target', { target: v }); }
-function updateHint() { IDLE_HINT = EGG ? 'no key yet: open the link from npm start' : shell ? `tap to hatch ${settings.name}` : macAsleep ? `zzz… ${settings.name.toLowerCase()} is asleep` : voiceBroken ? `tap ${settings.name} to type` : `tap or hold ${settings.name} to talk`; if (!listening) hint.textContent = IDLE_HINT; }
+function updateHint() { IDLE_HINT = EGG ? 'no key yet: open the link from npm start' : macAsleep ? `zzz… ${settings.name.toLowerCase()} is asleep` : voiceBroken ? `tap ${settings.name} to type` : `tap or hold ${settings.name} to talk`; if (!listening) hint.textContent = IDLE_HINT; }
 const MIC_ERRORS = {
   'not-allowed': 'Mic is blocked. Tap the icon left of the address → Permissions → Microphone → Allow, then reload.',
   'service-not-allowed': 'This browser has no speech recognition. Use Chrome.',
@@ -842,7 +860,7 @@ const topEl = $('#top');
   topEl.addEventListener('pointerdown', (e) => {
     if (e.target.closest('#hud, #bubble') || wakeEl.isConnected || lifeEl.classList.contains('open')) return;
     if (EGG) { eggTapAt = performance.now(); return; }
-    if (shell) return hatch();
+    if (shell) eggTapAt = performance.now();
     try { topEl.setPointerCapture(e.pointerId); } catch {}
     const p = press = { id: e.pointerId, held: false, out: false };
     p.timer = setTimeout(() => { p.held = true; if (!listening) beginListening('hold'); }, 350);
@@ -860,7 +878,7 @@ const topEl = $('#top');
 }
 topEl.addEventListener('contextmenu', (e) => e.preventDefault());
 // Desktop: hold space to talk.
-addEventListener('keydown', (e) => { if (e.code === 'Space' && !EGG && !shell && !e.repeat && !listening && e.target === document.body) { e.preventDefault(); beginListening('hold'); } });
+addEventListener('keydown', (e) => { if (e.code === 'Space' && !EGG && !e.repeat && !listening && e.target === document.body) { e.preventDefault(); beginListening('hold'); } });
 addEventListener('keyup', (e) => { if (e.code === 'Space') releaseHold(true); });
 
 // ---------- wake (audio unlock, fullscreen, keep screen on) ----------
@@ -868,7 +886,7 @@ const wakeEl = $('#wake');
 // The app needs no wake tap: audio, full screen and keep-screen-on are native there.
 if (qs.has('awake') || NATIVE) wakeEl.remove();
 wakeEl.addEventListener('click', async () => {
-  wakeEl.remove(); if (shell) hatch(); else { sfx([523, 784]); hop(1.4); }
+  wakeEl.remove(); if (shell) eggTapAt = performance.now(); else { sfx([523, 784]); hop(1.4); }
   try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch {}
   diag('wake');
   if (SR) {
@@ -884,7 +902,7 @@ wakeEl.addEventListener('click', async () => {
 });
 
 // ---------- live link ----------
-function applyState(s) { pet = s.pet; if (s.pet.hatched === false && !hatchAt) shell = true; sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; usage = s.usage || null; updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
+function applyState(s) { pet = s.pet; if (s.pet.hatched === false) shell = true; else if (shell && !hatchAt) hatch(); sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; usage = s.usage || null; updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
 // Remember how Lax looks, so the app's offline page can show the same Lax asleep.
 const remember = () => { try { NATIVE?.remember(JSON.stringify({ pet, settings })); } catch {} };
 function setAsleep(v) { if (macAsleep === v) return; macAsleep = v; updateHint(); }
@@ -923,7 +941,8 @@ function asleep() {
 
 // ---------- demo mode (?demo) — cycles every state without a server ----------
 function demo() {
-  pet = { name: 'Lax', level: 7, stage: 'cube', traits: ['headband'], mood: 'happy', xp: 400, prevXp: 360, nextXp: 490, streak: 4 };
+  pet = { name: 'Lax', level: 7, stage: 'cube', traits: ['headband'], mood: 'happy', xp: 400, prevXp: 360, nextXp: 490, streak: 4,
+    species: { id: 'fire', name: 'fire' }, look: { form: 'blaze', color: '#D97757', lift: 0 } };
   sessions = [{ id: 'd1', project: 'api', where: 'mac', status: 'working', mode: 'acceptEdits', ctx: 41, model: 'Opus 5.5' }, { id: 'd2', project: 'web', where: 'cli', status: 'done' }];
   settings = { ...settings, captions: true }; view = 'd1'; applyLook(); renderHud(); // the api tab is open, so its feed shows
   setTimeout(() => showBubble({ id: 'hi', kind: 'reply', text: 'Hi, I\'m Lax. Tap me and talk.' }), 400);
@@ -949,8 +968,6 @@ function demo() {
 
 // ---------- life menu ----------
 const lifeEl = $('#life');
-// Same order as lib/levels.mjs, where each colour's growth curve lives.
-const COLORS = ['#5abf8e', '#D97757', '#5aa7e6', '#f6d23c', '#a8754a', '#c58fd8', '#403e4a', '#f2ede3', '#f4a6c8'];
 let memory = null;
 function saveSettings(patch) {
   settings = { ...settings, ...patch }; applyLook(); renderLife();
@@ -965,10 +982,7 @@ function renderLife() {
     .map(([v, l]) => `<button data-v="${esc(v)}" class="${v === voiceTarget ? 'on' : ''}">${esc(l)}</button>`).join('');
   $('#sName').value !== settings.name && document.activeElement !== $('#sName') && ($('#sName').value = settings.name);
   $('#sPitch').value = settings.pitch;
-  // Evolved (level 50): the colour is part of its form now, so the swatches go.
-  if (pet.colorSet) { $('#swatches').innerHTML = `<span class="set"><i style="background:${settings.color}"></i>its own now</span>`; } else
-  $('#swatches').innerHTML = COLORS.map((c) => `<button style="background:${c}" data-c="${c}" class="${c === settings.color ? 'on' : ''}"></button>`).join('')
-    + `<input type="color" id="sColor" value="${settings.color}" title="custom" class="${COLORS.some((c) => c.toLowerCase() === settings.color.toLowerCase()) ? '' : 'on'}">`;
+  renderSpecies();
   lifeEl.querySelectorAll('.tog').forEach((t) => t.classList.toggle('on', !!settings[t.dataset.k]));
   $('#sWait').querySelectorAll('button').forEach((b) => b.classList.toggle('on', +b.dataset.v === settings.askTimeout));
   $('#sTheme').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === (settings.theme || 'system')));
@@ -990,13 +1004,44 @@ function renderLife() {
   $('#usageAge').textContent = usage?.ts ? `${Math.round((Date.now() - usage.ts) / 60000)} min ago` : '';
   $('#miles').innerHTML = (memory?.milestones || []).slice(0, 12).map((m) => `<li>${new Date(m.ts).toLocaleDateString()} ${m.text.replace(/</g, '&lt;')}</li>`).join('') || '<li>…</li>';
 }
+// Species: what it hatched as and why (each species' number against its bar), and while the bars get tuned, a hand pick.
+const pct = (v) => Math.round(v * 100) + '%', num = (v) => String(Math.round(v * 10) / 10);
+const WHY = [['electric', 'three', pct, 'of busy time 3+ at once'], ['fire', 'toolsPerH', num, 'tools a busy hour'],
+  ['water', 'sessionMin', num, 'busy minutes a session'], ['grass', 'promptsPerSession', num, 'prompts a session'], ['pink', 'repos', num, 'repos']];
+function renderSpecies() {
+  const sp = pet.species, w = pet.why, bars = pet.bars || {};
+  const head = pet.egg ? `an egg: ${pet.egg.pct}%${pet.egg.lead ? ', ' + (pet.choices || []).find((c) => c.id === pet.egg.lead)?.name + ' leads' : ''}`
+    : sp ? sp.name + (pet.picked ? ' (picked)' : '') : '–';
+  const rows = w ? WHY.map(([id, k, f, what]) => { const over = (w[k] || 0) / bars[id] > 1;
+    return `<span class="${over ? 'over' : ''}">${id} <b>${f(w[k] || 0)}</b> / ${f(bars[id])} ${what}</span>`; }).join('') : '';
+  $('#species').innerHTML = `<div class="name"><i style="background:${pet.look?.color || 'var(--coral)'}"></i>${esc(head)}</div>`
+    + (rows ? `<div class="why">${rows}<span class="dim">${pet.egg ? 'so far' : 'while it was an egg'}${w ? ', ' + (w.busyH || 0).toFixed(1) + ' busy hours' : ''}</span></div>` : '');
+  $('#sPick').style.display = pet.egg ? 'none' : '';
+  const o = settings.speciesOverride || {}, on = settings.speciesPick && !pet.egg;
+  $('#swatches').style.display = on ? '' : 'none';
+  if (!on) return;
+  const cur = o.id || sp?.id;
+  $('#swatches').innerHTML = `<div class="row">${(pet.choices || []).map((c) => `<button style="background:${c.color}" data-s="${c.id}" title="${esc(c.name)}" class="${c.id === cur ? 'on' : ''}"></button>`).join('')}`
+    + `<input type="color" id="sColor" value="${cur === 'plain' && o.color || '#3fb8b0'}" title="no species, just a colour" class="${cur === 'plain' ? 'on' : ''}"></div>`
+    + (cur === 'fox' ? `<div class="seg">${[{ id: '', name: 'auto' }, ...(pet.branches || [])].map((b) => `<button data-b="${b.id}" class="${(o.branch || '') === b.id ? 'on' : ''}">${esc(b.name)}</button>`).join('')}</div>` : '')
+    + (cur === 'pink' ? `<div class="seg"><button data-r="0" class="${o.rare ? '' : 'on'}">copier</button><button data-r="1" class="${o.rare ? 'on' : ''}">rare</button></div>` : '')
+    + `<small>${cur === 'plain' ? 'no species: a plain Lax in your colour' : cur === 'fox' || cur === 'pink' ? 'branch and rare show from level 50' : 'its form at your level'}</small>`;
+}
 $('#nameBtn').addEventListener('click', (e) => { e.stopPropagation(); openLife(); });
 lifeEl.addEventListener('pointerdown', (e) => e.stopPropagation());
 $('#lifeClose').addEventListener('click', () => lifeEl.classList.remove('open'));
 $('#sName').addEventListener('change', (e) => e.target.value.trim() && saveSettings({ name: e.target.value.trim().slice(0, 12) }));
 $('#sPitch').addEventListener('change', (e) => { saveSettings({ pitch: +e.target.value }); speak('Is this my voice?'); });
-$('#swatches').addEventListener('click', (e) => { if (e.target.dataset.c && !pet.colorSet) { saveSettings({ color: e.target.dataset.c }); hop(1); } });
-$('#swatches').addEventListener('change', (e) => { if (e.target.id === 'sColor' && !pet.colorSet) { saveSettings({ color: e.target.value }); hop(1); } });
+$('#swatches').addEventListener('click', (e) => {
+  const d = e.target.closest('button')?.dataset; if (!d) return;
+  const o = settings.speciesOverride || { id: pet.species?.id || 'fox', branch: null, rare: false };
+  if (d.s) saveSettings({ speciesOverride: { ...o, id: d.s } });
+  if (d.b !== undefined) saveSettings({ speciesOverride: { ...o, branch: d.b || null } });
+  if (d.r !== undefined) saveSettings({ speciesOverride: { ...o, rare: d.r === '1' } });
+  hop(1);
+});
+// No species at all: a plain Lax in a colour of your own (the rainbow swatch).
+$('#swatches').addEventListener('change', (e) => { if (e.target.id === 'sColor') { saveSettings({ speciesOverride: { id: 'plain', color: e.target.value, branch: null, rare: false } }); hop(1); } });
 lifeEl.querySelectorAll('.tog').forEach((t) => t.addEventListener('click', () => saveSettings({ [t.dataset.k]: !settings[t.dataset.k] })));
 $('#sWait').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ askTimeout: +e.target.dataset.v }));
 $('#sTheme').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ theme: e.target.dataset.v }));

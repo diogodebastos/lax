@@ -10,8 +10,9 @@ import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { ensureHome, commitMind, syncMindName, addMemoryLayout, addToolsAdvice } from './lib/home.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS, secret, ensureDirs, readEnv } from './lib/paths.mjs';
-import { grantKey } from './lib/allow.mjs';
-import { MAX_LEVEL, STAGES, levelOf as levelOn, stageIdx, barFor as barOn, curveOf } from './lib/levels.mjs';
+import { grantKey, repoRoot } from './lib/allow.mjs';
+import { MAX_LEVEL, STAGES, levelOf as levelOn, stageIdx, barFor as barOn } from './lib/levels.mjs';
+import { SPECIES, BRANCHES, BARS, BRICK, EGG_XP, RARE, LIMIT_PCT, signals, ratios, pick, branch, dayNight, dayKey, eggProgress, shouldHatch, formFor, nameFor, curveFor, replayEgg, aName } from './lib/species.mjs';
 import { createBrain, ensureBrain, brief } from './lib/brain.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus, tabCommand } from './lib/actions.mjs';
 import { readUsage, usageText } from './lib/usage.mjs';
@@ -50,16 +51,19 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
   CREATE TABLE IF NOT EXISTS milestones (id INTEGER PRIMARY KEY, ts INTEGER, text TEXT);
 `);
+// The repo each event happened in (a worktree counts as its main repo), for the species (lib/species.mjs). Added later: old rows have none.
+if (!db.prepare('PRAGMA table_info(events)').all().some((c) => c.name === 'repo')) db.exec('ALTER TABLE events ADD COLUMN repo TEXT');
 const kvGet = (k, d) => { const r = db.prepare('SELECT value FROM kv WHERE key=?').get(k); return r ? JSON.parse(r.value) : d; };
 const kvSet = (k, v) => db.prepare('INSERT INTO kv(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(k, JSON.stringify(v));
-const logEvent = (session, project, kind, text) =>
-  db.prepare('INSERT INTO events(ts,session,project,kind,text) VALUES(?,?,?,?,?)').run(Date.now(), session || '', project || '', kind, text);
+const logEvent = (session, project, kind, text, repo = null) =>
+  db.prepare('INSERT INTO events(ts,session,project,kind,text,repo) VALUES(?,?,?,?,?,?)').run(Date.now(), session || '', project || '', kind, text, repo);
 const milestone = (text) => db.prepare('INSERT INTO milestones(ts,text) VALUES(?,?)').run(Date.now(), text);
 
 const newPet = () => ({
   name: 'Lax', born: Date.now(), xp: 0, tools: {}, langs: {}, sessions: 0, turns: 0,
   errors: 0, approvals: 0, denials: 0, voice: 0, streak: 0, lastDay: null, lastSeen: Date.now(),
-  hatched: false, // a new Lax is an egg until the first tap (a Lax from before eggs has no field: it's out)
+  hatched: false, eggXp: 0, eggDays: [], // an egg until 1000 XP or 3 worked days (lib/species.mjs); then it hatches into its species
+  species: null, days: {}, limitDays: [],
 });
 let pet = kvGet('pet', null) || newPet();
 let voiceSessions = kvGet('voiceSessions', {}); // cwd -> claude session id
@@ -68,8 +72,9 @@ if (!kvGet('pet', null)) { milestone('Lax was born'); }
 if (!kvGet('newPath', false)) { if (kvGet('pet', null)) milestone(`${readSettings().name || 'Lax'} started over on a new path`); kvSet('newPath', true); }
 
 // Life menu settings — live on the Mac, edited from the phone.
-const DEFAULTS = { name: 'Lax', color: '#D97757', voice: true, pitch: 1.6, speakDone: false, captions: false,
-  phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system', learns: true };
+const DEFAULTS = { name: 'Lax', voice: true, pitch: 1.6, speakDone: false, captions: false,
+  phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system', learns: true,
+  speciesPick: false, speciesOverride: null }; // while the species bars get tuned: pick one by hand
 // Preferences live in settings.json, a plain file you can read; rebirth leaves them alone.
 function readSettings() { try { return JSON.parse(fs.readFileSync(SETTINGS, 'utf8')); } catch { return {}; } }
 const writeSettings = (s) => fs.writeFileSync(SETTINGS, JSON.stringify(s, null, 2) + '\n');
@@ -79,8 +84,11 @@ syncMindName(settings.name);
 function updateSettings(b) {
   const clean = {};
   if (typeof b.name === 'string' && b.name.trim()) clean.name = b.name.trim().slice(0, 12);
-  if (/^#[0-9a-f]{6}$/i.test(b.color || '') && !pet.color) clean.color = b.color;
-  for (const k of ['voice', 'speakDone', 'captions', 'phoneApprovals', 'learns']) if (typeof b[k] === 'boolean') clean[k] = b[k];
+  for (const k of ['voice', 'speakDone', 'captions', 'phoneApprovals', 'learns', 'speciesPick']) if (typeof b[k] === 'boolean') clean[k] = b[k];
+  const o = b.speciesOverride;
+  if (o === null) clean.speciesOverride = null;
+  else if (o && o.id === 'plain' && /^#[0-9a-f]{6}$/i.test(o.color || '')) clean.speciesOverride = { id: 'plain', color: o.color, branch: null, rare: false };
+  else if (o && SPECIES[o.id]) clean.speciesOverride = { id: o.id, branch: BRANCHES[o.branch] ? o.branch : null, rare: !!o.rare };
   if (Number.isFinite(b.pitch)) clean.pitch = Math.min(2, Math.max(0.5, b.pitch));
   if ([15, 30, 60, 120].includes(b.askTimeout)) clean.askTimeout = b.askTimeout;
   if (['system', 'light', 'dark'].includes(b.theme)) clean.theme = b.theme;
@@ -91,24 +99,94 @@ function updateSettings(b) {
 function rebirth() {
   db.exec('DELETE FROM events; DELETE FROM milestones;');
   pet = newPet(); voiceSessions = {}; kvSet('pet', pet); kvSet('voiceSessions', voiceSessions); kvSet('diary', []); laxFeed.length = 0;
+  leadCache.at = 0; autoCache.at = 0;
   milestone(`${settings.name} was born`);
 }
 
 // ---------- evolution (pure rules, no AI) ----------
-// Lax's colour picks its growth curve (lib/levels.mjs), so changing colour can move its level.
-const levelOf = (xp) => levelOn(xp, curveOf(settings.color));
-const barFor = (xp) => barOn(xp, curveOf(settings.color));
+// The species (read while Lax was an egg, lib/species.mjs) picks the growth curve, the form and the colour.
+// While the bars get tuned, the Life menu can pick one by hand (settings.speciesPick): it wins everywhere until switched off.
+function activeSpecies() {
+  const o = settings.speciesPick && settings.speciesOverride;
+  if (!o) return pet.species;
+  const own = pet.species || {};
+  if (o.id === 'plain') return { id: 'plain', color: o.color };
+  return { id: o.id, rare: o.id === 'pink' && o.rare, copy: own.copy || null,
+    branch: o.id === 'fox' ? o.branch || own.branch || autoBranch() : null };
+}
+const levelOf = (xp) => levelOn(xp, curveFor(activeSpecies()));
+const barFor = (xp) => barOn(xp, curveFor(activeSpecies()));
 // Never de-evolve: a stage, once reached, is kept (pet.stageReached), even if the curve ever changes again.
 const stageOf = (lvl) => STAGES[Math.max(stageIdx(lvl), pet.stageReached || 0)][1];
-// From level 50 Lax has evolved into its colour's form (public/lax.js), so the colour is kept for good.
-const COLOR_SET_AT = STAGES.findIndex(([l]) => l === 50);
-const colorSet = () => Math.max(stageIdx(levelOf(pet.xp)), pet.stageReached || 0) >= COLOR_SET_AT;
-// The colour is pinned in Lax's life (pet.color), not just its settings, so editing settings.json can't change it either.
-function pinColor() {
-  if (!pet.color && colorSet()) { pet.color = settings.color; kvSet('pet', pet); }
-  if (pet.color && settings.color !== pet.color) { settings = { ...settings, color: pet.color }; writeSettings(settings); }
+const stageNow = () => Math.max(stageIdx(levelOf(pet.xp)), pet.stageReached || 0);
+// What Lax has lived, as rows for lib/species.mjs. Its own thinking (the mind, ~/.lax) isn't your work.
+const legacyRepo = new Map();
+function journal(from, to = Infinity) {
+  return db.prepare('SELECT ts, session, project, repo, kind FROM events WHERE ts >= ? AND ts < ? ORDER BY ts').all(from, Number.isFinite(to) ? to : 8.64e15)
+    .filter((e) => e.project !== 'mind' && e.project !== '.lax' && !(e.repo || '').startsWith(HOME))
+    .map((e) => ({ ...e, repo: e.repo || oldRepo(e.project) }));
 }
-pinColor();
+// Rows from before the repo column: a folder of that name in ~/REPOS that is a git repo (a worktree "x-wt-…" is x).
+function oldRepo(project) {
+  if (!legacyRepo.has(project)) { const d = path.join(DEFAULT_WORKDIR, String(project).replace(/-wt-.*$/, '')); legacyRepo.set(project, fs.existsSync(path.join(d, '.git')) ? d : null); }
+  return legacyRepo.get(project);
+}
+/** The repo a folder is in, a worktree counting as its main repo (its .git is a file pointing into main/.git/worktrees). */
+const repoKeys = new Map();
+function repoKey(cwd) {
+  if (!cwd) return null;
+  if (!repoKeys.has(cwd)) repoKeys.set(cwd, mainRepo(cwd));
+  return repoKeys.get(cwd);
+}
+function mainRepo(cwd) {
+  const r = repoRoot(cwd); if (!r) return null;
+  try { const m = /^gitdir:\s*(.+)$/m.exec(fs.readFileSync(path.join(r, '.git'), 'utf8')); if (m && m[1].includes('/worktrees/')) return path.resolve(r, m[1].trim(), '../../..'); } catch {}
+  return r;
+}
+// The fox's Lv50 form: decided once, when it gets there.
+let autoCache = { at: 0, v: null };
+function autoBranch() {
+  if (Date.now() - autoCache.at > 36e5) autoCache = { at: Date.now(), v: branch({ ...dayNight(journal(pet.hatchedAt || pet.born)), limitDays: (pet.limitDays || []).length }) };
+  return autoCache.v;
+}
+function settleBranch() {
+  if (pet.species?.id === 'fox' && !pet.species.branch && stageNow() >= BRICK) { autoCache.at = 0; pet.species.branch = autoBranch(); }
+}
+// Hatching: 1000 XP or three worked days, then the species is whatever stood out in that time.
+const round = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Math.round(v * 100) / 100]));
+function hatchNow() {
+  const sig = signals(journal(pet.born)), id = pick(sig);
+  pet.species = { id, copy: pick(sig, { noPink: true }), rare: id === 'pink' && Math.random() < RARE, branch: null };
+  pet.hatched = true; pet.hatchedAt = Date.now(); pet.hatchSignals = round(sig); pet.xp = 0; pet.stageReached = 0;
+  delete pet.eggXp; delete pet.eggDays;
+  const text = `${settings.name} hatched: ${aName(id)}!`;
+  milestone(text); diary(text.replace(`${settings.name} `, '').replace(/!$/, ''));
+  broadcast('bubble', { id: 'hatch' + Date.now(), kind: 'levelup', text, speak: true });
+  kvSet('pet', pet); pushState();
+}
+function checkHatch() { if (pet.hatched === false && shouldHatch(pet, dayKey(Date.now()))) hatchNow(); }
+// What leads while it's an egg (its speckles), worked out at most once a minute.
+let leadCache = { at: 0, v: null };
+function eggLead() {
+  if (Date.now() - leadCache.at > 6e4) { const sig = signals(journal(pet.born)); leadCache = { at: Date.now(), v: sig.busyH >= 1 ? pick(sig) : null, sig: round(sig) }; }
+  return leadCache;
+}
+// A Lax from before species hatches again, as if its history had been an egg: the egg takes its first 1000 XP.
+function rehatchOld() {
+  if (settings.color) { const { color, ...rest } = settings; settings = rest; writeSettings(settings); } // the species gives the colour now
+  delete pet.color;
+  if (pet.species || pet.hatched === false) return;
+  const r = replayEgg(journal(pet.born));
+  if (!r.at) { Object.assign(pet, { hatched: false, eggXp: r.eggXp, eggDays: r.eggDays, xp: 0, stageReached: 0 }); milestone(`${settings.name} went back into its egg`); }
+  else {
+    pet.species = { id: r.species, copy: r.copy, rare: r.species === 'pink' && Math.random() < RARE, branch: null };
+    pet.hatchedAt = r.at; pet.hatchSignals = round(r.signals); pet.xp = Math.max(0, pet.xp - EGG_XP); pet.stageReached = stageIdx(levelOf(pet.xp));
+    settleBranch();
+    milestone(`${settings.name} hatched again, as ${aName(r.species)}`);
+  }
+  pet.days ||= {}; pet.limitDays ||= [];
+  kvSet('pet', pet);
+}
 // Traits (headband, glasses, cape…) show from level 10: a young Lax is just itself.
 const TRAITS_FROM = 10;
 // The kind of work you do most gives one: headband, glasses or monocle.
@@ -116,24 +194,34 @@ const TOOL_TRAIT = { Bash: 'headband', Edit: 'glasses', Write: 'glasses', MultiE
   Read: 'monocle', Grep: 'monocle', Glob: 'monocle' };
 // A command that runs tests (not one that only mentions them, like grep '"test"' package.json).
 const TEST_RUN = /\b(?:(?:npm|pnpm|yarn|bun)(?: run)? test|pytest|jest|vitest|cargo test|go test|node --test|swift test|gradlew? test|make test)\b|scripts\/test-[\w-]+\.m?js/;
-const uses = (p, ...tools) => tools.reduce((a, t) => a + (p.tools[t] || 0), 0);
+// Traits read only the last 7 days (pet.days, by local day), so they follow the work and fade after a week away.
+const week = (p) => { const w = { tools: {}, tests: 0, errors: 0 };
+  for (let i = 0; i < 7; i++) { const d = p.days?.[dayKey(Date.now() - i * 864e5)]; if (!d) continue;
+    for (const [k, n] of Object.entries(d.tools || {})) w.tools[k] = (w.tools[k] || 0) + n; w.tests += d.tests || 0; w.errors += d.errors || 0; }
+  return w; };
+// Today's tally, for the traits; days older than a week go.
+function today() {
+  const k = dayKey(Date.now()); pet.days ||= {};
+  if (!pet.days[k]) { for (const d of Object.keys(pet.days)) if (d < dayKey(Date.now() - 8 * 864e5)) delete pet.days[d]; pet.days[k] = { tools: {}, tests: 0, errors: 0 }; }
+  return pet.days[k];
+}
+const uses = (w, ...tools) => tools.reduce((a, t) => a + (w.tools[t] || 0), 0);
 function traits(p) {
   if (levelOf(p.xp) < TRAITS_FROM) return [];
-  const t = [];
+  const t = [], w = week(p);
   // A trait's tools added up. Bash counts a tenth: nearly everything runs through it, so otherwise every Lax wore the headband.
   const kinds = {};
-  for (const [tool, n] of Object.entries(p.tools)) {
+  for (const [tool, n] of Object.entries(w.tools)) {
     const k = TOOL_TRAIT[tool];
     if (k) kinds[k] = (kinds[k] || 0) + (tool === 'Bash' ? n / 10 : n);
   }
   const top = Object.entries(kinds).sort((a, b) => b[1] - a[1])[0];
   if (top && top[1] >= 30) t.push(top[0]);
   // Extras, on top of it. Goggles: tests are a real share of your commands, not just a few ever run.
-  const tests = p.tools.__tests || 0;
-  if (tests >= 50 && tests >= uses(p, 'Bash') * 0.15) t.push('goggles');
-  if (uses(p, 'WebFetch', 'WebSearch') >= 25) t.push('antenna');
-  if (uses(p, 'Agent', 'Task') >= 10) t.push('cape');
-  if (p.errors >= 10) t.push('scar');
+  if (w.tests >= 50 && w.tests >= uses(w, 'Bash') * 0.15) t.push('goggles');
+  if (uses(w, 'WebFetch', 'WebSearch') >= 25) t.push('antenna');
+  if (uses(w, 'Agent', 'Task') >= 10) t.push('cape');
+  if (w.errors >= 10) t.push('scar');
   if (p.streak >= 5) t.push('flame');
   return t;
 }
@@ -147,12 +235,13 @@ const LANG = { py: 'python', ts: 'typescript', tsx: 'typescript', js: 'javascrip
   go: 'go', c: 'c', cc: 'cpp', cpp: 'cpp', h: 'c', java: 'java', kt: 'kotlin', swift: 'swift', rb: 'ruby', md: 'markdown', tex: 'latex' };
 
 function gainXp(n) {
+  if (pet.hatched === false) { pet.eggXp = (pet.eggXp || 0) + n; checkHatch(); return; } // an egg gets no XP: it fills its shell
   const before = levelOf(pet.xp);
   pet.xp += n;
   const after = levelOf(pet.xp);
   if (after > before) {
     const grew = stageIdx(after) > Math.max(stageIdx(before), pet.stageReached || 0);
-    pet.stageReached = Math.max(pet.stageReached || 0, stageIdx(after)); pinColor();
+    pet.stageReached = Math.max(pet.stageReached || 0, stageIdx(after)); settleBranch();
     const st = stageOf(after);
     const text = after === MAX_LEVEL ? `${settings.name} reached level 100! A legend.`
       : grew ? `${settings.name} evolved into a ${st}!` : `${settings.name} reached level ${after}!`;
@@ -161,6 +250,16 @@ function gainXp(n) {
   }
 }
 function touchDay() {
+  // Local days, for the egg and the pink one. A new worked day: the pink one copies the last one (a quiet day keeps its form).
+  const local = dayKey(Date.now());
+  if (pet.workDay !== local) {
+    if (pet.workDay && pet.species?.id === 'pink') {
+      const from = new Date(pet.workDay + 'T00:00').getTime(), sig = signals(journal(from, from + 864e5));
+      if (sig.busyH > 0) pet.species.copy = pick(sig, { noPink: true });
+    }
+    pet.workDay = local;
+  }
+  if (pet.hatched === false && !(pet.eggDays ||= []).includes(local)) { pet.eggDays.push(local); leadCache.at = 0; }
   const today = new Date().toISOString().slice(0, 10);
   if (pet.lastDay !== today) {
     const y = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
@@ -171,9 +270,18 @@ function touchDay() {
   pet.lastSeen = Date.now();
 }
 function petView() {
-  const level = levelOf(pet.xp), [prevXp, nextXp] = barFor(pet.xp);
+  const level = levelOf(pet.xp), [prevXp, nextXp] = barFor(pet.xp), egg = pet.hatched === false;
+  const sp = activeSpecies(), st = stageNow();
+  // The rare one keeps its secret until level 50: before that it is a pink like any other.
+  const species = sp && { id: sp.id, name: nameFor(sp, st), branch: st >= BRICK ? sp.branch || null : null, copy: sp.copy || null, rare: !!sp.rare && st >= BRICK };
+  const lead = egg ? eggLead() : null;
   return { name: settings.name, born: pet.born, level, stage: stageOf(level), xp: pet.xp, prevXp, nextXp,
-    traits: traits(pet), mood: mood(pet), streak: pet.streak, colorSet: !!pet.color, hatched: pet.hatched !== false };
+    traits: traits(pet), mood: mood(pet), streak: pet.streak, hatched: !egg, species,
+    look: egg ? { form: null, color: lead.v ? SPECIES[lead.v].color : '#8a8378', lift: 0 } : formFor(sp, st),
+    egg: egg ? { pct: Math.round(eggProgress(pet) * 100), lead: lead.v } : null,
+    // Why it is what it is: each species' value over its bar, from the egg's time (for the Life menu, while the bars get tuned).
+    why: (egg ? lead.sig : pet.hatchSignals) || null, bars: BARS, picked: !!(settings.speciesPick && settings.speciesOverride),
+    choices: Object.entries(SPECIES).map(([id, v]) => ({ id, name: v.name, color: v.color })), branches: Object.entries(BRANCHES).map(([id, v]) => ({ id, name: v.name, color: v.color })) };
 }
 let saveTimer;
 const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => { kvSet('pet', pet); kvSet('voiceSessions', voiceSessions); }, 500); };
@@ -198,6 +306,8 @@ function setUsage(rl) {
   const u = readUsage(rl); if (!u) return false;
   const changed = JSON.stringify(u) !== JSON.stringify({ five_hour: usage?.five_hour, seven_day: usage?.seven_day });
   usage = { ...u, ts: Date.now() }; kvSet('usage', usage);
+  // Days you hit the 5-hour limit: enough of them and a fox becomes the coin cat at level 50.
+  if ((u.five_hour?.pct || 0) >= LIMIT_PCT && !(pet.limitDays ||= []).includes(dayKey(Date.now()))) { pet.limitDays.push(dayKey(Date.now())); save(); }
   if (changed) pushState(); // the status line runs often; the phone only hears when a number moves
   return true;
 }
@@ -289,7 +399,7 @@ const spoken = (text) => {
 };
 
 function onHook(h) {
-  const sid = h.session_id, project = proj(h.cwd);
+  const sid = h.session_id, project = proj(h.cwd), repo = repoKey(h.cwd);
   const s = sessions.get(sid) || { project, status: 'idle', ts: 0 };
   s.ts = Date.now(); s.project = project; if (h.permission_mode) s.mode = h.permission_mode; if (h.cwd) s.cwd = h.cwd; if (h.lax_where) s.where = h.lax_where; if (h.lax_session_pid) s.pid = h.lax_session_pid;
   sessions.set(sid, s);
@@ -304,20 +414,21 @@ function onHook(h) {
   switch (h.hook_event_name) {
     case 'SessionStart':
       pet.sessions++; gainXp(2); s.status = 'idle';
-      if (!mine) feed(`● session ${project}`, 'session', project, sid); logEvent(sid, project, 'session', h.source || 'start');
+      if (!mine) feed(`● session ${project}`, 'session', project, sid); logEvent(sid, project, 'session', h.source || 'start', repo);
       break;
     case 'UserPromptSubmit':
       s.status = 'working'; if (!mine) feed(`> ${short(h.prompt, 90)}`, 'prompt', project, sid); else if (laxOnMac) feed(`> ${short(h.prompt, 90)}`, 'prompt', settings.name.toLowerCase());
-      logEvent(sid, project, 'prompt', short(h.prompt, 500));
+      logEvent(sid, project, 'prompt', short(h.prompt, 500), repo);
       break;
     case 'PreToolUse': {
       s.status = 'working'; const n = h.tool_name;
+      const day = today(); day.tools[n] = (day.tools[n] || 0) + 1;
       pet.tools[n] = (pet.tools[n] || 0) + 1; gainXp(1);
-      if (n === 'Bash' && TEST_RUN.test(h.tool_input?.command || '')) pet.tools.__tests = (pet.tools.__tests || 0) + 1;
+      if (n === 'Bash' && TEST_RUN.test(h.tool_input?.command || '')) { pet.tools.__tests = (pet.tools.__tests || 0) + 1; day.tests++; }
       const ext = (h.tool_input?.file_path || '').split('.').pop();
       if (/^(Edit|Write|MultiEdit)$/.test(n) && LANG[ext]) pet.langs[LANG[ext]] = (pet.langs[LANG[ext]] || 0) + 1;
       if (!mine) narrate(h, project);
-      feed(describeTool(n, h.tool_input), 'tool', project, sid, stepParts(n, h.tool_input, h)); logEvent(sid, project, 'tool', describeTool(n, h.tool_input));
+      feed(describeTool(n, h.tool_input), 'tool', project, sid, stepParts(n, h.tool_input, h)); logEvent(sid, project, 'tool', describeTool(n, h.tool_input), repo);
       break;
     }
     case 'PostToolUse': {
@@ -330,14 +441,14 @@ function onHook(h) {
         if (lines.length) feed(lines.slice(0, 12).map((l) => '  ' + short(l, 160)).join('\n') + (lines.length > 12 ? `\n  … ${lines.length - 12} more lines` : ''), 'out', project, sid,
           { out: lines.slice(0, 40).map((l) => l.slice(0, 300)), total: lines.length, agent: h.agent_id });
       }
-      if (err) { pet.errors++; feed(`  ✗ ${h.tool_name} failed`, 'error', project, sid, { agent: h.agent_id }); broadcast('react', { state: 'error' }); }
+      if (err) { pet.errors++; today().errors++; feed(`  ✗ ${h.tool_name} failed`, 'error', project, sid, { agent: h.agent_id }); broadcast('react', { state: 'error' }); }
       break;
     }
     case 'PostToolUseFailure': { // a step that failed (a command's non-zero exit, a refused edit): what it said, then ✗
       if (h.is_interrupt) break;
       const lines = String(h.error || '').replace(/\s+$/, '').split('\n').filter(Boolean);
       if (lines.length) feed(lines.slice(0, 12).map((l) => '  ' + short(l, 160)).join('\n'), 'out', project, sid, { out: lines.slice(0, 40).map((l) => l.slice(0, 300)), total: lines.length, agent: h.agent_id });
-      pet.errors++; feed(`  ✗ ${h.tool_name} failed`, 'error', project, sid, { agent: h.agent_id }); broadcast('react', { state: 'error' });
+      pet.errors++; today().errors++; feed(`  ✗ ${h.tool_name} failed`, 'error', project, sid, { agent: h.agent_id }); broadcast('react', { state: 'error' });
       break;
     }
     case 'Notification':
@@ -350,7 +461,7 @@ function onHook(h) {
       s.status = 'done'; pet.turns++; gainXp(5);
       const msg = h.last_assistant_message || '';
       if (!mine) { narrate(h, project, msg); feed(`✓ ${project}: ${clip(msg, 1500) || 'done'}`, 'done', project, sid, { text: clip(msg, 1500) || 'done' }); } else if (laxOnMac) feed(`↩ ${clip(msg) || 'done'}`, 'done', settings.name.toLowerCase(), undefined, { answer: true, text: clip(msg) || 'done' });
-      logEvent(sid, project, 'done', short(msg, 1000));
+      logEvent(sid, project, 'done', short(msg, 1000), repo);
       if (!(voiceRun && voiceRun.sessionId === sid)) // voice runs speak their own result
         broadcast('bubble', { id: 'done-' + sid + Date.now(), kind: 'done', text: `${project}: ${spoken(msg) || 'done!'}`, session: sid, speak: false });
       break;
@@ -715,7 +826,7 @@ http.createServer(async (req, res) => {
       return json(res, { ok: !!p });
     }
     case '/api/settings': updateSettings(b); pushState(); return json(res, { ok: true, settings });
-    case '/api/hatch': if (pet.hatched === false) { pet.hatched = true; save(); pushState(); } return json(res, { ok: true });
+    case '/api/hatch': return json(res, { ok: true }); // older pages tapped to hatch; the egg hatches on its own now
     case '/api/rebirth': rebirth(); broadcast('reborn', {}); pushState(); return json(res, { ok: true });
     case '/api/diag': console.log(`[phone ${new Date().toISOString().slice(11, 19)}] ${JSON.stringify(b).slice(0, 600)}`); return json(res, { ok: true });
     case '/api/brain/reflect': return json(res, { ok: isLocal(req) && !!b.session && (brain.enqueue(String(b.session)), true) }); // local only: reflect now
@@ -731,3 +842,7 @@ http.createServer(async (req, res) => {
 }).listen(PORT, HOST, () => {
   console.log(`Lax is awake on ${HOST}:${PORT}.\n  Mac:   http://localhost:${PORT}/?t=${TOKEN}\n  Phone: ${phoneUrl()}\n  Pair:  http://localhost:${PORT}/pair  (QR code)`);
 });
+
+// Species (lib/species.mjs): a Lax from before them hatches again, and an egg checks whether its third day is over.
+rehatchOld();
+setInterval(checkHatch, 10 * 6e4);

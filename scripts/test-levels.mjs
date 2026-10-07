@@ -1,6 +1,6 @@
-// Lax's level curves (lib/levels.mjs): Medium Slow or Medium Fast by colour, max 100, evolutions at 16 / 36 / 50 / 100.
-import fs from 'node:fs';
-import { xpFor, levelOf, stageIdx, barFor, STAGES, COLORS, curveOf } from '../lib/levels.mjs';
+// Lax's level curves (lib/levels.mjs): Medium Slow or Medium Fast by species, max 100, evolutions at 16 / 36 / 50 / 100.
+import { xpFor, levelOf, stageIdx, barFor, STAGES } from '../lib/levels.mjs';
+import { SPECIES, curveFor } from '../lib/species.mjs';
 
 let failed = 0;
 const check = (name, got, want) => { const ok = JSON.stringify(got) === JSON.stringify(want);
@@ -23,11 +23,10 @@ check('the curve always goes up', mono, true);
 
 check('Medium Fast: level 16 / 100 at 4096 / 1e6 XP', [16, 100].map((n) => xpFor(n, 'mediumFast')), [4096, 1000000]);
 check('1387 XP on Medium Fast is level 11', levelOf(1387, 'mediumFast'), 11);
-check('swatch curves, in order', COLORS.map(([, c]) => c), ['mediumSlow', 'mediumSlow', 'mediumSlow', 'mediumFast', 'mediumFast', 'mediumFast', 'mediumFast', 'mediumFast', 'mediumSlow']);
-check('the default colour (any case) stays Medium Slow', curveOf('#d97757'), 'mediumSlow');
-check('a custom colour is Medium Fast', curveOf('#123456'), 'mediumFast');
-const ui = fs.readFileSync(new URL('../public/lax.js', import.meta.url), 'utf8').match(/const COLORS = (\[.*?\]);/)[1];
-check('the phone shows the same swatches', JSON.parse(ui.replace(/'/g, '"')), COLORS.map(([c]) => c));
+check('species curves', Object.fromEntries(Object.entries(SPECIES).map(([k, v]) => [k, v.curve])),
+  { grass: 'mediumSlow', fire: 'mediumSlow', water: 'mediumSlow', electric: 'mediumFast', fox: 'mediumFast', pink: 'mediumSlow' });
+check('the fox keeps its curve when it branches', curveFor({ id: 'fox', branch: 'moon' }), 'mediumFast');
+check('no species yet (an egg) is Medium Slow', curveFor(null), 'mediumSlow');
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nall level checks passed');
 process.exit(failed ? 1 : 0);
