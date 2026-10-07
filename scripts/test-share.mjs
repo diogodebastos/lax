@@ -1,5 +1,5 @@
 // Sharing (lib/share.mjs): WhatsApp numbers and links, who "Vera" means, and picking one by voice.
-import { waNumber, waLink, contactChoices, pickOption } from '../lib/share.mjs';
+import { waNumber, waLink, contactChoices, pickOption, pressScript, sameName } from '../lib/share.mjs';
 
 let failed = 0;
 const check = (name, got, want) => { const ok = JSON.stringify(got) === JSON.stringify(want);
@@ -28,6 +28,13 @@ check('short words must be exact: "Vero" is no one', pickOption(['Vera Silva', '
 check('"Costa" alone is two people: no pick', pickOption(L, 'Costa'), -1);
 check('nonsense: no pick', pickOption(L, 'banana'), -1);
 check('nothing said: no pick', pickOption(L, ''), -1);
+
+check('a chat named like what was said: first names, accents, emoji', ['Carlos Sequeira 🐼', 'João Lip', 'Tiago Domingues EY', 'Carlos Castelo']
+  .map((n) => [sameName(n, 'Carlos'), sameName(n, 'joao'), sameName(n, 'tiago domingues'), sameName(n, 'Carlos Sequeira')]),
+  [[true, false, false, true], [false, true, false, false], [false, false, true, false], [true, false, false, false]]);
+check('nothing said is no one', sameName('Carlos', ''), false);
+check('WhatsApp keystrokes: activate first, numbers are pauses', pressScript(0.3, 'keystroke "v" using command down').split('\n'),
+  ['tell application "WhatsApp" to activate', 'delay 0.3', 'tell application "System Events" to keystroke "v" using command down']);
 
 if (failed) { console.log(`\n${failed} share check(s) failed`); process.exit(1); }
 console.log('\nall share checks passed');
