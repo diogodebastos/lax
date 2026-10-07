@@ -69,13 +69,13 @@ const app = (await cf('GET', `/accounts/${A.id}/access/apps`)).find((a) => a.dom
 await (app ? cf('PUT', `/accounts/${A.id}/access/apps/${app.id}`, appBody) : cf('POST', `/accounts/${A.id}/access/apps`, appBody));
 step(`access app on ${HOST}: ${EMAIL} (email PIN) + service token`);
 
-// 3b. The public demos (/demo-*: static pages in demo mode, see server.mjs) are open to everyone. Everything else stays
+// 3b. The public demo (/demo and what it loads: static pages in demo mode, see server.mjs) is open to everyone. Everything else stays
 // behind the app above: Access picks the most specific path, and the API still needs Lax's token.
 const pub = await policy('lax: public demos', 'bypass', [{ everyone: {} }]);
-const demoBody = { name: 'Lax demos', domain: `${HOST}/demo-*`, type: 'self_hosted', app_launcher_visible: false, policies: [{ id: pub.id, precedence: 1 }] };
-const demoApp = (await cf('GET', `/accounts/${A.id}/access/apps`)).find((a) => a.domain === demoBody.domain);
+const demoBody = { name: 'Lax demos', domain: `${HOST}/demo`, type: 'self_hosted', app_launcher_visible: false, policies: [{ id: pub.id, precedence: 1 }] };
+const demoApp = (await cf('GET', `/accounts/${A.id}/access/apps`)).find((a) => a.name === demoBody.name);
 await (demoApp ? cf('PUT', `/accounts/${A.id}/access/apps/${demoApp.id}`, demoBody) : cf('POST', `/accounts/${A.id}/access/apps`, demoBody));
-step(`public: https://${HOST}/demo-portrait, -landscape, -cover`);
+step(`public: https://${HOST}/demo`);
 
 // 4. Remotely-managed tunnel → 127.0.0.1:7777
 let tunnel = (await cf('GET', `/accounts/${A.id}/cfd_tunnel?is_deleted=false&name=lax`))[0];

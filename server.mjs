@@ -565,13 +565,13 @@ http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     return res.end(fs.readFileSync(path.join(ROOT, 'public', 'pair.html'), 'utf8').replace('%%URL%%', phoneUrl()).replace('%%APP%%', appPairUrl()));
   }
-  // Public demos: the only paths Cloudflare Access lets anyone through (scripts/cf-setup.mjs), so they and everything
-  // they load live under /demo-*. A fixed list, served from public/; the app inside runs in ?demo mode (no server, no token).
-  if (req.method === 'GET' && url.pathname.startsWith('/demo-')) {
-    const DEMO_FILES = { '/demo-portrait': 'demo.html', '/demo-landscape': 'demo.html', '/demo-cover': 'demo.html', '/demo-app': 'index.html', '/demo-lax.js': 'lax.js' };
+  // The public demo: the only path Cloudflare Access lets anyone through (scripts/cf-setup.mjs), so it and everything it
+  // loads live under /demo. A fixed list, served from public/; the app inside runs in ?demo mode (no server, no token).
+  if (req.method === 'GET' && (url.pathname === '/demo' || url.pathname.startsWith('/demo/'))) {
+    const DEMO_FILES = { '/demo': 'demo.html', '/demo/app': 'index.html', '/demo/lax.js': 'lax.js' };
     const f = DEMO_FILES[url.pathname]; if (!f) { res.writeHead(404); return res.end(); }
     let text = fs.readFileSync(path.join(ROOT, 'public', f), 'utf8');
-    if (f === 'index.html') text = text.replace('src="lax.js', 'src="/demo-lax.js');
+    if (f === 'index.html') text = text.replace('src="lax.js', 'src="/demo/lax.js');
     res.writeHead(200, { 'content-type': MIME[path.extname(f)], 'cache-control': 'no-store' });
     return res.end(text);
   }
