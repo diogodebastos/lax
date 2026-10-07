@@ -1,0 +1,10 @@
+// The public demo, served by Cloudflare so it works with the Mac off. Assets only, no code: scripts/demo.mjs builds
+// dist/ from a git commit (the one being pushed) and deploys it. Access lets everyone through on /demo (cf-setup.mjs).
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "lax-demo",
+  "compatibility_date": "2026-10-07",
+  "assets": { "directory": "./dist", "html_handling": "auto-trailing-slash", "not_found_handling": "none" },
+  "routes": [{ "pattern": "lax.diogodebastos.com/demo*", "zone_name": "diogodebastos.com" }],
+  "workers_dev": false
+}

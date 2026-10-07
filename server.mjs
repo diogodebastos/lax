@@ -565,8 +565,8 @@ http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     return res.end(fs.readFileSync(path.join(ROOT, 'public', 'pair.html'), 'utf8').replace('%%URL%%', phoneUrl()).replace('%%APP%%', appPairUrl()));
   }
-  // The public demo: the only path Cloudflare Access lets anyone through (scripts/cf-setup.mjs), so it and everything it
-  // loads live under /demo. A fixed list, served from public/; the app inside runs in ?demo mode (no server, no token).
+  // The demo, live from the working folder (a local preview). Publicly, Cloudflare serves /demo itself from the last push
+  // to main (scripts/demo.mjs), so it never reaches here. A fixed list from public/; the app runs in ?demo mode.
   if (req.method === 'GET' && (url.pathname === '/demo' || url.pathname.startsWith('/demo/'))) {
     const DEMO_FILES = { '/demo': 'demo.html', '/demo/app': 'index.html', '/demo/lax.js': 'lax.js' };
     const f = DEMO_FILES[url.pathname]; if (!f) { res.writeHead(404); return res.end(); }
