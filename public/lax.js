@@ -47,7 +47,7 @@ function fit() {
 addEventListener('resize', fit); fit();
 document.fonts?.ready.then(fit); // the pixel font changes the hint's height, which Lax's position depends on
 
-const VERSION = 'v0.4';
+const VERSION = 'v0.5';
 // Diagnostics → the Mac's server log (data/server.log), so phone-only problems are visible there.
 const diag = (event, data = {}) => { if (DEMO || !TOKEN) return; try { fetch('/api/diag', { method: 'POST', keepalive: true,
   headers: { 'content-type': 'application/json', 'x-lax-token': TOKEN }, body: JSON.stringify({ event, ...data }) }); } catch {} };
@@ -778,9 +778,14 @@ function stopListening(discard) {
   if (NATIVE) NATIVE.cancelListening(); else if (rec) { rec.onend = null; rec.onerror = null; try { rec.abort(); } catch {} }
   clearBubble('listen'); hint.textContent = IDLE_HINT;
 }
+// Speech comes without punctuation, so a question would reach Claude as a statement. Words that open a question get
+// their "?" back. "Do"/"when"/"where" need more than the first word: "do the tests", "when you're done push" are orders.
+const AUX = 'is|are|am|was|were|does|did|can|could|would|should|will|shall|has|have|had|may|might|isn\'t|aren\'t|wasn\'t|doesn\'t|didn\'t|don\'t|can\'t|won\'t|wouldn\'t|shouldn\'t|couldn\'t|haven\'t|hasn\'t';
+const QUESTION = new RegExp(`^(?:(?:what|what's|whats|why|how|how's|who|who's|whose|which)\\b|(?:when|where)(?:'s| (?:${AUX}|do)\\b)|do (?:you|i|we|they)\\b|(?:${AUX}) (?:you|i|we|they|he|she|it|there|this|that|these|those|the|my|your|our|its|lax)\\b)`, 'i');
+const punctuate = (t) => !t || /[.!?…]$/.test(t) || !QUESTION.test(t) ? t : t + '?';
 function finishListening() { // send what was heard
   if (!listening) return;
-  const text = words(), h = answerHook; answerHook = null;
+  const text = punctuate(words()), h = answerHook; answerHook = null;
   stopListening(false);
   if (text) { sfx([330]); h ? h(text) : send(text); } else if (h) renderBubble();
 }

@@ -88,6 +88,9 @@ class LaxBridge(private val act: MainActivity, private val web: WebView) {
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
                 putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, preferOffline)
+                // Punctuation (a question gets its "?"), where the recognizer can do it; the page adds a "?" otherwise.
+                if (android.os.Build.VERSION.SDK_INT >= 33)
+                    putExtra(RecognizerIntent.EXTRA_ENABLE_FORMATTING, RecognizerIntent.FORMATTING_OPTIMIZE_QUALITY)
             })
         }
     }
