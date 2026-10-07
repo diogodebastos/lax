@@ -46,6 +46,7 @@ check('"Talk to edge cava" goes to that tab', tabCommand('Talk to edge cava.', T
 check('"switch to the side-project session" / "go to side project mac" go to that tab', tabCommand('switch to the side-project session', TABS) === 's2' && tabCommand('go to side project mac', TABS) === 's2');
 check('"go to edge kava" (misheard) still finds it', tabCommand('go to edge kava', TABS) === 's1');
 check('"back to you" / "talk to Pip" (its name) go to Lax\'s own tab', tabCommand('Back to you.', TABS) === 'all' && tabCommand('talk to Pip', TABS, 'Pip') === 'all');
+check('"Go to Lax CLI to session" (as heard) goes to lax·cli', tabCommand('Go to Lax CLI to session', TABS) === 's3');
 check('"go to the store" is a message', tabCommand('go to the store', TABS) === null);
 check('"talk to me about lax" is a message', tabCommand('talk to me about lax', TABS) === null);
 check('"switch to plan mode" is not a tab', tabCommand('switch to plan mode', TABS) === null);
