@@ -39,8 +39,8 @@ npm run remove-hooks   # undo
 ```
 
 - `http://localhost:7777/pair`: a QR code to open Lax on the phone (only works from the Mac itself)
-- `http://localhost:7777/?demo`: every state, without Claude Code
-- `http://localhost:7777/demo`: the shareable demo (closed / open / sideways phone), live from the working folder. The public one, https://lax.diogodebastos.com/demo, runs on Cloudflare (works with the Mac off) and is redeployed from main on every `git push` (`git config core.hooksPath scripts/git-hooks` once per clone; by hand: `node scripts/demo.mjs --deploy`).
+- `http://localhost:7777/demo/app?demo`: every state, without Claude Code
+- `http://localhost:7777/demo`: the shareable demo (portrait / landscape / cover; opens in landscape on a computer, portrait on a phone, cover 5% of the time), live from the working folder. The public one, https://lax.diogodebastos.com/demo, runs on Cloudflare (works with the Mac off) and is redeployed from main on every `git push` (`git config core.hooksPath scripts/git-hooks` once per clone; by hand: `node scripts/demo.mjs --deploy`).
 - `http://localhost:7777/preview.html`: a Flip 3 mockup (closed cover screen, open, Flex mode)
 
 ## Bodies
