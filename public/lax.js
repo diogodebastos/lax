@@ -91,6 +91,14 @@ let sessions = [], voiceBusy = false, thinking = false, lastWork = 0, channels =
 const ASLEEP = qs.has('asleep'); let macAsleep = ASLEEP;
 // No key: Lax hasn't hatched. Just an egg that wobbles now and then (and when tapped).
 const EGG = !DEMO && !ASLEEP && !TOKEN; let eggTapAt = -1e9;
+// Every start (the app opening, a reload) begins as an egg too, and the first tap hatches it.
+let shell = !DEMO && !ASLEEP, hatchAt = 0;
+function hatch() {
+  if (EGG || !shell || hatchAt) return;
+  hatchAt = performance.now(); sfx([392, 523]);
+  setTimeout(() => { shell = false; updateHint(); sfx([523, 659, 784]); hop(1.8);
+    for (let i = 0; i < 16; i++) spark(CX, GROUND - 8, i % 3 ? '#f3e6cf' : '#cdbb9c', 1.3, 45); }, 550);
+}
 let listening = false, speaking = false, react = null, reactUntil = 0;
 const body = { y: 0, vy: 0, s: 0, sv: 0, look: 0, blinkAt: 0, nextHop: 3 };
 const parts = [];
@@ -205,18 +213,20 @@ function formTop(f, x0, y0, w, h, eyeY, m, t) {
 }
 function drawEgg(t) {
   const rows = [4, 6, 8, 8, 10, 10, 12, 12, 12, 12, 12, 10, 8, 6], h = rows.length, y0 = GROUND - h;
-  const since = t - eggTapAt, k = since < 900 ? 1 : t % 3200 < 600 ? 0.6 : 0; // tapped, or every few seconds
-  const tilt = k * Math.sin(t / 60) * 2;
+  const since = t - eggTapAt, k = hatchAt ? 1.5 : since < 900 ? 1 : t % 3200 < 600 ? 0.6 : 0; // hatching, tapped, or every few seconds
+  const tilt = k * Math.sin(t / (hatchAt ? 35 : 60)) * 2;
   px(CX - 5, GROUND + 1, 10, 1, C.shadow);
   rows.forEach((w, i) => { const x = CX - w / 2 + Math.round(tilt * (h - i) / h); px(x - 1, y0 + i, w + 2, 1, C.out); });
   px(CX - 1 + Math.round(tilt), y0 - 1, 2, 1, C.out);
   rows.forEach((w, i) => { const x = CX - w / 2 + Math.round(tilt * (h - i) / h); px(x, y0 + i, w, 1, '#f3e6cf');
     if (i > 2) px(x + w - 2, y0 + i, 2, 1, '#cdbb9c'); if (i > 1 && i < 6) px(x + 1, y0 + i, 1, 1, '#fffaf0'); });
   for (const [dx, dy] of [[-2, 4], [2, 7], [-3, 9], [1, 11], [3, 3]]) px(CX + dx + Math.round(tilt * (h - dy) / h), y0 + dy, 1, 1, C.body);
+  if (hatchAt) { const n = Math.min(10, Math.floor((t - hatchAt) / 45)); // a zigzag crack runs across the middle
+    for (let i = 0; i < n; i++) px(CX - 5 + i + Math.round(tilt * 0.5), y0 + 6 + (i % 2), 1, 1, C.out); }
 }
 function draw(m, t) {
   g.clearRect(0, 0, W, H);
-  if (EGG) return drawEgg(t);
+  if (EGG || shell) return drawEgg(t);
   // ground: the dotted line is the hint's line in the page (#hint), so text never sits on it
   const [bw, bh] = SIZES[pet.stage] || SIZES.cube;
   let s = body.s;
@@ -648,7 +658,7 @@ function routeChannel() {
   return voiceTarget === 'background' ? null : channels.find((c) => c.cid === voiceTarget) || [...channels].sort((a, b) => b.active - a.active)[0] || null;
 }
 function setTarget(v) { voiceTarget = v; updateHint(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); if (!DEMO) api('/api/target', { target: v }); }
-function updateHint() { IDLE_HINT = EGG ? 'no key yet: open the link from npm start' : macAsleep ? `zzz… ${settings.name.toLowerCase()} is asleep` : voiceBroken ? `tap ${settings.name} to type` : `tap or hold ${settings.name} to talk`; if (!listening) hint.textContent = IDLE_HINT; }
+function updateHint() { IDLE_HINT = EGG ? 'no key yet: open the link from npm start' : shell ? `tap to hatch ${settings.name}` : macAsleep ? `zzz… ${settings.name.toLowerCase()} is asleep` : voiceBroken ? `tap ${settings.name} to type` : `tap or hold ${settings.name} to talk`; if (!listening) hint.textContent = IDLE_HINT; }
 const MIC_ERRORS = {
   'not-allowed': 'Mic is blocked. Tap the icon left of the address → Permissions → Microphone → Allow, then reload.',
   'service-not-allowed': 'This browser has no speech recognition. Use Chrome.',
@@ -768,6 +778,7 @@ const topEl = $('#top');
   topEl.addEventListener('pointerdown', (e) => {
     if (e.target.closest('#hud, #bubble') || wakeEl.isConnected || lifeEl.classList.contains('open')) return;
     if (EGG) { eggTapAt = performance.now(); return; }
+    if (shell) return hatch();
     try { topEl.setPointerCapture(e.pointerId); } catch {}
     const p = press = { id: e.pointerId, held: false, out: false };
     p.timer = setTimeout(() => { p.held = true; if (!listening) beginListening('hold'); }, 350);
@@ -785,7 +796,7 @@ const topEl = $('#top');
 }
 topEl.addEventListener('contextmenu', (e) => e.preventDefault());
 // Desktop: hold space to talk.
-addEventListener('keydown', (e) => { if (e.code === 'Space' && !EGG && !e.repeat && !listening && e.target === document.body) { e.preventDefault(); beginListening('hold'); } });
+addEventListener('keydown', (e) => { if (e.code === 'Space' && !EGG && !shell && !e.repeat && !listening && e.target === document.body) { e.preventDefault(); beginListening('hold'); } });
 addEventListener('keyup', (e) => { if (e.code === 'Space') releaseHold(true); });
 
 // ---------- wake (audio unlock, fullscreen, keep screen on) ----------
@@ -793,7 +804,7 @@ const wakeEl = $('#wake');
 // The app needs no wake tap: audio, full screen and keep-screen-on are native there.
 if (qs.has('awake') || NATIVE) wakeEl.remove();
 wakeEl.addEventListener('click', async () => {
-  wakeEl.remove(); sfx([523, 784]); hop(1.4);
+  wakeEl.remove(); if (shell) hatch(); else { sfx([523, 784]); hop(1.4); }
   try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch {}
   diag('wake');
   if (SR) {
