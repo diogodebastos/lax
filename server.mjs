@@ -13,7 +13,7 @@ import { HOME, MIND, DB, OLD_DB, SETTINGS, secret, ensureDirs, readEnv } from '.
 import { grantKey } from './lib/allow.mjs';
 import { MAX_LEVEL, STAGES, levelOf as levelOn, stageIdx, barFor as barOn, curveOf } from './lib/levels.mjs';
 import { createBrain, ensureBrain, brief } from './lib/brain.mjs';
-import { ACTIONS, voiceAction, sendAction, readStatus } from './lib/actions.mjs';
+import { ACTIONS, voiceAction, sendAction, readStatus, tabCommand } from './lib/actions.mjs';
 import { readUsage, usageText } from './lib/usage.mjs';
 import { openTerminal, q, ON_MAC } from './lib/terminal.mjs';
 
@@ -495,6 +495,9 @@ function askPick(cid, pickId, question, labels) {
   broadcast('bubble', bubble);
 }
 function talk(text) {
+  // "Talk to edge cava" / "back to you": the phone changes tab, as if you'd tapped it (whichever tab you said it in).
+  const tab = voiceAction(text) ? null : tabCommand(text, sessionList().slice(0, 8), settings.name);
+  if (tab) { feed(`> ${short(text, 90)}`, 'prompt', settings.name.toLowerCase()); broadcast('tab', { view: tab }); return true; }
   const cid = pickChannel();
   if (cid && quickAction(cid, voiceAction(text))) return true; // "clear", "stop"… (anything longer is a message)
   if (cid) { // into the running session

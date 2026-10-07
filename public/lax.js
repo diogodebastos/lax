@@ -686,6 +686,7 @@ function connect() {
   es.addEventListener('feed', (e) => { const f = JSON.parse(e.data); feed(f.line, f.kind, f.project, f.session); });
   es.addEventListener('bubble', (e) => showBubble(JSON.parse(e.data)));
   es.addEventListener('clear', (e) => clearBubble(JSON.parse(e.data).id));
+  es.addEventListener('tab', (e) => { const v = JSON.parse(e.data).view, chip = $('#chips').querySelector(`[data-view="${CSS.escape(v)}"]`); if (chip) goTab(chip); });
   es.addEventListener('reborn', () => { [...term.children].slice(0, -1).forEach((d) => d.remove()); parts.length = 0; hop(1.8);
     showBubble({ id: 'born', kind: 'reply', text: `Hi! I'm ${settings.name}. Nice to meet you.`, speak: true }); });
   es.addEventListener('react', (e) => { const r = JSON.parse(e.data); if (r.state === 'thinking') voiceBusy = true; else setReact(r.state); });
