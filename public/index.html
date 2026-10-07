@@ -140,8 +140,10 @@
   /* No terminal and no chat here: Lax, a mark per session, and a bubble only when something needs you (then Lax moves
      left to make room). With captions on, the ground line carries what Lax heard or said. Settings live in the open app. */
   body.wide #stage { inset:auto; left:-28px; top:-50px; width:312px; height:306px; }
-  body.wide.solo #top { width:512px; } body.wide.solo #stage { left:100px; } body.wide.solo #bottom { display:none; }
-  body.wide #bottom { justify-content:center; }
+  /* Only Lax moves: the top line and the ground line keep the whole strip; the bubble floats over the right half. */
+  body.wide #top { width:512px; } body.wide.solo #stage { left:100px; } body.wide.solo #bottom { display:none; }
+  body.wide #bottom { position:absolute; right:0; top:28px; bottom:28px; width:256px; justify-content:center; pointer-events:none; z-index:3; }
+  body.wide #bubble { pointer-events:auto; }
   body.wide #term { display:none; }
   body.wide #hud { font-size:19px; } body.wide #nameBtn { display:none; } body.wide #tab { display:block; }
   body.wide #xp { min-width:24px; }
