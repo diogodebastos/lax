@@ -71,11 +71,12 @@ The smallest learning loop that runs without you, so Lax starts learning now (Ph
 - The colours are familiar faces, in order: grass, fire, water starters, the electric mouse, the brown fox and its sun and moon forms, the coin cat, the pink one, then a free picker. Each colour levels on its face's curve: Medium Slow for the starters and the pink one, Medium Fast for the others and any custom colour. Changing colour can move the level; the stage never goes back.
 - Shipping it puts Lax at the right stage for the new curve (a one-time reset). From then on, Lax never de-evolves.
 
-### Phase 4: Lax on the cover screen [diogodebastos/lax#3](https://github.com/diogodebastos/lax/issues/3)
+### Phase 4: Lax on the cover screen ✅ [diogodebastos/lax#3](https://github.com/diogodebastos/lax/issues/3)
 This is the product: glance, don't open.
-- Run the app full-screen on the Flip 3's cover strip, through Good Lock MultiStar or CoverScreen OS.
-- Tune the `wide` layout at the real density.
-- Survive fold ↔ unfold without losing the link.
+- On the cover, just Lax: you talk, it answers. No terminal, no chat; a bubble only when a session needs your yes, one square per session, optional captions.
+- Lax follows you between the screens: fold the phone with Lax open and it's on the cover, unfold and it's back. No Good Lock or MultiStar needed.
+- Phone closed and something needs you: Lax comes up on the cover with the bubble, and ✓ approves right there.
+- A shareable demo at [lax.diogodebastos.com/demo](https://lax.diogodebastos.com/demo), served by Cloudflare. Photos of the real phone: [#18](https://github.com/diogodebastos/lax/issues/18).
 
 ### Phase 5: Lax learns [diogodebastos/lax#13](https://github.com/diogodebastos/lax/issues/13)
 What makes Lax a personal agent. Everything it learns lives in `~/.lax`, and you approve each step.
