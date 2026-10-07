@@ -673,12 +673,15 @@ function applyState(s) { pet = s.pet; sessions = s.sessions; voiceBusy = s.voice
 // Remember how Lax looks, so the app's offline page can show the same Lax asleep.
 const remember = () => { try { NATIVE?.remember(JSON.stringify({ pet, settings })); } catch {} };
 function setAsleep(v) { if (macAsleep === v) return; macAsleep = v; updateHint(); }
+// The first link asks the Mac for its recent lines, so a fresh page (the app moving to the cover screen, a reload)
+// still shows the conversation. Relinks don't: the page already has them.
+let linkedOnce = false;
 if (DEMO) demo();
 else if (ASLEEP) asleep();
 else if (!TOKEN) feed('no token — open the URL printed by `npm start`', 'error', undefined, '*');
 else connect();
 function connect() {
-  const es = new EventSource('/api/stream?t=' + encodeURIComponent(TOKEN));
+  const es = new EventSource('/api/stream?t=' + encodeURIComponent(TOKEN) + (linkedOnce ? '' : '&backlog=150'));
   es.addEventListener('state', (e) => { applyState(JSON.parse(e.data)); remember(); });
   es.addEventListener('feed', (e) => { const f = JSON.parse(e.data); feed(f.line, f.kind, f.project, f.session); });
   es.addEventListener('bubble', (e) => showBubble(JSON.parse(e.data)));
@@ -686,7 +689,7 @@ function connect() {
   es.addEventListener('reborn', () => { [...term.children].slice(0, -1).forEach((d) => d.remove()); parts.length = 0; hop(1.8);
     showBubble({ id: 'born', kind: 'reply', text: `Hi! I'm ${settings.name}. Nice to meet you.`, speak: true }); });
   es.addEventListener('react', (e) => { const r = JSON.parse(e.data); if (r.state === 'thinking') voiceBusy = true; else setReact(r.state); });
-  es.onopen = () => { if (macAsleep) { setAsleep(false); hop(1.4); } feed('linked to mac ✓', 'session', undefined, '*'); };
+  es.onopen = () => { linkedOnce = true; if (macAsleep) { setAsleep(false); hop(1.4); } feed('linked to mac ✓', 'session', undefined, '*'); };
   es.onerror = () => {
     if (!macAsleep) feed(`${settings.name.toLowerCase()} fell asleep. zzz…`, 'session', undefined, '*');
     setAsleep(true);
