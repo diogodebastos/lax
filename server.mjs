@@ -59,6 +59,7 @@ const milestone = (text) => db.prepare('INSERT INTO milestones(ts,text) VALUES(?
 const newPet = () => ({
   name: 'Lax', born: Date.now(), xp: 0, tools: {}, langs: {}, sessions: 0, turns: 0,
   errors: 0, approvals: 0, denials: 0, voice: 0, streak: 0, lastDay: null, lastSeen: Date.now(),
+  hatched: false, // a new Lax is an egg until the first tap (a Lax from before eggs has no field: it's out)
 });
 let pet = kvGet('pet', null) || newPet();
 let voiceSessions = kvGet('voiceSessions', {}); // cwd -> claude session id
@@ -161,7 +162,7 @@ function touchDay() {
 function petView() {
   const level = levelOf(pet.xp), [prevXp, nextXp] = barFor(pet.xp);
   return { name: settings.name, born: pet.born, level, stage: stageOf(level), xp: pet.xp, prevXp, nextXp,
-    traits: traits(pet), mood: mood(pet), streak: pet.streak, colorSet: !!pet.color };
+    traits: traits(pet), mood: mood(pet), streak: pet.streak, colorSet: !!pet.color, hatched: pet.hatched !== false };
 }
 let saveTimer;
 const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => { kvSet('pet', pet); kvSet('voiceSessions', voiceSessions); }, 500); };
@@ -672,6 +673,7 @@ http.createServer(async (req, res) => {
       return json(res, { ok: !!p });
     }
     case '/api/settings': updateSettings(b); pushState(); return json(res, { ok: true, settings });
+    case '/api/hatch': if (pet.hatched === false) { pet.hatched = true; save(); pushState(); } return json(res, { ok: true });
     case '/api/rebirth': rebirth(); broadcast('reborn', {}); pushState(); return json(res, { ok: true });
     case '/api/diag': console.log(`[phone ${new Date().toISOString().slice(11, 19)}] ${JSON.stringify(b).slice(0, 600)}`); return json(res, { ok: true });
     case '/api/brain/reflect': return json(res, { ok: isLocal(req) && !!b.session && (brain.enqueue(String(b.session)), true) }); // local only: reflect now
