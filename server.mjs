@@ -65,7 +65,7 @@ if (!kvGet('pet', null)) { milestone('Lax was born'); }
 if (!kvGet('newPath', false)) { if (kvGet('pet', null)) milestone(`${readSettings().name || 'Lax'} started over on a new path`); kvSet('newPath', true); }
 
 // Life menu settings — live on the Mac, edited from the phone.
-const DEFAULTS = { name: 'Lax', color: '#D97757', voice: true, pitch: 1.6, speakDone: false,
+const DEFAULTS = { name: 'Lax', color: '#D97757', voice: true, pitch: 1.6, speakDone: false, captions: false,
   phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system', learns: true };
 // Preferences live in settings.json, a plain file you can read; rebirth leaves them alone.
 function readSettings() { try { return JSON.parse(fs.readFileSync(SETTINGS, 'utf8')); } catch { return {}; } }
@@ -77,7 +77,7 @@ function updateSettings(b) {
   const clean = {};
   if (typeof b.name === 'string' && b.name.trim()) clean.name = b.name.trim().slice(0, 12);
   if (/^#[0-9a-f]{6}$/i.test(b.color || '') && !pet.color) clean.color = b.color;
-  for (const k of ['voice', 'speakDone', 'phoneApprovals', 'learns']) if (typeof b[k] === 'boolean') clean[k] = b[k];
+  for (const k of ['voice', 'speakDone', 'captions', 'phoneApprovals', 'learns']) if (typeof b[k] === 'boolean') clean[k] = b[k];
   if (Number.isFinite(b.pitch)) clean.pitch = Math.min(2, Math.max(0.5, b.pitch));
   if ([15, 30, 60, 120].includes(b.askTimeout)) clean.askTimeout = b.askTimeout;
   if (['system', 'light', 'dark'].includes(b.theme)) clean.theme = b.theme;
@@ -312,7 +312,7 @@ function ask(h) {
     const questions = h.tool_name === 'AskUserQuestion' && Array.isArray(h.tool_input?.questions) ? h.tool_input.questions : null;
     const bubble = questions
       ? { id, kind: 'question', session: h.session_id, project, questions, text: `${project}: ${questions[0].question}`, speak: true }
-      : { id, kind: 'permission', session: h.session_id, text: `${project} wants to: ${describeTool(h.tool_name, h.tool_input)}`, speak: true, actions: true,
+      : { id, kind: 'permission', session: h.session_id, project, gist: describeTool(h.tool_name, h.tool_input), text: `${project} wants to: ${describeTool(h.tool_name, h.tool_input)}`, speak: true, actions: true,
         ...(grant?.startsWith('edit:') && { details: `A yes also lets it edit the rest of ${path.basename(grant.slice(5))} until it finishes this answer.` }) };
     // Questions are worth waiting longer for: they need reading.
     const timer = setTimeout(() => finish('none'), Math.min(600, settings.askTimeout * (questions ? 4 : 1)) * 1000);
@@ -373,6 +373,7 @@ function channelEvent(b) {
   } else if (b.type === 'permission') {
     const id = 'relay-' + b.request_id;
     const bubble = { id, kind: 'permission', session: channelSession(c), actions: true, speak: true, details: String(b.input_preview || ''),
+      project: c.project, gist: `${b.tool_name}${b.description ? ' — ' + short(b.description, 60) : ''}`,
       text: `${c.project} wants to: ${b.tool_name}${b.description ? ' — ' + short(b.description, 140) : ''}` };
     pending.set(id, { bubble, relay: { cid: b.cid, settles: true }, finish(decision) {
       if (!pending.delete(id)) return;

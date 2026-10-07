@@ -59,7 +59,7 @@ const C = { bg: '#000', shadow: '#2a2521', ink: '#000', out: '#120c0a', body: '#
 const SIZES = { sprout: [10, 9], blob: [13, 12], cube: [15, 14], brick: [17, 16], legend: [19, 18] };
 
 // ---------- world state ----------
-let settings = { name: 'Lax', color: '#D97757', voice: true, pitch: 1.6, speakDone: false, phoneApprovals: true, askTimeout: 30, theme: 'system' };
+let settings = { name: 'Lax', color: '#D97757', voice: true, pitch: 1.6, speakDone: false, captions: false, phoneApprovals: true, askTimeout: 30, theme: 'system' };
 const shade = (hex, amt) => { const n = parseInt(hex.slice(1), 16), t = amt < 0 ? 0 : 255, a = Math.abs(amt);
   return '#' + [16, 8, 0].map((sh) => Math.round(((n >> sh) & 255) * (1 - a) + t * a).toString(16).padStart(2, '0')).join(''); };
 // Theme: system (the phone's or computer's dark mode), light or dark. Remembered per device so the page starts right.
@@ -313,7 +313,9 @@ function renderHud() {
   }).join('');
   $('#lvl').textContent = `Lv${pet.level}`;
   $('#xp i').style.width = Math.round(100 * (pet.xp - pet.prevXp) / Math.max(1, pet.nextXp - pet.prevXp)) + '%';
-  $('#dots').innerHTML = sessions.slice(0, 6).map((s) => `<b class="${s.status}" title="${s.project}"></b>`).join('');
+  // Cover screen: the open tab's name in place of the menu (settings live in the open app).
+  const vi = shown.findIndex((s) => s.id === view); $('#tab').textContent = vi < 0 ? settings.name.toLowerCase() : labels[vi];
+  $('#dots').innerHTML = shown.map((s) => `<b class="${s.status}" title="${s.project}"></b>`).join('');
 }
 const term = $('#term');
 // Which tab is open: 'all' or a session id. Per device, so it lives here, not on the Mac.
@@ -350,7 +352,7 @@ let bubbles = []; // newest last; the one with actions wins
 const elB = $('#bubble');
 const TAGS = { question: 'question', permission: 'needs you', waiting: 'waiting', done: 'done', reply: 'lax', error: 'uh oh', levelup: '★ level up', you: 'you', listening: 'listening', learned: '✦ learned' };
 function showBubble(b) {
-  bubbles = bubbles.filter((x) => x.id !== b.id); bubbles.push(b);
+  bubbles = bubbles.filter((x) => x.id !== b.id); bubbles.push(b); b.at = performance.now();
   b.sticky = b.actions || b.kind === 'question' || b.kind === 'listening';
   if (!b.sticky) b.expires = performance.now() + (b.kind === 'reply' ? 15000 : 9000);
   renderBubble();
@@ -370,7 +372,11 @@ function renderBubble() {
   const now = performance.now();
   bubbles = bubbles.filter((b) => !b.expires || b.expires > now);
   const here = bubbles.filter((x) => !elsewhere(x)), away = bubbles.find((x) => elsewhere(x) && needsYou(x));
-  const b = here.find((x) => x.kind === 'listening') || here.find((x) => x.sticky) || here[here.length - 1]; // your words while talking win
+  // The cover screen (closed phone) has no chat: only what needs you gets a bubble; the rest is spoken, and captioned if on.
+  const pool = cover() ? here.filter(needsYou) : here;
+  const b = pool.find((x) => x.kind === 'listening') || pool.find((x) => x.sticky) || pool[pool.length - 1]; // your words while talking win
+  document.body.classList.toggle('solo', cover() && !b); // nothing needs you: Lax has the whole strip
+  renderCaption(here, now);
   elB.dataset.away = '';
   if (!b && away) { // another tab needs you: say which, no buttons; tapping it opens that tab
     const i = sessions.slice(0, 8).findIndex((s) => s.id === away.session), label = tabLabels(sessions.slice(0, 8))[i];
@@ -386,6 +392,8 @@ function renderBubble() {
   elB.querySelector('.actions').style.display = b.actions ? 'flex' : 'none';
   elB.querySelector('.more').style.display = b.details ? '' : 'none';
   const det = elB.querySelector('.det'); det.textContent = b.details || ''; det.style.display = b.details && b.showDetails ? 'block' : 'none';
+  // Cover screen: the project goes up in the tag and the bubble keeps only the gist ("$ npm test"), big enough to read.
+  if (cover() && b.gist) { elB.querySelector('.tag').textContent = `${TAGS[b.kind]} · ${b.project}`; elB.querySelector('.text').textContent = b.gist; elB.dataset.key = ''; return; }
   if (b.kind !== 'question') { elB.querySelector('.text').textContent = b.text + (b.details && !b.actions && !b.showDetails ? ' ⋯' : ''); elB.dataset.key = ''; return; }
   // Question: one at a time; only rebuild when something changed (the 1s refresh would wipe selections).
   b.qi ??= 0; b.answers ??= {}; b.picked ??= [];
@@ -397,6 +405,18 @@ function renderBubble() {
   elB.querySelector('.choices').innerHTML = (q.options || []).map((o, i) =>
     `<button class="opt${b.picked.includes(o.label) ? ' on' : ''}" data-i="${i}">${esc(o.label)}${o.description ? `<small>${esc(o.description)}</small>` : ''}</button>`).join('')
     + `<div class="row">${q.multiSelect ? '<button class="send">send ▶</button>' : ''}<button class="other">${answerHook ? '🎙 listening…' : '🎙 other'}</button><button class="pass">⌨ terminal</button></div>`;
+}
+// The cover screen's ground line: what Lax heard while you talk, then the first sentence of what it said, for 8s.
+// Captions are a setting; mic and network errors always show, since nothing else would tell you.
+const cover = () => document.body.classList.contains('wide');
+function renderCaption(here, now) {
+  const was = hint.className; hint.className = '';
+  if (!cover()) { if (was && !listening) hint.textContent = IDLE_HINT; return; }
+  if (listening) { if (settings.captions) { hint.className = 'heard'; hint.innerHTML = `<span class="cap">“${esc(words() || '…')}”</span>`; } return; }
+  const c = here.findLast((x) => !needsYou(x) && !['listening', 'you'].includes(x.kind) && now - x.at < 8000 && (settings.captions || x.kind === 'error'));
+  if (!c) { if (was) hint.textContent = IDLE_HINT; return; }
+  hint.className = 'said';
+  hint.innerHTML = `<span class="cap"><span class="who">${esc(c.kind === 'reply' ? settings.name.toLowerCase() : TAGS[c.kind] || '')}</span>${esc(c.text.split(/(?<=[.!?])\s/)[0])}</span>`;
 }
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 let answerHook = null; // when set, the next thing heard answers the open question instead of going to /api/talk
@@ -692,7 +712,7 @@ function demo() {
     () => feed('Edit auth.ts', 'tool', 'api', 'd1'), () => feed('$ npm test -- auth', 'tool', 'api', 'd1'),
     () => feed('  ✗ Bash failed', 'error', 'api', 'd1') || setReact('error'),
     () => feed('Edit auth.ts', 'tool', 'api', 'd1'),
-    () => showBubble({ id: 'perm', kind: 'permission', text: 'api wants to: $ rm -rf dist && npm run build', actions: true }),
+    () => showBubble({ id: 'perm', kind: 'permission', project: 'api', gist: '$ rm -rf dist && npm run build', text: 'api wants to: $ rm -rf dist && npm run build', actions: true }),
     () => {}, () => {}, () => clearBubble('perm') || feed('  ✓ approved from phone', 'done', 'api', 'd1'),
     () => feed('$ npm run build', 'tool', 'api', 'd1'),
     () => feed('✓ api: Fixed the race in token refresh; all 42 tests pass.', 'done', 'api') || showBubble({ id: 'd', kind: 'done', text: 'api: Fixed the race in token refresh; all 42 tests pass.' }),
