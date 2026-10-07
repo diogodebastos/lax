@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.hardware.display.DisplayManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.Uri
@@ -15,7 +16,9 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.provider.Settings
 import android.util.Log
+import android.view.Display
 import org.json.JSONObject
 import java.net.HttpURLConnection
 
@@ -232,8 +235,15 @@ class LaxService : Service() {
         val fresh = shownAsks.add(id)
         if (MainActivity.resumed) return // Lax is on screen and shows the same bubble.
         nm.notify(notifId(id), n.build())
-        if (fresh) wakeScreen()
+        if (!fresh) return
+        // Phone closed: Lax comes up on the cover with the bubble (glance, don't open). The notification stays as a fallback.
+        if (closed() && Settings.canDrawOverlays(this) && MainActivity.openOnCover(this)) return
+        wakeScreen()
     }
+
+    /** Folded, by the hinge (MainActivity's last reading); before Lax has read it, by the main screen being off. */
+    private fun closed() = MainActivity.folded
+        ?: (getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)?.state != Display.STATE_ON)
 
     private fun cancelAsk(id: String) {
         shownAsks.remove(id)
