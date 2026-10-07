@@ -87,8 +87,8 @@ The session tabs on the open phone (and `lax watch` on the Mac) show a step the 
 - Lax's own tab is a conversation: its work shows live while it runs and folds under its answer ("used 2 tools", tap for the steps); your yeses stay where you gave them; answers in markdown.
 - It survives restarts (rebuilt from Lax's own transcript), with time dividers and Lax's diary in between: what it learned, levels, streaks. Live sessions opening and closing fold into one line.
 
-### Phase 4.2: species, from how you work
-Replaces picking a colour (designed 2026-10-07; built in `lib/species.mjs`, tests in `scripts/test-species.mjs`). Still to do: tune the bars on real eggs, then drop the hand pick so species stay set.
+### Phase 4.2: species, from how you work ✅ [diogodebastos/lax#19](https://github.com/diogodebastos/lax/issues/19)
+Replaces picking a colour (designed 2026-10-07; built in `lib/species.mjs`, tests in `scripts/test-species.mjs`). Postponed (2026-10-07): tuning the bars on real eggs, then dropping the hand pick so species stay set; tracked in #19.
 - **An egg first.** It gets no XP; a bar shows how close it is to hatching: 3 worked days (days off don't count), or the XP that would be Lv10, whichever comes first. Its speckles take the colour that's leading. It hatches at Lv1 with 0 XP, as the species the egg time showed, and keeps it.
 - **The species** is the one furthest past its bar (first guesses, to tune on real eggs). "Busy" means something happened in the session in the last 10 minutes; open but idle time never counts.
   - electric: 3+ sessions busy at once, 25% of busy time
