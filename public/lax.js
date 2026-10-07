@@ -6,7 +6,8 @@ const qs = new URLSearchParams(location.search);
 let TOKEN = qs.get('t');
 try { if (TOKEN) localStorage.lax_t = TOKEN; else TOKEN = localStorage.lax_t; } catch {}
 if (qs.get('t')) history.replaceState(null, '', location.pathname);
-const DEMO = qs.has('demo');
+// Demo mode only under /demo (the public demo and its local preview); a plain /?demo is the real app.
+const DEMO = qs.has('demo') && location.pathname.startsWith('/demo');
 // Inside the Lax Android app: Android's own speech recognition, TTS and vibration (see android/…/LaxBridge.kt).
 const NATIVE = (() => { try { return window.LaxNative?.isNative() ? window.LaxNative : null; } catch { return null; } })();
 const buzz = (pattern) => (NATIVE ? NATIVE.vibrate(pattern.join(',')) : navigator.vibrate?.(pattern));
