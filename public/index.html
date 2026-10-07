@@ -84,6 +84,17 @@
   #term .md b { color:var(--fg); } #term .md code { color:var(--coral); font:inherit; } #term .md .h { color:var(--fg); text-decoration:underline; }
   #term .md .fence { color:var(--dim); white-space:pre !important; overflow-x:auto; text-indent:0; display:block; }
   #term .copied { outline:1px dashed var(--coral); }
+  /* Lax's own tab: a conversation. Its work shows live (one line per step) while it runs, then folds under the answer. */
+  #term .day { color:var(--dim); text-align:center; margin:8px 0 4px; }
+  #term .diary, #term .sessions { color:var(--dim); padding-left:1.2em; text-indent:-1.2em; } #term .diary .mk { color:var(--coral); }
+  #term > .own .cmd, #term > .own .out, #term > .own .diff, #term > .own .error { display:none; }
+  #term > .own { margin-left:1.2em; } #term > .own, #term > .own .head { color:var(--text2); }
+  #term > .own .mk { color:var(--blue); } #term > .own.step.run .head .mk { animation:blink 1s steps(2) infinite; }
+  #term .used { color:var(--dim); margin-left:1.2em; cursor:pointer; } #term .used > .x { display:none; margin-top:3px; } #term .used.open > .x { display:block; }
+  #term .used .x > div { margin-bottom:3px; } #term .used .say { color:var(--text2); }
+  #term .face { display:inline-block; width:12px; height:14px; margin-right:calc(1.2em - 12px); vertical-align:-1px; background:var(--dim);
+    -webkit-mask:var(--face) center/100% 100% no-repeat; mask:var(--face) center/100% 100% no-repeat; text-indent:0; }
+  #term .yes, #term .no { margin-left:1.2em; } #term .yes { color:var(--green); } #term .no { color:var(--red); }
   /* Tall cover (no tabs): one row per step, no commands or output under it. */
   body:not(.big) #term .cmd, body:not(.big) #term .out, body:not(.big) #term .diff, body:not(.big) #term .sub { display:none; }
   /* The open tab's status, under the terminal: mode · context · model · working/idle. */

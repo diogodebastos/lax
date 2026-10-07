@@ -39,3 +39,24 @@ assert.deepEqual(editDiff('Write', { content: '1\n2\n3\n4\n5\n6\n7\n8\n' }), { a
 assert.equal(editDiff('Edit', { old_string: 'same', new_string: 'same' }), null);
 assert.equal(editDiff('Bash', { command: 'ls' }), null);
 console.log('transcript ok');
+
+// Lax's own history: prompts, narration, steps and the answer, turn by turn; old turns cut.
+{
+  const { conversation } = await import('../lib/transcript.mjs');
+  const T = (i) => new Date(Date.UTC(2026, 9, 7, 10, i)).toISOString();
+  const recs = [
+    { ...prompt('p1', 'weather tomorrow'), timestamp: T(0) },
+    { ...say('a1', 'Checking.'), timestamp: T(1) },
+    { type: 'assistant', uuid: 't1', timestamp: T(1), message: { content: [{ type: 'tool_use', name: 'WebFetch', input: { url: 'wttr.in' } }] } },
+    { ...result('r1'), timestamp: T(2) },
+    { ...say('a2', 'Sunny, 24.'), timestamp: T(2) },
+    { ...prompt('p2', '<command-name>/clear</command-name>'), timestamp: T(3) },
+    { ...prompt('p3', 'thanks'), timestamp: T(4) },
+    { ...say('a3', 'Any time.'), timestamp: T(5) },
+  ];
+  const c = conversation(recs);
+  assert.deepEqual(c.map((x) => x.kind), ['prompt', 'say', 'tool', 'answer', 'prompt', 'answer']);
+  assert.equal(c[2].tool, 'WebFetch'); assert.equal(c[3].text, 'Sunny, 24.'); assert.equal(c[4].text, 'thanks');
+  assert.deepEqual(conversation(recs, 1).map((x) => x.text), ['thanks', 'Any time.']);
+  console.log('conversation ok');
+}

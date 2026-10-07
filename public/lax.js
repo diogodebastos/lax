@@ -394,10 +394,22 @@ function feed(line, kind = 'tool', project, session = '', x = {}) {
   if (!lanes.has(key)) lanes.set(key, {});
   const at = lanes.get(key);
   const add = (d) => { if (at.box) return at.box.appendChild(d); d.dataset.s = session; d.hidden = !visible(d); return term.insertBefore(d, term.lastElementChild); };
+  // Lax's own tab is a conversation: its work (x.own) shows live while it runs, then folds under its answer as
+  // "used 3 tools"; your yeses stay where you gave them. Time dividers between talks; its diary in between.
+  const laxTab = !session, own = laxTab && x.own, yes = own && /^(done|error)$/.test(kind) && /^ {2}/.test(line);
+  const turn = laxTab ? (lanes.turn ??= { work: [] }) : null;
+  const put = laxTab ? (d) => { const r = add(d); if (own && !yes) { r.classList.add('own'); turn.work.push(r); } return r; } : add;
+  if (laxTab && kind === 'prompt') foldWork(turn, session); // an unanswered turn's work folds before the next one
+  if (laxTab && x.ts) {
+    const last = lanes.lastTs, d = new Date(x.ts);
+    if (!last || x.ts - last > 30 * 60000 || new Date(last).toDateString() !== d.toDateString()) add(el('day', `— ${when(d)} —`));
+    lanes.lastTs = x.ts;
+  }
+  const sessRow = lanes.sess; if (laxTab) lanes.sess = null; // only lines in a row fold together
 
   if (kind === 'tool' && x.tool && FOLD.test(x.tool)) { // reads and searches in a row: one line that counts up
     let g = at.group;
-    if (!g) { g = at.group = add(el('sum')); g.counts = {}; g.label = span('', ''); g.list = el('x'); g.append(g.label, g.list); }
+    if (!g) { g = at.group = put(el('sum')); g.counts = {}; g.label = span('', ''); g.list = el('x'); g.append(g.label, g.list); }
     const k = /^(Read|NotebookRead)$/.test(x.tool) ? 'read' : x.tool === 'LS' ? 'listed' : x.tool.startsWith('mcp__') ? mcpName(x.tool) : 'searched';
     g.counts[k] = (g.counts[k] || 0) + 1;
     g.label.textContent = Object.entries(g.counts).map(([w, c]) => w === 'read' ? 'read ' + plural(c, 'file') : w === 'searched' ? 'searched ' + plural(c, 'pattern')
@@ -412,7 +424,7 @@ function feed(line, kind = 'tool', project, session = '', x = {}) {
     s.head = el('head', span('mk', '● '), label); s.append(s.head);
     if (x.tool === 'Bash' && x.desc && x.cmd) s.append(el('cmd', '$ ' + firstLines(x.cmd, 3)));
     s.copy = x.cmd || label;
-    at.step = add(s);
+    at.step = put(s);
   } else if ((kind === 'out' && x.out) || (kind === 'diff' && x.diff)) { // under the step it belongs to; tap for more
     at.group = null;
     const s = at.step, isOut = kind === 'out';
@@ -427,14 +439,25 @@ function feed(line, kind = 'tool', project, session = '', x = {}) {
     }
     if (!isOut && s) s.head.append(span('n', '  '), span('n a', `+${x.diff.add}`), span('n', ' '), span('n d', `-${x.diff.del}`));
     if (s) { s.insertBefore(box, s.fail || null); if (isOut) s.copy += '\n' + x.out.join('\n'); } else add(box);
+  } else if (kind === 'error' && x.answer) { // the answer went wrong: still the end of the turn
+    const r = add(el('error', line)); if (laxTab) foldWork(turn, session, r);
   } else if (kind === 'error' && at.step && /failed$/.test(line)) { // "✗ Bash failed" marks its step
     at.step.classList.replace('run', 'bad') || at.step.classList.add('bad'); at.step.append(at.step.fail = el('error', '✗ failed'));
   } else if (kind === 'say') {
-    at.group = null; add(el('say md', span('mk', '● '), ...md(x.text || line.replace(/^● /, ''))));
-    if (session && session === view) lastSay = { text: x.text || line, at: performance.now() };
+    at.group = null; put(el('say md', span('mk', '● '), ...md(x.text || line.replace(/^● /, ''))));
+    if (view === 'all' ? !session : session === view) lastSay = { text: x.text || line, at: performance.now() };
   } else if (kind === 'done' && x.text) {
     at.group = null; at.step?.classList.remove('run');
-    add(el('done md', span('mk', '✓ '), ...md(x.text)));
+    const answer = add(el('done md', laxTab && x.answer ? laxFace() : span('mk', '✓ '), ...md(x.text)));
+    if (laxTab && x.answer) foldWork(turn, session, answer);
+  } else if (yes) { // your yes (or no) to one of Lax's own steps, where you gave it
+    add(el(kind === 'done' ? 'yes' : 'no', line.trim()));
+  } else if (kind === 'diary') {
+    at.group = null; add(el('diary', span('mk', '+ '), x.text || line.replace(/^\+ /, '')));
+  } else if (laxTab && kind === 'session' && /live session/.test(line)) { // sessions opening and closing: one line
+    const prev = sessRow, item = line.replace(/^● live session: (.*)/, '$1 opened').replace(/^○ live session closed: (.*)/, '$1 closed');
+    if (prev?.isConnected) { prev.items.push(item); prev.label.textContent = `live sessions: ${prev.items.join(', ')}`; lanes.sess = prev; }
+    else { const r = lanes.sess = add(el('sessions', span('mk', '· '))); r.items = [item]; r.label = span('', `live sessions: ${item}`); r.append(r.label); }
   } else if (kind === 'prompt' && line.startsWith('> ')) {
     at.group = null; at.step?.classList.remove('run');
     add(el('prompt turn', span('mk', '› '), line.slice(2)));
@@ -444,6 +467,37 @@ function feed(line, kind = 'tool', project, session = '', x = {}) {
   while (term.children.length > 400) term.firstElementChild.remove();
   if (stick) term.scrollTop = term.scrollHeight;
   if (kind === 'tool') lastWork = performance.now();
+}
+// Lax's answers start with its face, small and grey like the old ✓: a square with two eyes. A mask, so it takes the
+// theme's grey; drawn 3x bigger than it shows so the pixels stay sharp.
+let faceMask = null;
+function laxFace() {
+  if (!faceMask) {
+    const rows = ['......', 'ffffff', 'f.ff.f', 'f.ff.f', 'ffffff', 'ffffff', '......'], k = 6;
+    const cv = document.createElement('canvas'); cv.width = 6 * k; cv.height = 7 * k; const c = cv.getContext('2d');
+    rows.forEach((r, j) => [...r].forEach((ch, i) => ch === 'f' && c.fillRect(i * k, j * k, k, k)));
+    faceMask = `url(${cv.toDataURL()})`;
+    document.documentElement.style.setProperty('--face', faceMask);
+  }
+  return span('face', '');
+}
+// A turn's work, folded under its answer: "used 3 tools", tap to see every step in full.
+function foldWork(turn, session, after) {
+  const work = turn.work.filter((w) => w.isConnected); turn.work = [];
+  if (!work.length) return;
+  const n = work.reduce((k, w) => k + (w.classList.contains('step') ? 1 : w.counts ? Object.values(w.counts).reduce((a, b) => a + b, 0) : 0), 0);
+  const box = el('used'), list = el('x');
+  box.append(span('', n ? `used ${plural(n, 'tool')}` : 'thought it through'), list);
+  for (const w of work) { w.classList.remove('run', 'own'); list.append(w); }
+  box.dataset.s = session; box.hidden = !visible(box);
+  (after || term.lastElementChild.previousElementSibling || term.lastElementChild).after(box);
+  box.addEventListener('click', (e) => { if (!e.target.closest('.fold, .sum')) box.classList.toggle('open'); });
+}
+// "today 09:12", "yesterday 22:10", "Mon 6 Oct 10:00"
+function when(d) {
+  const hm = d.toTimeString().slice(0, 5), day = new Date(); day.setHours(0, 0, 0, 0);
+  const diff = Math.round((day - new Date(d).setHours(0, 0, 0, 0)) / 864e5);
+  return diff === 0 ? `today ${hm}` : diff === 1 ? `yesterday ${hm}` : `${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} ${hm}`;
 }
 // Just enough markdown for an answer: **bold**, `code`, # headings and ``` fences. Returns nodes, never HTML.
 function md(text) {
