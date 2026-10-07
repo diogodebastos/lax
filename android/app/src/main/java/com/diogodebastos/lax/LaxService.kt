@@ -48,7 +48,7 @@ class LaxService : Service() {
         fun channels(ctx: Context) {
             val nm = ctx.getSystemService(NotificationManager::class.java)
             nm.createNotificationChannel(NotificationChannel(CH_LINK, "Link to your Mac", NotificationManager.IMPORTANCE_MIN).apply {
-                description = "Lax keeps watching your Claude Code sessions."
+                description = "Keeps Lax linked to your Mac."
                 setShowBadge(false)
             })
             nm.createNotificationChannel(NotificationChannel(CH_ASK, "Claude Code needs you", NotificationManager.IMPORTANCE_HIGH).apply {
@@ -289,7 +289,7 @@ class LaxService : Service() {
     private fun linkNotification(text: String): Notification = Notification.Builder(this, CH_LINK)
         .setSmallIcon(R.drawable.ic_stat_lax)
         .setColor(0xFFD97757.toInt())
-        .setContentTitle("$name is watching")
+        .setContentTitle("$name is here")
         .setContentText(text)
         .setContentIntent(openApp())
         .setOngoing(true)
