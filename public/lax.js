@@ -446,6 +446,7 @@ function feed(line, kind = 'tool', project, session = '', x = {}) {
     s.head = el('head', span('mk', '● '), label); s.append(s.head);
     if (x.tool === 'Bash' && x.desc && x.cmd) s.append(el('cmd', '$ ' + firstLines(x.cmd, 3)));
     s.copy = x.cmd || label;
+    if (x.doc) { s.doc = true; s.append(docBox(x.doc)); s.copy += '\n' + x.doc; }
     at.step = put(s);
   } else if ((kind === 'out' && x.out) || (kind === 'diff' && x.diff)) { // under the step it belongs to; tap for more
     at.group = null;
@@ -460,7 +461,8 @@ function feed(line, kind = 'tool', project, session = '', x = {}) {
       label(); box.addEventListener('click', () => { box.classList.toggle('open'); label(); });
     }
     if (!isOut && s) s.head.append(span('n', '  '), span('n a', `+${x.diff.add}`), span('n', ' '), span('n d', `-${x.diff.del}`));
-    if (s) { s.insertBefore(box, s.fail || null); if (isOut) s.copy += '\n' + x.out.join('\n'); } else add(box);
+    if (!isOut && s?.doc) { /* the whole file already shows under it */ }
+    else if (s) { s.insertBefore(box, s.fail || null); if (isOut) s.copy += '\n' + x.out.join('\n'); } else add(box);
   } else if (kind === 'error' && x.answer) { // the answer went wrong: still the end of the turn
     const r = add(el('error', line)); if (laxTab) foldWork(turn, session, r);
   } else if (kind === 'error' && at.step && /failed$/.test(line)) { // "✗ Bash failed" marks its step
@@ -489,6 +491,20 @@ function feed(line, kind = 'tool', project, session = '', x = {}) {
   while (term.children.length > 400) term.firstElementChild.remove();
   if (stick) term.scrollTop = term.scrollHeight;
   if (kind === 'tool') lastWork = performance.now();
+}
+// A plan, or a markdown file being written: rendered, its first lines, tap to read all of it (never cut in a ``` fence).
+function docBox(text) {
+  const lines = String(text).replace(/\s+$/, '').split('\n');
+  let cut = Math.min(4, lines.length), fence = false;
+  for (let i = 0; i < cut; i++) if (/^\s*```/.test(lines[i])) fence = !fence;
+  if (fence) { while (cut < lines.length && !/^\s*```/.test(lines[cut])) cut++; cut = Math.min(cut + 1, lines.length); }
+  const box = el('doc md fold', el('', ...md(lines.slice(0, cut).join('\n')))), rest = lines.length - cut;
+  if (rest > 0) {
+    const more = el('more', `… ${plural(rest, 'more line')}`);
+    box.append(el('x', ...md(lines.slice(cut).join('\n'))), more);
+    box.addEventListener('click', () => { more.textContent = box.classList.toggle('open') ? 'less' : `… ${plural(rest, 'more line')}`; });
+  }
+  return box;
 }
 // Lax's answers start with its face, small and grey like the old ✓: a square with two eyes. A mask, so it takes the
 // theme's grey; drawn 3x bigger than it shows so the pixels stay sharp.

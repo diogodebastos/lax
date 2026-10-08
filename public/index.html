@@ -75,6 +75,10 @@
   #term .step .out, #term .step .diff { margin-left:1.2em; padding-left:1.2em; position:relative; cursor:pointer; }
   #term .step .out::before, #term .step .diff::before { content:'└'; position:absolute; left:0; top:0; color:var(--dim); }
   #term .out div, #term .diff div { white-space:pre !important; overflow:hidden; text-overflow:ellipsis; color:var(--dim); }
+  #term .step .doc { margin-left:1.2em; padding-left:1.2em; position:relative; cursor:pointer; color:var(--text2); }
+  #term .step .doc::before { content:'└'; position:absolute; left:0; top:0; color:var(--dim); }
+  #term .doc div { white-space:pre-wrap !important; word-break:break-word; text-overflow:clip; }
+  #term .fold.open div { white-space:pre-wrap !important; word-break:break-word; } /* opened: every line whole, wrapped */
   #term .diff .a { color:var(--green); } #term .diff .d { color:var(--red); }
   #term .more { color:var(--dim); font-style:italic; } #term .fold > .x { display:none; } #term .fold.open > .x { display:block; }
   #term .sum { color:var(--dim); margin-left:1.2em; cursor:pointer; } #term .sum .x { display:none; margin-left:1.2em; } #term .sum.open .x { display:block; }
@@ -87,7 +91,7 @@
   /* Lax's own tab: a conversation. Its work shows live (one line per step) while it runs, then folds under the answer. */
   #term .day { color:var(--dim); text-align:center; margin:8px 0 4px; }
   #term .diary, #term .sessions { color:var(--dim); padding-left:1.2em; text-indent:-1.2em; } #term .diary .mk { color:var(--coral); }
-  #term > .own .cmd, #term > .own .out, #term > .own .diff, #term > .own .error { display:none; }
+  #term > .own .cmd, #term > .own .out, #term > .own .diff, #term > .own .doc, #term > .own .error { display:none; }
   #term > .own { margin-left:1.2em; } #term > .own, #term > .own .head { color:var(--text2); }
   #term > .own .mk { color:var(--blue); } #term > .own.step.run .head .mk { animation:blink 1s steps(2) infinite; }
   #term .used { color:var(--dim); margin-left:1.2em; cursor:pointer; } #term .used > .x { display:none; margin-top:3px; } #term .used.open > .x { display:block; }
@@ -96,7 +100,7 @@
     -webkit-mask:var(--face) center/100% 100% no-repeat; mask:var(--face) center/100% 100% no-repeat; text-indent:0; }
   #term .yes, #term .no { margin-left:1.2em; } #term .yes { color:var(--green); } #term .no { color:var(--red); }
   /* Tall cover (no tabs): one row per step, no commands or output under it. */
-  body:not(.big) #term .cmd, body:not(.big) #term .out, body:not(.big) #term .diff, body:not(.big) #term .sub { display:none; }
+  body:not(.big) #term .cmd, body:not(.big) #term .out, body:not(.big) #term .diff, body:not(.big) #term .doc, body:not(.big) #term .sub { display:none; }
   /* The open tab's status, under the terminal: mode · context · model · working/idle. */
   #status { display:none; } body.big #status.on { display:block; padding:3px 14px 4px; border-top:1px dashed var(--line2); color:var(--dim); font-size:17px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #status .hot { color:var(--amber); } #status .full { color:var(--red); } #status .plan { color:var(--blue); } #status .auto { color:var(--amber); }
