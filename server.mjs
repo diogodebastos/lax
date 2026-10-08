@@ -370,8 +370,16 @@ function stepParts(name, input = {}, h = {}) {
   if (name === 'Bash') { p.desc = input.description ? short(input.description, 120) : undefined; p.cmd = String(input.command || '').slice(0, 600); }
   if (/^(Read|Edit|Write|MultiEdit|NotebookEdit)$/.test(name)) p.file = path.basename(input.file_path || input.notebook_path || '');
   if (name === 'Task' || name === 'Agent') p.desc = short(input.description || input.prompt, 80);
+  // A plan, or a markdown file being written: the whole text, to read on the phone (not just its first changed lines).
+  if (name === 'ExitPlanMode') p.doc = planText(input);
+  if (name === 'Write' && /\.(md|markdown)$/i.test(input.file_path || '')) p.doc = input.content;
+  if (p.doc != null) p.doc = clip(p.doc, 30000);
   return p;
 }
+const planText = (input) => {
+  if (typeof input.plan === 'string' && input.plan.trim()) return input.plan;
+  try { return input.planFilePath ? fs.readFileSync(input.planFilePath, 'utf8') : undefined; } catch { return undefined; }
+};
 function describeTool(name, input = {}) {
   switch (name) {
     case 'Bash': return `$ ${short(input.command, 80)}`;
