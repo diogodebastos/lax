@@ -50,7 +50,7 @@ if (prompt.startsWith('Draft a wish')) {
   if (/Revise wish/.test(prompt)) answer({ wish: { title: 'Timers', say: 'I can set timers on your Mac. Want me to?', proposal: 'Revised: ' + ask.trim() } });
   else if (/countdown/.test(ask) && timer) answer({ wish: { same_as: timer } });
   else if (/music/.test(ask)) answer({ wish: { title: 'Music', slug: 'music', say: 'I could play music. Want me to?', proposal: 'Play music.' } });
-  else answer({ wish: { title: 'Timers', slug: 'timers', say: 'You asked me for a timer today. I can learn it. Want me to?', proposal: '**What I would do**: timers on the phone.' } });
+  else answer({ wish: { title: 'Timers', slug: 'timers', say: 'You asked me for a timer today. I can learn it. Want me to?', proposal: '**What I would do**: timers on the phone. **Off limits**: auth, tokens, the tunnel.' } });
 } else if (prompt.startsWith('You are Lax, learning')) {
   fs.mkdirSync('scripts', { recursive: true });
   fs.writeFileSync('scripts/test-timer.mjs', 'console.log("timer ok");\\n');
@@ -196,6 +196,7 @@ const pkg = (test, extra = {}) => JSON.stringify({ scripts: { test, start: 'node
 check('package.json: adding a test is fine', packageOk(pkg('node a.mjs'), pkg('node a.mjs && node --no-warnings scripts/test-b.mjs')));
 check('package.json: anything else is not', !packageOk(pkg('node a.mjs'), pkg('node a.mjs && curl x')) && !packageOk(pkg('node a.mjs'), pkg('node a.mjs', { postinstall: 'x' })));
 check('refuses: tokens and the tunnel, not timers', !!refuses('show me the tunnel token') && !refuses('set a timer'));
+check('refuses: not a model\'s tokens', !refuses('show my usage; a small token cost per message') && !!refuses('print the Lax token'));
 
 // The build fence (hooks/lax-hook.mjs, LAX_BUILD).
 const WT = path.join(HOME, 'wt'); sh(HOME, 'init', '-q', WT);
