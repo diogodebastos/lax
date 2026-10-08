@@ -86,6 +86,8 @@ The session tabs on the open phone (and `lax watch` on the Mac) show a step the 
 - A status row under the open tab: mode, context, model, working or idle (context and model come from the status line, so CLI sessions only).
 - Lax's own tab is a conversation: its work shows live while it runs and folds under its answer ("used 2 tools", tap for the steps); your yeses stay where you gave them; answers in markdown.
 - It survives restarts (rebuilt from Lax's own transcript), with time dividers and Lax's diary in between: what it learned, levels, streaks. Live sessions opening and closing fold into one line.
+- Your messages show cut to one line; tap one to read all of it, hold it to copy it whole (2026-10-08).
+- Lax's conversation starts fresh after 8 quiet hours, at 150k tokens, or when you say "start fresh", carrying the last few turns of the one before; the context block keeps one line per session, more for a session you name. Every message re-sends the whole conversation, and the one endless conversation had reached 400k tokens; the first fresh message cost about 27k (2026-10-08, [#22](https://github.com/diogodebastos/lax/pull/22)).
 
 ### Phase 4.2: species, from how you work ✅ [diogodebastos/lax#19](https://github.com/diogodebastos/lax/issues/19)
 Replaces picking a colour (designed 2026-10-07; built in `lib/species.mjs`, tests in `scripts/test-species.mjs`). Postponed (2026-10-07): tuning the bars on real eggs, then dropping the hand pick so species stay set; tracked in #19.
