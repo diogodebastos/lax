@@ -345,7 +345,7 @@ function laxHistory() {
   const name = settings.name.toLowerCase(), lines = [];
   for (const it of conversation(tailRecords(file, 512 * 1024), 25)) {
     const base = { project: name, ts: it.ts, history: true };
-    if (it.kind === 'prompt') lines.push({ ...base, line: `> ${short(it.text, 90)}`, kind: 'prompt' });
+    if (it.kind === 'prompt') lines.push({ ...base, line: `> ${short(said(it.text), 90)}`, kind: 'prompt' });
     else if (it.kind === 'say') lines.push({ ...base, line: `● ${short(it.text, 200)}`, kind: 'say', own: true, text: clip(it.text, 1500) });
     else if (it.kind === 'tool') lines.push({ ...base, line: describeTool(it.tool, it.input), kind: 'tool', own: true, ...stepParts(it.tool, it.input) });
     else lines.push({ ...base, line: `↩ ${clip(it.text)}`, kind: 'done', text: clip(it.text), answer: true });
@@ -359,6 +359,9 @@ const channelSession = (c) => c?.sessionPid ? [...sessions.entries()].find(([, s
 const clip = (t, n = 4000) => { t = String(t ?? '').trim(); return t.length > n ? t.slice(0, n) + '\n…' : t; };
 const proj = (cwd) => (cwd ? path.basename(cwd) : '?');
 const short = (s, n = 60) => { s = String(s ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
+// What you said to Lax, without the context block each voice message starts with (assistantPrompt).
+const CONTEXT = /^\[Context now[^\]\n]*\]\n[\s\S]*?\n\[\/Context\]\n*/;
+const said = (prompt) => String(prompt ?? '').replace(CONTEXT, '');
 
 // A step's parts for the phone's terminal: why (the Bash description), the full command, the file, and whose it is
 // (agent: set when a subagent made the call, so it shows under its Agent step).
@@ -410,7 +413,7 @@ function onHook(h) {
       break;
     case 'UserPromptSubmit':
       s.status = 'working'; if (!mine) feed(`> ${short(h.prompt, 90)}`, 'prompt', project, sid); else if (laxOnMac) feed(`> ${short(h.prompt, 90)}`, 'prompt', settings.name.toLowerCase());
-      logEvent(sid, project, 'prompt', short(h.prompt, 500), repo);
+      logEvent(sid, project, 'prompt', short(mine ? said(h.prompt) : h.prompt, 500), repo);
       break;
     case 'PreToolUse': {
       s.status = 'working'; const n = h.tool_name;
@@ -612,10 +615,13 @@ function sessionsBrief() {
   }).join('\n');
 }
 // Who Lax is lives in its mind (~/.lax/mind/CLAUDE.md); this adds what changes per message.
-const assistantPrompt = () =>
-  'The user is talking to you by voice: start with ONE short, plain sentence that can be read aloud.\n\n' +
+const VOICE_RULE = 'The user is talking to you by voice: start with ONE short, plain sentence that can be read aloud.';
+// What changes goes in the message itself, not the system prompt: a resumed conversation (--resume) keeps its first
+// system prompt, so the sessions and usage would be stale. Old blocks stay in the history; the newest one is current.
+const assistantPrompt = (text) =>
+  '[Context now: this replaces any earlier context block]\n' +
   `Their Claude Code sessions right now (tab name, status, latest activity):\n${sessionsBrief()}\n\n` +
-  `Their Claude plan usage: ${usageText(usage)}`;
+  `Their Claude plan usage: ${usageText(usage)}\n[/Context]\n\n${text}`;
 // Quick actions by voice: a closed list typed into a live `lax` session's terminal (lib/actions.mjs).
 function quickAction(cid, action) {
   const c = channels.get(cid); if (!c?.pty || !action) return false;
@@ -706,7 +712,7 @@ function talk(text) {
   const cwd = MIND;
   ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name });
   syncMindSelf(selfLine(petView())); // it knows what it is right now: species, form, level (or still an egg)
-  const args = ['-p', text, '--output-format', 'stream-json', '--verbose', '--add-dir', DEFAULT_WORKDIR, '--append-system-prompt', assistantPrompt()];
+  const args = ['-p', assistantPrompt(text), '--output-format', 'stream-json', '--verbose', '--add-dir', DEFAULT_WORKDIR, '--append-system-prompt', VOICE_RULE];
   if (voiceSessions[ASSISTANT]) args.push('--resume', voiceSessions[ASSISTANT]);
   pet.voice++; gainXp(3); save();
   feed(`> ${short(text, 90)}`, 'prompt', name);
