@@ -11,7 +11,9 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const PORT = 7798, LAX = `http://127.0.0.1:${PORT}`, DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-test-'));
 // A throwaway Lax home: memory, secrets and mind all in a temp folder.
-const ENV = { ...process.env, LAX_HOME: DATA, LAX_PORT: String(PORT), LAX_URL: LAX, LAX_PUBLIC_URL: '' };
+// One pretend Claude Code session (its pid) for the channel and the hooks, so this runs the same with or without a real
+// claude above it (Lax runs the tests from its server when it builds something it learned).
+const ENV = { ...process.env, LAX_HOME: DATA, LAX_PORT: String(PORT), LAX_URL: LAX, LAX_PUBLIC_URL: '', LAX_SESSION_PID: String(process.pid) };
 delete ENV.LAX_DATA;
 const server = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server.mjs')], { env: ENV, stdio: 'ignore' });
 const cleanup = () => { server.kill(); fs.rmSync(DATA, { recursive: true, force: true }); };
