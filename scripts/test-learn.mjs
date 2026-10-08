@@ -137,6 +137,9 @@ check('the next wish is offered, with its proposal to read', /timer/.test(q?.tex
 from = await talk('on the Mac, not the phone');
 q = await until(() => question(from, 'wish'));
 check('a correction → the proposal is redrafted with it, and asked again', /Revised: "on the Mac, not the phone"/.test(q?.details || ''), q?.details);
+{ const { DatabaseSync } = await import('node:sqlite'); const db = new DatabaseSync(path.join(HOME, 'life.db'), { readOnly: true });
+  const rec = db.prepare("SELECT text FROM events WHERE kind='learning'").all().map((r) => r.text).join('\n'); db.close();
+  check('its learning record keeps the no, the refusal and the correction', /declined: Music/.test(rec) && /refused: rotate the tunnel token/.test(rec) && /corrected: Timers: on the Mac, not the phone/.test(rec), rec); }
 from = await talk('later');
 await until(() => said(from, /tomorrow/));
 check('"later" → asked again another time', wish('Timers')?.status === 'later' && wish('Timers').laterUntil > Date.now() + 3600e3);

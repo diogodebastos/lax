@@ -8,13 +8,13 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { ensureHome, commitMind, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice } from './lib/home.mjs';
+import { ensureHome, commitMind, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice } from './lib/home.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS } from './lib/paths.mjs';
 import { HOST, TOKEN, authed, isLocal, phoneUrl, pairPage } from './lib/auth.mjs'; // first: it loads Lax's home and local config
 import { grantKey, repoRoot } from './lib/allow.mjs';
 import { MAX_LEVEL, STAGES, levelOf as levelOn, stageIdx, barFor as barOn } from './lib/levels.mjs';
 import { SPECIES, BRANCHES, BARS, BRICK, EGG_XP, RARE, LIMIT_PCT, signals, ratios, pick, branch, dayNight, dayKey, eggProgress, shouldHatch, formFor, nameFor, curveFor, replayEgg, aName, selfLine } from './lib/species.mjs';
-import { createBrain, ensureBrain, brief } from './lib/brain.mjs';
+import { createBrain, ensureBrain, addAcross, brief } from './lib/brain.mjs';
 import { createLearn } from './lib/learn.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus, tabCommand } from './lib/actions.mjs';
 import { readUsage, usageText } from './lib/usage.mjs';
@@ -592,10 +592,13 @@ const ASSISTANT = 'assistant:' + MIND; // its key in voiceSessions (a conversati
 laxHistory(); // Lax's tab starts with your last conversation, not empty
 
 // ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
-ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addMemoryLayout(); addToolsAdvice(); addWishAdvice();
+ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice();
 const brain = createBrain({ db, settings: () => settings, feed, diary: (t) => diary(t), broadcast, gainXp: (n) => { gainXp(n); save(); pushState(); },
   sessionInfo: (sid) => sessions.get(sid), skip: (sid) => sid === voiceSessions[ASSISTANT], claude: process.env.LAX_CLAUDE,
+  wish: (w) => learn.gap({ ...w, project: 'mind', via: 'review' }), // a fix its weekly review says needs code
   log: (...a) => console.log('[brain]', ...a) });
+// Its learning record (events of kind 'learning'), which the weekly review reads (lib/brain.mjs).
+const record = (kind, text) => logEvent('', 'mind', 'learning', `${kind}: ${short(text, 300)}`);
 // ---------- what it couldn't do: wishes, offered by voice, built on a branch, merged on your yes (lib/learn.mjs) ----------
 // A quiet moment to offer one: the phone is there, nothing is waiting on you, and no session is busy.
 const quiet = () => clients.size > 0 && !voiceRun && !channelWait && !laxOnMac && pending.size === 0
@@ -603,7 +606,7 @@ const quiet = () => clients.size > 0 && !voiceRun && !channelWait && !laxOnMac &
 const learn = createLearn({ settings: () => settings, feed, diary: (t) => diary(t), broadcast, pending, quiet,
   gainXp: (n) => { gainXp(n); save(); pushState(); }, body: process.env.LAX_BODY || ROOT, claude: process.env.LAX_CLAUDE,
   say: (text, kind = 'reply') => broadcast('bubble', { id: 'learn' + Date.now(), kind, text, speak: true }),
-  record: (kind, text) => logEvent('', 'mind', 'learning', `${kind}: ${text}`), // its learning record, for the weekly review
+  record: (kind, text) => record(kind, text),
   log: (...a) => console.log('[learn]', ...a) });
 const tabLabel = (s) => `${s.project}·${s.where || 'cli'}`;
 function sessionsBrief() {
@@ -735,7 +738,8 @@ function talk(text) {
   });
   let err = ''; child.stderr.on('data', (d) => { err += d; });
   child.on('close', (code) => {
-    commitMind(); // whatever Lax learned or changed in its mind, with history, described by what changed
+    const changed = commitMind(); // whatever Lax learned or changed in its mind, with history, described by what changed
+    if (changed.startsWith('forgot:')) record('forgot', changed.slice(8)); // a note that was wrong: its learning record
     voiceRun = null;
     const ok = result && !result.is_error;
     const say = ok ? spoken(result.result) : `Something went wrong. ${short(err || result?.result, 120)}`;
@@ -830,6 +834,7 @@ http.createServer(async (req, res) => {
     case '/api/hatch': return json(res, { ok: true }); // older pages tapped to hatch; the egg hatches on its own now
     case '/api/rebirth': rebirth(); broadcast('reborn', {}); pushState(); return json(res, { ok: true });
     case '/api/diag': console.log(`[phone ${new Date().toISOString().slice(11, 19)}] ${JSON.stringify(b).slice(0, 600)}`); return json(res, { ok: true });
+    case '/api/brain/review': return json(res, { ok: isLocal(req) && brain.review(true) }); // local only: the weekly review, now
     case '/api/brain/reflect': return json(res, { ok: isLocal(req) && !!b.session && (brain.enqueue(String(b.session)), true) }); // local only: reflect now
     case '/api/learn/merged': return json(res, { ok: isLocal(req) && learn.merged({ id: String(b.id || ''), ok: !!b.ok, why: String(b.why || '') }) });
     case '/api/channel/event': return json(res, { ok: isLocal(req) && channelEvent(b) });
