@@ -21,6 +21,7 @@ import { readUsage, usageText } from './lib/usage.mjs';
 import { openTerminal, q, ON_MAC } from './lib/terminal.mjs';
 import { tailRecords, newAssistantText, conversation } from './lib/transcript.mjs';
 import { editDiff } from './lib/diff.mjs';
+import { claudeAlive } from './lib/claude-pid.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const PORT = Number(process.env.LAX_PORT || 7777);
@@ -276,19 +277,28 @@ function petView() {
     choices: Object.entries(SPECIES).map(([id, v]) => ({ id, name: v.name, color: v.color })), branches: Object.entries(BRANCHES).map(([id, v]) => ({ id, name: v.name, color: v.color })) };
 }
 let saveTimer;
-const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => { kvSet('pet', pet); kvSet('voiceSessions', voiceSessions); }, 500); };
+const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => { kvSet('pet', pet); kvSet('voiceSessions', voiceSessions); kvSet('sessions', [...sessions]); }, 500); };
 
 // ---------- live state ----------
 const clients = new Set();
-const sessions = new Map(); // session_id -> {project, status, ts}
+// session_id -> {project, status, ts, pid}. Kept across restarts: a terminal left open keeps its tab on the phone,
+// however long it's quiet, for as long as its claude process lives. Without a pid (older hooks), 6 hours of quiet.
+const sessions = new Map(kvGet('sessions', []));
+const SESSION_QUIET = 6 * 36e5;
+function pruneSessions() {
+  const alive = claudeAlive([...sessions.values()].map((s) => s.pid));
+  let gone = 0;
+  for (const [id, s] of sessions) if (s.pid ? !alive.has(s.pid) : s.ts < Date.now() - SESSION_QUIET) { sessions.delete(id); gone++; }
+  if (gone) { save(); pushState(); }
+}
 const pending = new Map(); // ask id -> {resolve, bubble}
 function broadcast(type, data) {
   const msg = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const c of clients) c.write(msg);
 }
 function sessionList() {
-  const cutoff = Date.now() - 6 * 36e5;
-  return [...sessions.entries()].filter(([id, s]) => s.ts > cutoff && id !== voiceSessions[ASSISTANT]).map(([id, s]) => ({ id, ...s }));
+  const cutoff = Date.now() - SESSION_QUIET;
+  return [...sessions.entries()].filter(([id, s]) => (s.pid || s.ts > cutoff) && id !== voiceSessions[ASSISTANT]).map(([id, s]) => ({ id, ...s }));
 }
 const stateMsg = () => ({ pet: petView(), sessions: sessionList(), voiceBusy: !!voiceRun, thinking: !!channelWait, settings,
   channels: channelList(), voiceTarget, usage });
@@ -861,3 +871,4 @@ http.createServer(async (req, res) => {
 // Species (lib/species.mjs): a Lax from before them hatches again, and an egg checks whether its third day is over.
 rehatchOld();
 setInterval(checkHatch, 10 * 6e4);
+pruneSessions(); setInterval(pruneSessions, 30e3); // closed terminals (even without a SessionEnd) lose their tab
