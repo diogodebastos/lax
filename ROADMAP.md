@@ -110,10 +110,11 @@ Replaces picking a colour (designed 2026-10-07; built in `lib/species.mjs`, test
 
 ### Phase 5: Lax learns [diogodebastos/lax#13](https://github.com/diogodebastos/lax/issues/13)
 What makes Lax a personal agent. Everything it learns lives in `~/.lax`, and you approve each step.
+Two slices. **5a (what it couldn't do) is done** (2026-10-08; `lib/learn.mjs`, `lib/guard.mjs`, `scripts/after-merge.mjs`, tests in `scripts/test-learn.mjs`): its first real wish, "tell my Claude usage" in Lax's tab, went gap → wish → "any wishes?" → yes → issue #20 → build → PR #21 → "merge it" → restarted healthy, pushed. Next, 5b: from every project, and how it learns.
 - **What it couldn't do.** When a session that hears you has to say "I can't", it reports the gap. Lax keeps a wish list, proposes by voice ("you asked me to share to WhatsApp; I can learn it like this. Want me to?"), opens an issue on your yes, builds it on a branch with tests, and **you merge**.
 - **From every project you launch it in.** `lax` in edge-cava, your CV, a job-hunt experiment…: Lax builds an understanding of you across them (projects, goals, how you work), connects them, and briefs new sessions. Ask "what do you know about me?"; say "forget that".
 - **How it learns.** It reviews its own record (declined wishes, corrected proposals, wrong notes) and proposes better ways to learn, through the same branch → merge flow.
-- Guardrails in code: never auth, tokens, the tunnel or the guardrails; never `main` without your yes.
+- Guardrails in code: never auth, tokens, the tunnel or the guardrails; never `main` without your yes. Auth lives in `lib/auth.mjs` so the off-limits list is a list of files; `package.json` may only gain tests; a wish is at most 800 lines.
 
 ### Phase 6: Lax remembers [diogodebastos/lax#6](https://github.com/diogodebastos/lax/issues/6)
 Lax learns your projects, auto-generates skills, and never forgets how a problem was solved.
