@@ -19,6 +19,12 @@ const FAKE = path.join(HOME, 'fake-claude.mjs');
 fs.writeFileSync(FAKE, `#!${process.execPath}
 import fs from 'node:fs'; import path from 'node:path';
 const prompt = process.argv[process.argv.indexOf('-p') + 1] || '';\nfs.writeFileSync(${JSON.stringify(path.join(HOME, 'last-prompt.txt'))}, prompt);\nfs.writeFileSync(${JSON.stringify(path.join(HOME, 'last-model.txt'))}, process.argv[process.argv.indexOf('--model') + 1] || '');
+if (prompt.startsWith('Do your weekly review')) {
+  fs.writeFileSync(${JSON.stringify(path.join(HOME, 'review-prompt.txt'))}, prompt);
+  fs.appendFileSync('wishing.md', '- Ask where it runs (Mac or phone) before proposing.\\n');
+  console.log(JSON.stringify({ result: 'Done.\\n{"learned": [], "changed_how_i_learn": "proposals ask where it runs first", "wish": {"asked": "learn to check where a wish runs", "why": "corrected twice"}}' }));
+  process.exit(0);
+}
 const file = (prompt.match(/projects\\/([^\\s]+\\.md)/) || [])[1];
 if (file) {
   fs.mkdirSync('projects', { recursive: true });
@@ -97,6 +103,30 @@ check('mind history: "forget that" reads as forgot', describeMindDiff(hunk('-- L
 check('mind history: a new note reads as noted', describeMindDiff(hunk('+- 2026-10-06: Prefers tea.')) === 'noted: Prefers tea.');
 check('mind history: an edited note reads as changed', describeMindDiff(hunk('-- Likes coffee.\n+- Likes tea.')) === 'changed: Likes tea.');
 check('mind history: no change, no message', describeMindDiff('') === '');
+
+// Phase 5b: across projects, and how it learns.
+check('learning.md knows where and when, connections, and its record', /## Across projects/.test(fs.readFileSync(path.join(MIND, 'learning.md'), 'utf8')));
+check('CLAUDE.md: "what do you know about me?"', /What do you know about me\?/.test(fs.readFileSync(path.join(MIND, 'CLAUDE.md'), 'utf8')));
+const OTHER = path.join(HOME, 'cv'); fs.mkdirSync(OTHER);
+const before = learnedBubbles().length;
+await hook({ hook_event_name: 'SessionStart', session_id: 's-cv', cwd: OTHER });
+for (const p of ['tighten the summary', 'add the Cloudflare role']) await hook({ hook_event_name: 'UserPromptSubmit', session_id: 's-cv', cwd: OTHER, prompt: p });
+await hook({ hook_event_name: 'Stop', session_id: 's-cv', cwd: OTHER, last_assistant_message: 'Done.' });
+for (let i = 0; i < 40 && learnedBubbles().length === before; i++) await sleep(150);
+const cvPrompt = fs.readFileSync(path.join(HOME, 'last-prompt.txt'), 'utf8');
+check('a reflection lists the other projects it knows, to connect them', /Other projects you know[\s\S]*- demo-proj: .*pixel-art game/.test(cvPrompt));
+// Its learning record: a proposal corrected twice the same way, then the weekly review reads it.
+await post('/api/channel/event', { type: 'gap', asked: 'rotate the tunnel token', why: 'no access', cwd: PROJ }); // refused → recorded
+const learnedBefore = learnedBubbles().length;
+check('the weekly review can run now (local)', (await post('/api/brain/review', {})).ok === true);
+for (let i = 0; i < 40 && learnedBubbles().length === learnedBefore; i++) await sleep(150);
+const rev = fs.readFileSync(path.join(HOME, 'review-prompt.txt'), 'utf8');
+check('the weekly review gets its learning record', /<record>[\s\S]*refused: rotate the tunnel token/.test(rev), rev.slice(-200));
+check('…may change how it drafts wishes, and says so', /proposals ask where it runs first/.test(learnedBubbles().pop()?.d.details || '') && /Ask where it runs/.test(fs.readFileSync(path.join(MIND, 'wishing.md'), 'utf8')));
+check('…and a fix that needs code becomes a wish', phone.some((e) => e.ev === 'feed' && /> wish: learn to check where a wish runs/.test(e.d.line)));
+{ const { commitMind } = await import('../lib/home.mjs');
+  const md = path.join(MIND, 'CLAUDE.md'); fs.writeFileSync(md, fs.readFileSync(md, 'utf8').replace(/^- Prefers short answers.*\n/m, ''));
+  check('"forget that" commits as forgot (what the record keeps)', /^forgot: Prefers short answers/.test(commitMind())); }
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nall brain checks passed');
 process.exit(failed ? 1 : 0);
