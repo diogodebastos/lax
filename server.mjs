@@ -8,7 +8,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { ensureHome, commitMind, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice } from './lib/home.mjs';
+import { ensureHome, commitMind, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice, addFreshAdvice } from './lib/home.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS } from './lib/paths.mjs';
 import { HOST, TOKEN, authed, isLocal, phoneUrl, pairPage } from './lib/auth.mjs'; // first: it loads Lax's home and local config
 import { grantKey, repoRoot } from './lib/allow.mjs';
@@ -21,6 +21,7 @@ import { readUsage, usageText } from './lib/usage.mjs';
 import { openTerminal, q, ON_MAC } from './lib/terminal.mjs';
 import { tailRecords, newAssistantText, conversation } from './lib/transcript.mjs';
 import { editDiff } from './lib/diff.mjs';
+import { FRESH, FRESH_HOURS, FRESH_TOKENS, freshDue, contextSize, recap } from './lib/talk.mjs';
 import { claudeAlive } from './lib/claude-pid.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
@@ -60,6 +61,8 @@ const newPet = () => ({
 });
 let pet = kvGet('pet', null) || newPet();
 let voiceSessions = kvGet('voiceSessions', {}); // cwd -> claude session id
+// Lax's own conversation: when you last talked, how full it is, and the one before it (lib/talk.mjs).
+let laxTalk = kvGet('laxTalk', {}); // { last, tokens, prev }
 if (!kvGet('pet', null)) { milestone('Lax was born'); }
 // Phase 3.7 moved Lax to a new level curve (it went from brick back to sprout): note it once.
 if (!kvGet('newPath', false)) { if (kvGet('pet', null)) milestone(`${readSettings().name || 'Lax'} started over on a new path`); kvSet('newPath', true); }
@@ -91,7 +94,7 @@ function updateSettings(b) {
 }
 function rebirth() {
   db.exec('DELETE FROM events; DELETE FROM milestones;');
-  pet = newPet(); voiceSessions = {}; kvSet('pet', pet); kvSet('voiceSessions', voiceSessions); kvSet('diary', []); laxFeed.length = 0;
+  pet = newPet(); voiceSessions = {}; laxTalk = {}; kvSet('pet', pet); kvSet('voiceSessions', voiceSessions); kvSet('laxTalk', laxTalk); kvSet('diary', []); laxFeed.length = 0;
   leadCache.at = 0; autoCache.at = 0;
   milestone(`${settings.name} was born`);
 }
@@ -277,7 +280,7 @@ function petView() {
     choices: Object.entries(SPECIES).map(([id, v]) => ({ id, name: v.name, color: v.color })), branches: Object.entries(BRANCHES).map(([id, v]) => ({ id, name: v.name, color: v.color })) };
 }
 let saveTimer;
-const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => { kvSet('pet', pet); kvSet('voiceSessions', voiceSessions); kvSet('sessions', [...sessions]); }, 500); };
+const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => { kvSet('pet', pet); kvSet('voiceSessions', voiceSessions); kvSet('laxTalk', laxTalk); kvSet('sessions', [...sessions]); }, 500); };
 
 // ---------- live state ----------
 const clients = new Set();
@@ -296,9 +299,11 @@ function broadcast(type, data) {
   const msg = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const c of clients) c.write(msg);
 }
+// Lax's own conversation, this one or the one before it: never a session of yours (no tab, no reflection).
+const laxOwn = (sid) => !!sid && (sid === voiceSessions[ASSISTANT] || sid === laxTalk.prev);
 function sessionList() {
   const cutoff = Date.now() - SESSION_QUIET;
-  return [...sessions.entries()].filter(([id, s]) => (s.pid || s.ts > cutoff) && id !== voiceSessions[ASSISTANT]).map(([id, s]) => ({ id, ...s }));
+  return [...sessions.entries()].filter(([id, s]) => (s.pid || s.ts > cutoff) && !laxOwn(id)).map(([id, s]) => ({ id, ...s }));
 }
 const stateMsg = () => ({ pet: petView(), sessions: sessionList(), voiceBusy: !!voiceRun, thinking: !!channelWait, settings,
   channels: channelList(), voiceTarget, usage });
@@ -348,14 +353,22 @@ function diary(text) {
   const d = [...kvGet('diary', []), { ts: Date.now(), text }].slice(-100); kvSet('diary', d);
   feed(`+ ${text}`, 'diary', settings.name.toLowerCase(), undefined, { text });
 }
-// Lax's tab after a restart: the last turns of its own conversation (from its transcript) and its diary, in time order.
+// Where Claude Code keeps one of Lax's conversations.
+const talkFile = (id) => path.join(os.homedir(), '.claude', 'projects', MIND.replace(/[^a-zA-Z0-9]/g, '-'), id + '.jsonl');
+// Lax's tab after a restart: the last turns of its conversations (the one before, then this one, from their
+// transcripts) and its diary, in time order.
 function laxHistory() {
-  const sid = voiceSessions[ASSISTANT]; if (!sid) return;
-  const file = path.join(os.homedir(), '.claude', 'projects', MIND.replace(/[^a-zA-Z0-9]/g, '-'), sid + '.jsonl');
+  const ids = [laxTalk.prev, voiceSessions[ASSISTANT]].filter(Boolean); if (!ids.length) return;
   const name = settings.name.toLowerCase(), lines = [];
-  for (const it of conversation(tailRecords(file, 512 * 1024), 25)) {
+  const items = ids.flatMap((id, i) => {
+    const its = conversation(tailRecords(talkFile(id), 512 * 1024), 25);
+    // Where the new one began: the same divider you saw when it started.
+    return i && its.length ? [{ kind: 'fresh', ts: its[0].ts - 1 }, ...its] : its;
+  });
+  for (const it of items) {
     const base = { project: name, ts: it.ts, history: true };
-    if (it.kind === 'prompt') lines.push({ ...base, line: `> ${short(said(it.text), 90)}`, kind: 'prompt' });
+    if (it.kind === 'fresh') lines.push({ ...base, line: '○ new conversation', kind: 'session' });
+    else if (it.kind === 'prompt') lines.push({ ...base, line: `> ${short(said(it.text), 90)}`, kind: 'prompt' });
     else if (it.kind === 'say') lines.push({ ...base, line: `● ${short(it.text, 200)}`, kind: 'say', own: true, text: clip(it.text, 1500) });
     else if (it.kind === 'tool') lines.push({ ...base, line: describeTool(it.tool, it.input), kind: 'tool', own: true, ...stepParts(it.tool, it.input) });
     else lines.push({ ...base, line: `↩ ${clip(it.text)}`, kind: 'done', text: clip(it.text), answer: true });
@@ -608,11 +621,17 @@ async function openOnMac() {
 }
 const ASSISTANT = 'assistant:' + MIND; // its key in voiceSessions (a conversation only resumes in the folder it started in)
 laxHistory(); // Lax's tab starts with your last conversation, not empty
+// A conversation from before Lax kept track: when it was last used and how full it is, from its transcript, so a
+// long one starts fresh on the next message instead of being sent whole once more.
+if (voiceSessions[ASSISTANT] && !laxTalk.last) {
+  const recs = tailRecords(talkFile(voiceSessions[ASSISTANT]), 512 * 1024), u = recs.findLast((r) => r.type === 'assistant' && r.message?.usage);
+  laxTalk.last = Date.parse(recs.findLast((r) => r.timestamp)?.timestamp) || Date.now(); laxTalk.tokens = u ? contextSize(u.message.usage) : 0;
+}
 
 // ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
-ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice();
+ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice();
 const brain = createBrain({ db, settings: () => settings, feed, diary: (t) => diary(t), broadcast, gainXp: (n) => { gainXp(n); save(); pushState(); },
-  sessionInfo: (sid) => sessions.get(sid), skip: (sid) => sid === voiceSessions[ASSISTANT], claude: process.env.LAX_CLAUDE,
+  sessionInfo: (sid) => sessions.get(sid), skip: laxOwn, claude: process.env.LAX_CLAUDE,
   wish: (w) => learn.gap({ ...w, project: 'mind', via: 'review' }), // a fix its weekly review says needs code
   log: (...a) => console.log('[brain]', ...a) });
 // Its learning record (events of kind 'learning'), which the weekly review reads (lib/brain.mjs).
@@ -627,11 +646,16 @@ const learn = createLearn({ settings: () => settings, feed, diary: (t) => diary(
   record: (kind, text) => record(kind, text),
   log: (...a) => console.log('[learn]', ...a) });
 const tabLabel = (s) => `${s.project}·${s.where || 'cli'}`;
-function sessionsBrief() {
-  const list = sessionList().filter((s) => s.id !== voiceSessions[ASSISTANT]);
+// One line per session (and its latest step); the last few steps only for a session the message names, so the
+// block stays small: every message carries one, and they all stay in the conversation.
+function sessionsBrief(text = '') {
+  const list = sessionList();
   if (!list.length) return 'No Claude Code sessions are running right now.';
+  const words = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(), asked = ` ${words(text)} `, me = words(settings.name);
   return list.map((s) => {
-    const lines = recentFeed.filter((f) => f.session === s.id).slice(-6).map((f) => '    ' + f.line).join('\n');
+    // "lax cli" names lax·cli; a project called like Lax itself only by its full tab name ("hey lax" names no session).
+    const named = [tabLabel(s), s.project].map(words).some((n) => n.length > 2 && n !== me && asked.includes(` ${n} `));
+    const lines = recentFeed.filter((f) => f.session === s.id).slice(named ? -6 : -1).map((f) => '    ' + short(f.line, named ? 200 : 100)).join('\n');
     return `- ${tabLabel(s)} (${s.status}, active ${Math.round((Date.now() - s.ts) / 60000)} min ago, in ${s.cwd || '?'})${lines ? ':\n' + lines : ''}`;
   }).join('\n');
 }
@@ -639,10 +663,20 @@ function sessionsBrief() {
 const VOICE_RULE = 'The user is talking to you by voice: start with ONE short, plain sentence that can be read aloud.';
 // What changes goes in the message itself, not the system prompt: a resumed conversation (--resume) keeps its first
 // system prompt, so the sessions and usage would be stale. Old blocks stay in the history; the newest one is current.
-const assistantPrompt = (text) =>
+// carry: the last turns of the previous conversation, on the first message of a new one (lib/talk.mjs recap).
+const assistantPrompt = (text, carry = '') =>
   '[Context now: this replaces any earlier context block]\n' +
-  `Their Claude Code sessions right now (tab name, status, latest activity):\n${sessionsBrief()}\n\n` +
+  (carry ? `This is a new conversation. The last one ended with:\n${carry}\n\n` : '') +
+  `Their Claude Code sessions right now (tab name, status, latest activity):\n${sessionsBrief(text)}\n\n` +
   `Their Claude plan usage: ${usageText(usage)}\n[/Context]\n\n${text}`;
+// A fresh conversation: the current one becomes the one before (for the recap and the phone's history).
+function freshTalk(why) {
+  const id = voiceSessions[ASSISTANT]; if (!id) return false;
+  laxTalk = { prev: id }; delete voiceSessions[ASSISTANT]; sessions.delete(id); save();
+  feed(`○ new conversation${why ? ` (${why})` : ''}`, 'session', settings.name.toLowerCase());
+  return true;
+}
+const FRESH_LIMITS = { hours: Number(process.env.LAX_FRESH_HOURS) || FRESH_HOURS, maxTokens: Number(process.env.LAX_FRESH_TOKENS) || FRESH_TOKENS };
 // Quick actions by voice: a closed list typed into a live `lax` session's terminal (lib/actions.mjs).
 function quickAction(cid, action) {
   const c = channels.get(cid); if (!c?.pty || !action) return false;
@@ -730,10 +764,22 @@ function talk(text) {
   const name = settings.name.toLowerCase();
   if (ON_MAC.test(text.trim())) { feed(`> ${short(text, 90)}`, 'prompt', name); openOnMac().then((say) => broadcast('bubble', { id: 'onmac' + Date.now(), kind: 'reply', text: say, speak: true })); return true; }
   if (laxOnMac) { broadcast('bubble', { id: 'onmac' + Date.now(), kind: 'reply', text: `I'm open on the Mac right now. Quit there and I'll hear you here again.`, speak: true }); return true; }
+  // "Start fresh": a new conversation, by voice. Its notes stay; only the chat starts over.
+  if (FRESH.test(text.trim())) {
+    feed(`> ${short(text, 90)}`, 'prompt', name);
+    const say = freshTalk('you asked') ? `Fresh start. I still have my notes.` : `We're already fresh. Go ahead.`;
+    broadcast('bubble', { id: 'fresh' + Date.now(), kind: 'reply', text: say, speak: true });
+    return true;
+  }
+  // After a quiet spell, or once it's long, the next message starts a new one (every message re-sends the whole chat).
+  const due = voiceSessions[ASSISTANT] && freshDue(laxTalk, Date.now(), FRESH_LIMITS);
+  if (due) freshTalk(due);
+  const carry = !voiceSessions[ASSISTANT] && laxTalk.prev ? recap(tailRecords(talkFile(laxTalk.prev), 512 * 1024), { clean: said }) : '';
+  laxTalk.last = Date.now();
   const cwd = MIND;
   ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name });
   syncMindSelf(selfLine(petView())); // it knows what it is right now: species, form, level (or still an egg)
-  const args = ['-p', assistantPrompt(text), '--output-format', 'stream-json', '--verbose', '--add-dir', DEFAULT_WORKDIR, '--append-system-prompt', VOICE_RULE];
+  const args = ['-p', assistantPrompt(text, carry), '--output-format', 'stream-json', '--verbose', '--add-dir', DEFAULT_WORKDIR, '--append-system-prompt', VOICE_RULE];
   if (voiceSessions[ASSISTANT]) args.push('--resume', voiceSessions[ASSISTANT]);
   pet.voice++; gainXp(3); save();
   feed(`> ${short(text, 90)}`, 'prompt', name);
@@ -748,6 +794,7 @@ function talk(text) {
       let m; try { m = JSON.parse(line); } catch { continue; }
       if (m.type === 'system' && m.subtype === 'init') { voiceSessions[ASSISTANT] = m.session_id; voiceRun.sessionId = m.session_id; save(); }
       if (m.type === 'result') result = m;
+      if (m.type === 'assistant' && !m.parent_tool_use_id && m.message?.usage) laxTalk.tokens = contextSize(m.message.usage); // how full the conversation is now
       if (m.type === 'assistant' && !m.parent_tool_use_id) for (const b of m.message?.content || []) {
         if (b.type === 'text' && b.text?.trim()) pendingSay = b.text.trim();
         else if (b.type === 'tool_use' && pendingSay) { feed(`● ${short(pendingSay, 200)}`, 'say', name, undefined, { own: true, text: clip(pendingSay, 1500) }); pendingSay = null; }
