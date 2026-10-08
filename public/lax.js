@@ -484,7 +484,9 @@ function feed(line, kind = 'tool', project, session = '', x = {}) {
     else { const r = lanes.sess = add(el('sessions', span('mk', '· '))); r.items = [item]; r.label = span('', `live sessions: ${item}`); r.append(r.label); }
   } else if (kind === 'prompt' && line.startsWith('> ')) {
     at.group = null; at.step?.classList.remove('run');
-    add(el('prompt turn', span('mk', '› '), line.slice(2)));
+    const row = add(el('prompt turn', span('mk', '› '), span('', line.slice(2))));
+    // Cut short: tap it to read all of what you said (and again to shrink it); a long press copies it whole.
+    if (x.text) { row.classList.add('cut'); row.copy = x.text; row.addEventListener('click', () => { row.lastChild.textContent = row.classList.toggle('open') ? x.text : line.slice(2); }); }
   } else {
     at.group = null; add(el(kind, line));
   }
@@ -555,10 +557,10 @@ function md(text) {
   }
   return out;
 }
-// Hold a step half a second to copy its command and output (to paste it in a message from the phone).
+// Hold a step half a second to copy its command and output (to paste it in a message from the phone), or a message of yours to copy all of it.
 { let timer = null, held = false;
   term.addEventListener('pointerdown', (e) => {
-    const s = e.target.closest('.step'); held = false; if (!s) return;
+    const s = e.target.closest('.step, .prompt.cut'); held = false; if (!s) return;
     timer = setTimeout(async () => {
       timer = null; held = true; s.classList.add('copied'); setTimeout(() => s.classList.remove('copied'), 900); buzz([30]);
       try { await navigator.clipboard.writeText(s.copy || s.textContent); hint.textContent = 'copied'; }

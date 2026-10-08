@@ -102,6 +102,13 @@ check('"start fresh" is answered without Claude', calls().length === before && p
 await say('who are you?');
 check('…and the next message starts a new conversation', resumes(calls().at(-1)) === null && /The last one ended with:\nYou: and now\?/.test(prompt(calls().at(-1))));
 
+// A long message: the line is cut, and the whole of it comes along for the phone to open; a short one doesn't need to.
+const long = 'please check that the deploy went through and then tell me which of the three workers failed and why, in detail';
+await say(long);
+const sent = phone.filter((e) => e.ev === 'feed' && e.d.kind === 'prompt').at(-1)?.d;
+check('a long message is cut on its line, and comes whole', sent?.line.endsWith('…') && sent?.text === long, JSON.stringify(sent));
+check('a short one comes as it is', phone.some((e) => e.ev === 'feed' && e.d.line === '> who are you?' && e.d.text === undefined));
+
 // A restart: Lax's tab shows both conversations, with the divider between them.
 await sleep(700); // its state is saved half a second after a change
 await new Promise((r) => { server.once('exit', r); server.kill(); }); phone = []; start(); await up();

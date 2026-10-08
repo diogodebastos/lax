@@ -368,7 +368,7 @@ function laxHistory() {
   for (const it of items) {
     const base = { project: name, ts: it.ts, history: true };
     if (it.kind === 'fresh') lines.push({ ...base, line: '○ new conversation', kind: 'session' });
-    else if (it.kind === 'prompt') lines.push({ ...base, line: `> ${short(said(it.text), 90)}`, kind: 'prompt' });
+    else if (it.kind === 'prompt') lines.push({ ...base, line: saidLine(said(it.text)), kind: 'prompt', ...saidFull(said(it.text)) });
     else if (it.kind === 'say') lines.push({ ...base, line: `● ${short(it.text, 200)}`, kind: 'say', own: true, text: clip(it.text, 1500) });
     else if (it.kind === 'tool') lines.push({ ...base, line: describeTool(it.tool, it.input), kind: 'tool', own: true, ...stepParts(it.tool, it.input) });
     else lines.push({ ...base, line: `↩ ${clip(it.text)}`, kind: 'done', text: clip(it.text), answer: true });
@@ -381,6 +381,10 @@ const channelSession = (c) => c?.sessionPid ? [...sessions.entries()].find(([, s
 // The terminal shows replies and results in full (capped), so you can check them on the phone; bubbles stay short.
 const clip = (t, n = 4000) => { t = String(t ?? '').trim(); return t.length > n ? t.slice(0, n) + '\n…' : t; };
 const proj = (cwd) => (cwd ? path.basename(cwd) : '?');
+// What you said, as a feed line: shortened, with the whole of it for the phone to open (tap the line).
+const saidLine = (t) => `> ${short(t, 90)}`;
+const saidFull = (t) => { t = String(t ?? '').trim(); return short(t, 90) === t ? {} : { text: clip(t) }; };
+const youSaid = (text, project, session) => feed(saidLine(text), 'prompt', project, session, saidFull(text));
 const short = (s, n = 60) => { s = String(s ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 // What you said to Lax, without the context block each voice message starts with (assistantPrompt).
 const CONTEXT = /^\[Context now[^\]\n]*\]\n[\s\S]*?\n\[\/Context\]\n*/;
@@ -443,7 +447,7 @@ function onHook(h) {
       if (!mine) feed(`● session ${project}`, 'session', project, sid); logEvent(sid, project, 'session', h.source || 'start', repo);
       break;
     case 'UserPromptSubmit':
-      s.status = 'working'; if (!mine) feed(`> ${short(h.prompt, 90)}`, 'prompt', project, sid); else if (laxOnMac) feed(`> ${short(h.prompt, 90)}`, 'prompt', settings.name.toLowerCase());
+      s.status = 'working'; if (!mine) youSaid(h.prompt, project, sid); else if (laxOnMac) youSaid(said(h.prompt), settings.name.toLowerCase());
       logEvent(sid, project, 'prompt', short(mine ? said(h.prompt) : h.prompt, 500), repo);
       break;
     case 'PreToolUse': {
@@ -748,7 +752,7 @@ function talk(text) {
   if (learn.hears(text, { toLax: !pickChannel() })) return true;
   // "Talk to edge cava" / "back to you": the phone changes tab, as if you'd tapped it (whichever tab you said it in).
   const tab = voiceAction(text) ? null : tabCommand(text, sessionList().slice(0, 8), settings.name);
-  if (tab) { feed(`> ${short(text, 90)}`, 'prompt', settings.name.toLowerCase()); broadcast('tab', { view: tab }); return true; }
+  if (tab) { youSaid(text, settings.name.toLowerCase()); broadcast('tab', { view: tab }); return true; }
   const cid = pickChannel();
   if (cid && quickAction(cid, voiceAction(text))) return true; // "clear", "stop"… (anything longer is a message)
   if (cid) { // into the running session
@@ -757,16 +761,16 @@ function talk(text) {
     clearTimeout(channelWait?.timer);
     channelWait = { cid, timer: setTimeout(() => { channelWait = null; pushState(); }, 180000) };
     pet.voice++; gainXp(3); save();
-    feed(`> ${short(text, 90)}`, 'prompt', c.project, channelSession(c)); pushState();
+    youSaid(text, c.project, channelSession(c)); pushState();
     return true;
   }
   if (voiceRun) return false;
   const name = settings.name.toLowerCase();
-  if (ON_MAC.test(text.trim())) { feed(`> ${short(text, 90)}`, 'prompt', name); openOnMac().then((say) => broadcast('bubble', { id: 'onmac' + Date.now(), kind: 'reply', text: say, speak: true })); return true; }
+  if (ON_MAC.test(text.trim())) { youSaid(text, name); openOnMac().then((say) => broadcast('bubble', { id: 'onmac' + Date.now(), kind: 'reply', text: say, speak: true })); return true; }
   if (laxOnMac) { broadcast('bubble', { id: 'onmac' + Date.now(), kind: 'reply', text: `I'm open on the Mac right now. Quit there and I'll hear you here again.`, speak: true }); return true; }
   // "Start fresh": a new conversation, by voice. Its notes stay; only the chat starts over.
   if (FRESH.test(text.trim())) {
-    feed(`> ${short(text, 90)}`, 'prompt', name);
+    youSaid(text, name);
     const say = freshTalk('you asked') ? `Fresh start. I still have my notes.` : `We're already fresh. Go ahead.`;
     broadcast('bubble', { id: 'fresh' + Date.now(), kind: 'reply', text: say, speak: true });
     return true;
@@ -782,7 +786,7 @@ function talk(text) {
   const args = ['-p', assistantPrompt(text, carry), '--output-format', 'stream-json', '--verbose', '--add-dir', DEFAULT_WORKDIR, '--append-system-prompt', VOICE_RULE];
   if (voiceSessions[ASSISTANT]) args.push('--resume', voiceSessions[ASSISTANT]);
   pet.voice++; gainXp(3); save();
-  feed(`> ${short(text, 90)}`, 'prompt', name);
+  youSaid(text, name);
   const child = spawn(process.env.LAX_CLAUDE || 'claude', args, { cwd, env: { ...process.env, LAX_VOICE: '1', LAX_HOME: HOME }, stdio: ['ignore', 'pipe', 'pipe'] });
   voiceRun = { child, cwd, sessionId: voiceSessions[ASSISTANT] || null };
   broadcast('react', { state: 'thinking' }); pushState();
