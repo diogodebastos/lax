@@ -1047,9 +1047,10 @@ function renderLife() {
   $('#stats').innerHTML = [['level', p.level], ['stage', p.stage], ['xp', p.xp], ['streak', (p.streak || 0) + 'd'], ['age', days + 'd'], ['mood', p.mood],
     ['turns', raw.turns ?? '–'], ['approved', raw.approvals ?? '–'], ['errors', raw.errors ?? '–'], ['voice', memory?.voiceProject ?? '–'],
     ['traits', (p.traits || []).join(', ') || 'none yet']].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
-  const tools = Object.entries(raw.tools || {}).filter(([k]) => !k.startsWith('__')).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  const max = tools[0]?.[1] || 1;
-  $('#tools').innerHTML = tools.length ? tools.map(([k, v]) => `<div class="bar"><span>${esc(k.replace(/^mcp__.*?__/, ''))}</span><div class="track"><i style="width:${Math.round(100 * v / max)}%"></i></div><b>${v}</b></div>`).join('') : '<div class="bar"><span>nothing yet</span></div>';
+  // As the traits count them: the last 7 days, Bash a tenth (it runs nearly everything).
+  const tools = Object.entries(p.weekTools || {}).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const max = tools[0]?.[1] || 1, n = (v) => v >= 10 || Number.isInteger(v) ? Math.round(v) : v.toFixed(1);
+  $('#tools').innerHTML = tools.length ? tools.map(([k, v]) => `<div class="bar"><span>${esc(k.replace(/^mcp__.*?__/, ''))}${k === 'Bash' ? ' /10' : ''}</span><div class="track"><i style="width:${Math.round(100 * v / max)}%"></i></div><b>${n(v)}</b></div>`).join('') : '<div class="bar"><span>nothing this week</span></div>';
   // Claude plan usage, from the status line of your terminal sessions (hooks/lax-status.mjs).
   const resets = (ms) => { if (!ms) return ''; const d = new Date(ms), hm = d.toTimeString().slice(0, 5);
     return d - Date.now() < 864e5 ? hm : d.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' + hm; };
