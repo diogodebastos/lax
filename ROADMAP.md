@@ -127,6 +127,12 @@ Phases 3.4 and 5 give Lax an understanding of you: a short summary it rewrites a
 - **How it remembers is Lax's to change:** `mind/remembering.md`, next to `learning.md` and `wishing.md`, rewritten in the weekly review; code changes go through the wish flow.
 - Claude Code's memory and each repo's `CLAUDE.md` stay the short, current layers; Lax's long-term memory is the deep store behind them. The first run moves history out of today's notes, so the summary shrinks and nothing is lost.
 
+### Phase 6.1: see the brain [diogodebastos/lax#24](https://github.com/diogodebastos/lax/issues/24)
+A picture of Lax's brain on [the demo](https://lax.diogodebastos.com/demo) and in the app, updating as it learns: the summary, long-term memory, skills, the rules it learns by, and the links between them. A reflection lights up what it touched; "forget that" fades a node.
+- Same look as the demo, app and Lax: palette, VT323, pixels, no emoji. PNG preview first.
+- Public shows the shape only (counts, links, events); project names from an allowlist, never note text. The app shows the real thing.
+- Live in the app over SSE; on the demo, a scrubbed snapshot sent to Cloudflare after each mind commit, so it still shows with the Mac off.
+
 ### Phase 7: Lax schedules [diogodebastos/lax#7](https://github.com/diogodebastos/lax/issues/7)
 Focused automation: natural-language scheduling for reports, backups and briefings, running unattended through the Mac.
 - "Every weekday at 8:30, brief me on open PRs" becomes a job you confirm before it's saved.
