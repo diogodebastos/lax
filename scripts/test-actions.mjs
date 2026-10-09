@@ -9,6 +9,8 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { voiceAction, sendAction, screenMode, readStatus, tabCommand } from '../lib/actions.mjs';
+import { verdict, WISH_ASK, MERGE_IT } from '../lib/learn.mjs';
+import { FRESH } from '../lib/talk.mjs';
 
 const pty = createRequire(import.meta.url)('node-pty');
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -53,6 +55,22 @@ check('two lax·cli tabs: "go to lax cli" goes to the first', tabCommand('go to 
 check('"go to the store" is a message', tabCommand('go to the store', TABS) === null);
 check('"talk to me about lax" is a message', tabCommand('talk to me about lax', TABS) === null);
 check('"switch to plan mode" is not a tab', tabCommand('switch to plan mode', TABS) === null);
+
+// Everything said in English works in Portuguese too.
+check('PT actions: "limpa" / "pára" / "fecha" / "compacta" / "continua"', voiceAction('Limpa.') === 'clear' && voiceAction('pára') === 'stop' && voiceAction('fecha') === 'close' && voiceAction('compacta') === 'compact' && voiceAction('continua') === 'continue');
+check('PT modes: "modo plano" / "muda para o modo automático" / "modo manual"', voiceAction('modo plano') === 'plan mode' && voiceAction('muda para o modo automático') === 'auto mode' && voiceAction('modo manual') === 'manual mode');
+check('PT: "contexto" / "uso" / "modelo" / "usa o sonnet" / "modelo opus"', voiceAction('contexto') === 'context' && voiceAction('uso') === 'usage' && voiceAction('modelo?') === 'model' && voiceAction('usa o sonnet') === 'model sonnet' && voiceAction('modelo opus') === 'model opus');
+check('PT: "limpa o README" / "para o servidor" are messages', voiceAction('limpa o README') === null && voiceAction('para o servidor') === null);
+check('PT tabs: "fala com o edge cava" / "muda para a sessão do job hunt"', tabCommand('fala com o edge cava', TABS) === 's1' && tabCommand('muda para a sessão do job hunt', TABS) === 's2');
+check('PT tabs: "volta para ti" / "fala com o Lax" go to Lax\'s own tab', tabCommand('volta para ti', TABS) === 'all' && tabCommand('fala com o Lax', TABS) === 'all');
+check('PT tabs: "vai para lax cli dois" goes to the second', tabCommand('vai para lax cli dois', TWO) === 's4');
+check('PT tabs: "vai para a loja" is a message', tabCommand('vai para a loja', TABS) === null);
+check('PT wish answers: "sim" / "claro" yes, "não" / "nem pensar" no, "mais tarde" / "amanhã" later', verdict('Sim.') === 'yes' && verdict('claro') === 'yes' && verdict('não') === 'no' && verdict('nem pensar') === 'no' && verdict('mais tarde') === 'later' && verdict('amanhã') === 'later');
+check('PT: "sim mas no Mac" is a correction', verdict('sim mas no Mac') === 'other');
+check('PT: "tens desejos?" / "o que queres aprender?" / "lê-me a tua lista de desejos" ask for wishes', WISH_ASK.test('tens desejos?') && WISH_ASK.test('Lax, o que queres aprender?') && WISH_ASK.test('lê-me a tua lista de desejos'));
+check('PT: "faz o merge" / "sim, junta isso" merge', MERGE_IT.test('faz o merge') && MERGE_IT.test('sim, junta isso'));
+check('PT: "nova conversa" / "vamos começar de novo" / "recomeça" start fresh', FRESH.test('nova conversa') && FRESH.test('vamos começar de novo') && FRESH.test('Recomeça.'));
+check('PT: "começa" / "começa os testes" don\'t start fresh', !FRESH.test('começa') && !FRESH.test('começa os testes'));
 
 // Reading Claude Code's screen (shapes copied from the real thing, v2.1).
 const FOOT = (m) => `❯ \n────\n  ⚠ Transcript saving is off\n  ${m} (shift+tab to cycle)`;
