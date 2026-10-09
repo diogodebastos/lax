@@ -26,6 +26,7 @@ The repo is Lax's **body** (code only). **Lax itself** lives in `~/.lax` on your
   settings.json  your preferences for it: name, voice, theme… (rebirth keeps them)
   secrets/       token, env.json, tunnel-token (0700, never readable by the assistant)
   logs/          server.log, tunnel.log   (npm run logs)
+  archive/       every Claude Code transcript, kept past Claude Code's 30 days, secrets scrubbed
 ```
 
 The phone stores nothing except the access token. Coming from an older Lax with a `data/` folder? `npm run move-home` moves it, once.
