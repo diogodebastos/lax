@@ -23,6 +23,7 @@ import { tailRecords, newAssistantText, conversation } from './lib/transcript.mj
 import { editDiff } from './lib/diff.mjs';
 import { FRESH, FRESH_HOURS, FRESH_TOKENS, freshDue, contextSize, recap } from './lib/talk.mjs';
 import { claudeAlive } from './lib/claude-pid.mjs';
+import { createArchive } from './lib/archive.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const PORT = Number(process.env.LAX_PORT || 7777);
@@ -438,6 +439,7 @@ function onHook(h) {
   if (/^(PostToolUse|PostToolUseFailure|Stop|UserPromptSubmit)$/.test(h.hook_event_name)) clearRelays((c) => c.cwd === h.cwd);
   if (/^(Stop|SessionEnd)$/.test(h.hook_event_name)) grants.delete(sid); // the answer is done: your yeses were for that one
   brain.onEvent(sid, h.hook_event_name); // a quiet session after real work → Lax reflects on it
+  if (!h.agent_id) archive.onEvent(sid, h.hook_event_name, h.transcript_path); // and keeps its transcript, scrubbed
   // Lax's conversation came up outside a voice run: it's open in a terminal on the Mac (until that ends).
   if (mine && h.hook_event_name === 'SessionStart' && !voiceRun) laxOnMac = true;
   if (mine && h.hook_event_name === 'SessionEnd' && laxOnMac) { laxOnMac = false; feed('○ back on the phone', 'session', settings.name.toLowerCase()); }
@@ -638,6 +640,9 @@ const brain = createBrain({ db, settings: () => settings, feed, diary: (t) => di
   sessionInfo: (sid) => sessions.get(sid), skip: laxOwn, claude: process.env.LAX_CLAUDE,
   wish: (w) => learn.gap({ ...w, project: 'mind', via: 'review' }), // a fix its weekly review says needs code
   log: (...a) => console.log('[brain]', ...a) });
+// The raw past, kept past Claude Code's 30 days (lib/archive.mjs): on quiet, plus a sweep soon after start and daily.
+const archive = createArchive({ log: (...a) => console.log('[archive]', ...a) });
+setTimeout(() => archive.sweep(), 60e3).unref(); setInterval(() => archive.sweep(), 864e5).unref();
 // Its learning record (events of kind 'learning'), which the weekly review reads (lib/brain.mjs).
 const record = (kind, text) => logEvent('', 'mind', 'learning', `${kind}: ${short(text, 300)}`);
 // ---------- what it couldn't do: wishes, offered by voice, built on a branch, merged on your yes (lib/learn.mjs) ----------
