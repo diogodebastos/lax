@@ -785,16 +785,19 @@ function beginListening(m) {
   diag('talk-' + m, { native: !!NATIVE }); showHeard(); listenStretch();
 }
 const raw = () => [said, heard].filter(Boolean).join(' ').trim();
-const words = () => LaxHeard.fix(raw(), vocab.heard).text; // what you said, misheard names fixed
+const words = () => LaxHeard.hear(raw(), vocab).text; // what you said, spelled names joined and misheard ones fixed
 function showHeard(outside = false) {
   hint.textContent = talkMode === 'hold' ? (outside ? 'let go to cancel' : 'let go to send · slide off to cancel') : 'tap me to cancel';
-  showBubble({ id: 'listen', kind: 'listening', text: words() || '…', fixed: LaxHeard.fix(raw(), vocab.heard).fixed });
+  showBubble({ id: 'listen', kind: 'listening', text: words() || '…', fixed: LaxHeard.hear(raw(), vocab).fixed });
 }
+// Lax listens in its own language (Life menu), not the phone's: a phone in pt-PT hearing English mishears a lot.
+const listenLang = () => (settings.listen && settings.listen !== 'phone' ? settings.listen : navigator.language || 'en-US');
 // One stretch of recognition (until the recognizer stops at a pause).
 function listenStretch() {
   // The names you use go to the recognizer as hints (an older app only takes the language).
-  if (NATIVE) return NATIVE.listenFor ? NATIVE.listenFor(navigator.language || 'en-US', JSON.stringify(vocab.words)) : NATIVE.listen(navigator.language || 'en-US');
-  rec = new SR(); rec.lang = navigator.language || 'en-US'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 5;
+  const lang = listenLang();
+  if (NATIVE) return NATIVE.listenFor ? NATIVE.listenFor(lang, JSON.stringify(vocab.words)) : NATIVE.listen(lang);
+  rec = new SR(); rec.lang = lang; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 5;
   let text = '';
   rec.onspeechstart = speechBegan;
   // Of its guesses, the one with a name Lax knows.
@@ -836,9 +839,9 @@ const QUESTION = new RegExp(`^(?:(?:what|what's|whats|why|how|how's|who|who's|wh
 const punctuate = (t) => !t || /[.!?…]$/.test(t) || !QUESTION.test(t) ? t : t + '?';
 function finishListening() { // send what was heard
   if (!listening) return;
-  const text = punctuate(words()), fixed = LaxHeard.fix(raw(), vocab.heard).fixed, h = answerHook; answerHook = null;
+  const text = punctuate(words()), heard = LaxHeard.hear(raw(), vocab), h = answerHook; answerHook = null;
   stopListening(false);
-  if (text) { sfx([330]); h ? h(text) : send(text, fixed); } else if (h) renderBubble();
+  if (text) { sfx([330]); h ? h(text) : send(text, heard); } else if (h) renderBubble();
 }
 function cancelListening() {
   if (!listening) return;
@@ -877,11 +880,11 @@ function typeInstead() {
   const text = prompt(h ? 'Your answer:' : 'Talk to Lax:');
   if (text?.trim()) (h ? h(text.trim()) : send(text.trim())); else if (h) renderBubble();
 }
-// fixed: set when it was dictated (even if nothing needed fixing), the words Lax fixed; typed text is sent as is.
-function send(text, fixed) {
-  showBubble({ id: 'you' + Date.now(), kind: 'you', text: '“' + text + '”', fixed });
+// heard: set when it was dictated (LaxHeard.hear: the words Lax fixed, the names you spelled); typed text is sent as is.
+function send(text, heard) {
+  showBubble({ id: 'you' + Date.now(), kind: 'you', text: '“' + text + '”', fixed: heard?.fixed });
   if (DEMO) { voiceBusy = true; setTimeout(() => { voiceBusy = false; showBubble({ id: 'r' + Date.now(), kind: 'reply', text: 'Demo mode — I heard you!', speak: true }); }, 1800); return; }
-  api('/api/talk', { text, voice: !!fixed }).then((r) => { if (!r.ok) showBubble({ id: 'busy', kind: 'error', text: 'I\'m busy, try again in a sec.' }); })
+  api('/api/talk', { text, voice: !!heard, spelled: heard?.spelled }).then((r) => { if (!r.ok) showBubble({ id: 'busy', kind: 'error', text: 'I\'m busy, try again in a sec.' }); })
     .catch(() => showBubble({ id: 'net', kind: 'error', text: 'Couldn\'t reach your Mac.' }));
 }
 const topEl = $('#top');
@@ -1054,6 +1057,7 @@ function renderLife() {
   renderSpecies();
   lifeEl.querySelectorAll('.tog[data-k]').forEach((t) => t.classList.toggle('on', !!settings[t.dataset.k]));
   $('#sWait').querySelectorAll('button').forEach((b) => b.classList.toggle('on', +b.dataset.v === settings.askTimeout));
+  $('#sListen').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === (settings.listen || 'phone')));
   $('#sTheme').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === (settings.theme || 'system')));
   const raw = memory?.raw || {}, p = memory?.pet || pet;
   const days = p.born ? Math.max(0, Math.floor((Date.now() - p.born) / 864e5)) : 0;
@@ -1111,6 +1115,7 @@ $('#swatches').addEventListener('change', (e) => { if (e.target.id === 'sColor')
 lifeEl.querySelectorAll('.tog[data-k]').forEach((t) => t.addEventListener('click', () => saveSettings({ [t.dataset.k]: !settings[t.dataset.k] })));
 $('#wipeKnows').addEventListener('click', (e) => e.currentTarget.classList.toggle('on')); // not a setting: only for this rebirth
 $('#sWait').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ askTimeout: +e.target.dataset.v }));
+$('#sListen').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ listen: e.target.dataset.v }));
 $('#sTheme').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ theme: e.target.dataset.v }));
 // Rebirth needs a 2-second hold so it can't happen by accident.
 { const btn = $('#rebirth'), fill = btn.querySelector('i'); let t0, raf;

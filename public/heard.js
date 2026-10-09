@@ -19,6 +19,18 @@
     return { text: out, fixed };
   }
 
+  /** A name you spelled out ("F I S I C A I", "l-a-x", "L. A. X.") → one word, as Lax knows it if it does ("Lax").
+   *  Three letters or more; single letters on their own ("a", "I") are left alone. */
+  function spell(text, words) {
+    const known = new Map((words || []).map((w) => [squash(w), w]));
+    const spelled = [];
+    const out = String(text || '').replace(/(?<![\p{L}\p{N}])\p{L}(?:[\s.\-]+\p{L}(?![\p{L}\p{N}])){2,}\.?/gu, (m) => {
+      const w = m.replace(/[^\p{L}]/gu, '').toLowerCase(), as = known.get(w) || w;
+      spelled.push(as); return as;
+    });
+    return { text: out, spelled };
+  }
+
   /** Of the recognizer's guesses (best first), the first that has one of your words or a known mishearing; else the best. */
   function pick(alts, words, heard) {
     alts = (alts || []).filter((a) => a && a.trim());
@@ -29,5 +41,11 @@
     return alts.find(has) || alts[0];
   }
 
-  globalThis.LaxHeard = { fix, pick, norm };
+  /** What you said, as Lax writes it: spelled names joined, then misheard ones fixed. fixed: the words it changed. */
+  function hear(text, vocab) {
+    const s = spell(text, vocab.words), f = fix(s.text, vocab.heard);
+    return { text: f.text, fixed: [...s.spelled, ...f.fixed], spelled: s.spelled };
+  }
+
+  globalThis.LaxHeard = { fix, pick, spell, hear, norm, squash };
 })();

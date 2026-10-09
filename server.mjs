@@ -10,7 +10,7 @@ import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { ensureHome, commitMind, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice, addFreshAdvice, addEpisodesAdvice } from './lib/home.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS, VOCAB } from './lib/paths.mjs';
-import { readVocab, addHeard, allHeard, knownWords, dictatedNote, teachCommand } from './lib/vocab.mjs';
+import { readVocab, addHeard, addWord, allHeard, knownWords, dictatedNote, teachCommand, typedOver } from './lib/vocab.mjs';
 import { HOST, TOKEN, authed, isLocal, phoneUrl, pairPage } from './lib/auth.mjs'; // first: it loads Lax's home and local config
 import { grantKey, repoRoot } from './lib/allow.mjs';
 import { MAX_LEVEL, STAGES, levelOf as levelOn, stageIdx, barFor as barOn } from './lib/levels.mjs';
@@ -73,7 +73,7 @@ if (!kvGet('newPath', false)) { if (kvGet('pet', null)) milestone(`${readSetting
 
 // Life menu settings — live on the Mac, edited from the phone.
 const DEFAULTS = { name: 'Lax', voice: true, pitch: 1.6, speakDone: false, captions: false,
-  phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system', learns: true,
+  phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system', learns: true, listen: 'phone',
   speciesPick: false, speciesOverride: null }; // while the species bars get tuned: pick one by hand
 // Preferences live in settings.json, a plain file you can read; rebirth leaves them alone.
 function readSettings() { try { return JSON.parse(fs.readFileSync(SETTINGS, 'utf8')); } catch { return {}; } }
@@ -92,6 +92,7 @@ function updateSettings(b) {
   if (Number.isFinite(b.pitch)) clean.pitch = Math.min(2, Math.max(0.5, b.pitch));
   if ([15, 30, 60, 120].includes(b.askTimeout)) clean.askTimeout = b.askTimeout;
   if (['system', 'light', 'dark'].includes(b.theme)) clean.theme = b.theme;
+  if (['phone', 'en-US', 'pt-PT'].includes(b.listen)) clean.listen = b.listen;
   const renamed = clean.name && clean.name !== settings.name;
   settings = { ...settings, ...clean }; writeSettings(settings);
   if (renamed) syncMindName(settings.name); // its mind knows its new name
@@ -790,8 +791,20 @@ function askPick(cid, pickId, question, labels) {
   } });
   broadcast('bubble', bubble);
 }
+// What you last dictated: typed over soon after, the difference is a misheard → meant pair.
+let lastDictated = null;
+const TYPED_OVER_MS = 120000;
 // voice: dictated on the phone (not typed), so whoever reads it is told it may be misheard and which names it may hold.
-function talk(text, voice = false) {
+// spelled: names you spelled out in it ("F I S I C A I"), kept as words to listen for.
+function talk(text, voice = false, spelled = []) {
+  if (voice) {
+    const known = vocabNow().words;
+    for (const w of spelled.slice(0, 5)) { const k = addWord(VOCAB, w, known); if (k) { diary(`listens for ${k} (you spelled it)`); pushState(); } }
+    lastDictated = { text, at: Date.now() };
+  } else if (lastDictated && Date.now() - lastDictated.at < TYPED_OVER_MS) {
+    const p = typedOver(lastDictated.text, text); lastDictated = null;
+    if (p) learnHeard(p.heard, p.meant, 'you typed it over');
+  }
   // "You keep mishearing physic AI, it's fisicai": a pair Lax keeps, fixed from now on.
   const teach = teachCommand(text);
   if (teach) {
@@ -991,7 +1004,7 @@ http.createServer(async (req, res) => {
       voiceTarget = b.target === 'auto' || channels.has(b.target) ? b.target : 'background'; pushState();
       return json(res, { ok: true, voiceTarget });
     case '/api/action': return json(res, { ok: quickAction(String(b.cid || ''), voiceAction(b.action)) });
-    case '/api/talk': return json(res, { ok: talk(String(b.text || '').slice(0, 2000), !!b.voice) });
+    case '/api/talk': return json(res, { ok: talk(String(b.text || '').slice(0, 2000), !!b.voice, Array.isArray(b.spelled) ? b.spelled.map(String) : []) });
     default: return json(res, { error: 'not found' }, 404);
   }
 }).listen(PORT, HOST, () => {
