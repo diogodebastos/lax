@@ -31,10 +31,16 @@ if (file) {
   fs.writeFileSync(path.join('projects', file), '# demo-proj\\n- A pixel-art game, in Godot. (2026-10-06)\\n');
   fs.appendFileSync('CLAUDE.md', '- Prefers short answers. (2026-10-06)\\n');
 }
-console.log(JSON.stringify({ result: 'Done.\\n{"learned": ["demo-proj is a pixel-art game in Godot", "prefers short answers"]}' }));
+// An episode, as remembering.md says, plus two the answer only claims (not there, outside episodes/).
+const sid = (prompt.match(/Session: ([^,\\s]+),/) || [])[1];
+const ep = 'episodes/2026-10/2026-10-09-demo-proj-' + sid + '.md';
+if (sid) { fs.mkdirSync(path.dirname(ep), { recursive: true });
+  fs.writeFileSync(ep, '# Jump with coyote time\\nwhen: 2026-10-09 10:00 to 10:30\\nwhere: demo-proj\\nkind: build\\noutcome: done\\ntags: player, jump\\nsession: ' + sid + '\\n\\nAdded a jump to player.gd.\\n'); }
+console.log(JSON.stringify({ result: 'Done.\\n' + JSON.stringify({ learned: ['demo-proj is a pixel-art game in Godot', 'prefers short answers'], episodes: sid ? [ep, 'episodes/nope.md', '../CLAUDE.md'] : [] }) }));
 `, { mode: 0o755 });
 
-const ENV = { ...process.env, LAX_HOME: HOME, LAX_PORT: String(PORT), LAX_URL: LAX, LAX_PUBLIC_URL: '', LAX_CLAUDE: FAKE, LAX_REFLECT_IDLE: '1' };
+const CC = path.join(HOME, 'cc-projects'); // Claude Code's transcripts, for this test
+const ENV = { ...process.env, LAX_CLAUDE_PROJECTS: CC, LAX_HOME: HOME, LAX_PORT: String(PORT), LAX_URL: LAX, LAX_PUBLIC_URL: '', LAX_CLAUDE: FAKE, LAX_REFLECT_IDLE: '1' };
 delete ENV.LAX_DATA;
 const server = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server.mjs')], { env: ENV, stdio: 'ignore' });
 const cleanup = () => { server.kill(); fs.rmSync(HOME, { recursive: true, force: true }); };
@@ -69,7 +75,7 @@ check('a trivial session doesn\'t trigger a reflection', learnedBubbles().length
 await hook({ hook_event_name: 'SessionStart', session_id: 's-work' });
 for (const p of ['make the player jump', 'add coyote time']) await hook({ hook_event_name: 'UserPromptSubmit', session_id: 's-work', prompt: p });
 for (const f of ['player.gd', 'level.tscn', 'player.gd']) await hook({ hook_event_name: 'PreToolUse', session_id: 's-work', tool_name: 'Edit', tool_input: { file_path: f } });
-await hook({ hook_event_name: 'Stop', session_id: 's-work', last_assistant_message: 'Jump and coyote time are in.' });
+await hook({ hook_event_name: 'Stop', session_id: 's-work', last_assistant_message: 'Jump and coyote time are in.', transcript_path: path.join(CC, '-demo-proj', 's-work.jsonl') });
 for (let i = 0; i < 40 && !learnedBubbles().length; i++) await sleep(150);
 const b = learnedBubbles()[0];
 check('a quiet session after real work → "learned" bubble', /I learned 2 things from demo-proj/.test(b?.d.text || ''), b?.d.text);
@@ -81,6 +87,22 @@ const sent = fs.readFileSync(path.join(HOME, 'last-prompt.txt'), 'utf8');
 check('the reflection gets the project\'s README', /<README.md>[\s\S]*Godot 4/.test(sent));
 check('the reflection uses the stronger model (sonnet)', fs.readFileSync(path.join(HOME, 'last-model.txt'), 'utf8') === 'sonnet');
 check('learning.md (how it learns) lives in the mind', fs.existsSync(path.join(MIND, 'learning.md')));
+
+// Phase 6: what happened is kept as an episode, following remembering.md.
+check('remembering.md (how it remembers) lives in the mind', /# How I remember/.test(fs.readFileSync(path.join(MIND, 'remembering.md'), 'utf8')));
+check('the reflection is asked for episodes, with the session and its archived transcript',
+  /following remembering\.md[\s\S]*Session: s-work, \d{4}-\d\d-\d\d \d\d:\d\d to \d\d:\d\d, transcript: .*archive\/transcripts\/-demo-proj\/s-work\.jsonl/.test(sent), sent.split('\n').find((l) => l.includes('Session:')));
+check('the episode lands in the mind, and is committed', execFileSync('git', ['-C', MIND, 'status', '--porcelain'], { encoding: 'utf8' }).trim() === ''
+  && /kept 2026-10-09-demo-proj-s-work/.test(execFileSync('git', ['-C', MIND, 'log', '--oneline'], { encoding: 'utf8' })));
+const remembered = phone.filter((e) => e.ev === 'feed' && /remembered from demo-proj/.test(e.d.line));
+check('the feed says what it remembered, by title, and only episodes that are there', remembered.length === 1 && remembered[0].d.line === '✦ remembered from demo-proj: Jump with coyote time', remembered[0]?.d.line);
+check('CLAUDE.md: episodes are searched, never read whole', /kept as episodes in `episodes\/`/.test(fs.readFileSync(path.join(MIND, 'CLAUDE.md'), 'utf8')));
+// The session goes on: the next reflection knows the episode it already kept.
+for (const p of ['now double jump', 'and a dash']) await hook({ hook_event_name: 'UserPromptSubmit', session_id: 's-work', prompt: p });
+const n = learnedBubbles().length;
+await hook({ hook_event_name: 'Stop', session_id: 's-work', last_assistant_message: 'Done.' });
+for (let i = 0; i < 40 && learnedBubbles().length === n; i++) await sleep(150);
+check('a session that went on: its episode is listed, to update', /already kept about this session: episodes\/2026-10\/2026-10-09-demo-proj-s-work\.md/.test(fs.readFileSync(path.join(HOME, 'last-prompt.txt'), 'utf8')));
 
 // The next session in that project starts with Lax's brief (through the real hook).
 const out = execFileSync(process.execPath, [path.join(ROOT, 'hooks', 'lax-hook.mjs')], { env: ENV, encoding: 'utf8',
