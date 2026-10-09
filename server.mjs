@@ -14,7 +14,8 @@ import { HOST, TOKEN, authed, isLocal, phoneUrl, pairPage } from './lib/auth.mjs
 import { grantKey, repoRoot } from './lib/allow.mjs';
 import { MAX_LEVEL, STAGES, levelOf as levelOn, stageIdx, barFor as barOn } from './lib/levels.mjs';
 import { SPECIES, BRANCHES, BARS, BRICK, EGG_XP, RARE, LIMIT_PCT, signals, ratios, pick, branch, dayNight, dayKey, eggProgress, shouldHatch, formFor, nameFor, curveFor, replayEgg, aName, selfLine } from './lib/species.mjs';
-import { createBrain, ensureBrain, addAcross, brief } from './lib/brain.mjs';
+import { createBrain, ensureBrain, addAcross, addSkills, addEpisodesToLearning, brief, episodes, forgetEpisode, wipeKnowledge, PROJECTS } from './lib/brain.mjs';
+import { createSkills } from './lib/skills.mjs';
 import { createLearn } from './lib/learn.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus, tabCommand } from './lib/actions.mjs';
 import { readUsage, usageText } from './lib/usage.mjs';
@@ -24,6 +25,7 @@ import { editDiff } from './lib/diff.mjs';
 import { FRESH, FRESH_HOURS, FRESH_TOKENS, freshDue, contextSize, recap } from './lib/talk.mjs';
 import { claudeAlive } from './lib/claude-pid.mjs';
 import { createArchive } from './lib/archive.mjs';
+import { recall } from './lib/recall.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const PORT = Number(process.env.LAX_PORT || 7777);
@@ -93,7 +95,9 @@ function updateSettings(b) {
   settings = { ...settings, ...clean }; writeSettings(settings);
   if (renamed) syncMindName(settings.name); // its mind knows its new name
 }
-function rebirth() {
+// Knowledge is separate from the pet: a rebirth keeps what Lax knows unless you ask it to forget that too.
+function rebirth(knowledge = false) {
+  if (knowledge) { wipeKnowledge(); skills.wipe(); for (const k of ['brainUpTo', 'episodeMilestone']) db.prepare('DELETE FROM kv WHERE key=?').run(k); }
   db.exec('DELETE FROM events; DELETE FROM milestones;');
   pet = newPet(); voiceSessions = {}; laxTalk = {}; kvSet('pet', pet); kvSet('voiceSessions', voiceSessions); kvSet('laxTalk', laxTalk); kvSet('diary', []); laxFeed.length = 0;
   leadCache.at = 0; autoCache.at = 0;
@@ -635,11 +639,14 @@ if (voiceSessions[ASSISTANT] && !laxTalk.last) {
 }
 
 // ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
-ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice(); addEpisodesAdvice();
+ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addSkills(); addEpisodesToLearning(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice(); addEpisodesAdvice();
 const brain = createBrain({ db, settings: () => settings, feed, diary: (t) => diary(t), broadcast, gainXp: (n) => { gainXp(n); save(); pushState(); },
   sessionInfo: (sid) => sessions.get(sid), skip: laxOwn, claude: process.env.LAX_CLAUDE,
   wish: (w) => learn.gap({ ...w, project: 'mind', via: 'review' }), // a fix its weekly review says needs code
+  milestone: (t) => { milestone(t); pushState(); }, skill: (k) => skills.drafted(k), skills: () => skills.list(),
   log: (...a) => console.log('[brain]', ...a) });
+// The first run of long-term memory: today's notes split into the current picture and episodes (once, when it's calm).
+setTimeout(() => brain.migrate(), Number(process.env.LAX_MIGRATE_AFTER ?? 120) * 1000).unref();
 // The raw past, kept past Claude Code's 30 days (lib/archive.mjs): on quiet, plus a sweep soon after start and daily.
 const archive = createArchive({ log: (...a) => console.log('[archive]', ...a) });
 setTimeout(() => archive.sweep(), 60e3).unref(); setInterval(() => archive.sweep(), 864e5).unref();
@@ -654,6 +661,11 @@ const learn = createLearn({ settings: () => settings, feed, diary: (t) => diary(
   say: (text, kind = 'reply') => broadcast('bubble', { id: 'learn' + Date.now(), kind, text, speak: true }),
   record: (kind, text) => record(kind, text),
   log: (...a) => console.log('[learn]', ...a) });
+// ---------- know-how: workflows you repeat become skills, installed on your yes (lib/skills.mjs) ----------
+const skills = createSkills({ settings: () => settings, feed, diary: (t) => diary(t), broadcast, pending, quiet,
+  gainXp: (n) => { gainXp(n); save(); pushState(); }, milestone: (t) => { milestone(t); pushState(); }, record: (kind, text) => record(kind, text),
+  say: (text, kind = 'reply') => broadcast('bubble', { id: 'skill' + Date.now(), kind, text, speak: true }),
+  log: (...a) => console.log('[skills]', ...a) });
 const tabLabel = (s) => `${s.project}·${s.where || 'cli'}`;
 // One line per session (and its latest step); the last few steps only for a session the message names, so the
 // block stays small: every message carries one, and they all stay in the conversation.
@@ -755,6 +767,8 @@ function askPick(cid, pickId, question, labels) {
 function talk(text) {
   // Answering a wish question, "any wishes?", "merge it" (lib/learn.mjs).
   if (learn.hears(text, { toLax: !pickChannel() })) return true;
+  if (skills.hears(text)) return true; // answering "install this skill?"
+
   // "Talk to edge cava" / "back to you": the phone changes tab, as if you'd tapped it (whichever tab you said it in).
   const tab = voiceAction(text) ? null : tabCommand(text, sessionList().slice(0, 8), settings.name);
   if (tab) { youSaid(text, settings.name.toLowerCase()); broadcast('tab', { view: tab }); return true; }
@@ -890,6 +904,12 @@ http.createServer(async (req, res) => {
   if (url.pathname === '/api/brief') return json(res, { text: brief(url.searchParams.get('project') || '', settings.name) });
   if (url.pathname === '/api/memory') return json(res, { pet: petView(), raw: pet, voiceProject: pickChannel() ? channels.get(pickChannel()).project : 'assistant',
     milestones: db.prepare('SELECT ts,text FROM milestones ORDER BY id DESC LIMIT 50').all() });
+  // What Lax knows (the life menu): counts of its notes, its skills, its newest episodes.
+  if (url.pathname === '/api/knows' && req.method === 'GET') {
+    let projects = 0; try { projects = fs.readdirSync(PROJECTS).filter((f) => f.endsWith('.md')).length; } catch {}
+    let you = 0; try { you = (fs.readFileSync(path.join(MIND, 'CLAUDE.md'), 'utf8').split(/^## Notes\s*$/m)[1] || '').split('\n').filter((l) => /^\s*[-*] /.test(l)).length; } catch {}
+    return json(res, { notes: { projects, you }, skills: skills.view(), episodes: episodes(40) });
+  }
   if (req.method !== 'POST') return json(res, { error: 'method' }, 405);
   const b = await body(req);
   switch (url.pathname) {
@@ -906,8 +926,26 @@ http.createServer(async (req, res) => {
     }
     case '/api/settings': updateSettings(b); pushState(); return json(res, { ok: true, settings });
     case '/api/hatch': return json(res, { ok: true }); // older pages tapped to hatch; the egg hatches on its own now
-    case '/api/rebirth': rebirth(); broadcast('reborn', {}); pushState(); return json(res, { ok: true });
+    case '/api/rebirth': rebirth(!!b.knowledge); broadcast('reborn', {}); pushState(); return json(res, { ok: true });
+    case '/api/knows': { // from the life menu: forget an episode or a skill, install or decline a drafted one
+      const me = settings.name.toLowerCase();
+      if (b.episode) { const t = forgetEpisode(String(b.episode)); if (t) { record('forgot', `episode ${t}`); feed(`  forgot: ${short(t, 80)}`, 'diary', me); } return json(res, { ok: !!t }); }
+      const name = String(b.skill || '');
+      if (b.do === 'forget') return json(res, { ok: skills.forget(name) });
+      if (b.do === 'install') { const why = skills.install(name); return json(res, { ok: !why, why }); }
+      if (b.do === 'decline') return json(res, { ok: skills.decline(name) });
+      return json(res, { ok: false }, 400);
+    }
     case '/api/diag': console.log(`[phone ${new Date().toISOString().slice(11, 19)}] ${JSON.stringify(b).slice(0, 600)}`); return json(res, { ok: true });
+    case '/api/recall': { // a session's `recall` tool (channel/lax-channel.mjs): Lax searches its long-term memory
+      if (!isLocal(req)) return json(res, { ok: false, answer: 'Only from this Mac.' }, 403);
+      const q = String(b.query || '').slice(0, 1000), who = b.cwd ? proj(String(b.cwd)) : settings.name.toLowerCase();
+      feed(`  recalling for ${who}: ${short(q, 80)}`, 'diary', settings.name.toLowerCase());
+      const r = await recall(q, { claude: process.env.LAX_CLAUDE, cwd: b.cwd ? String(b.cwd) : '' });
+      if (r.ok && r.found) { gainXp(1); save(); pushState(); }
+      feed(`  ${r.ok && r.found ? 'recalled' : r.ok ? 'nothing in my memory' : 'couldn\'t recall'}: ${short(q, 80)}`, r.ok ? 'diary' : 'error', settings.name.toLowerCase());
+      return json(res, r);
+    }
     case '/api/brain/review': return json(res, { ok: isLocal(req) && brain.review(true) }); // local only: the weekly review, now
     case '/api/brain/reflect': return json(res, { ok: isLocal(req) && !!b.session && (brain.enqueue(String(b.session)), true) }); // local only: reflect now
     case '/api/learn/merged': return json(res, { ok: isLocal(req) && learn.merged({ id: String(b.id || ''), ok: !!b.ok, why: String(b.why || '') }) });

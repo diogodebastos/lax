@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { claudePid } from '../lib/claude-pid.mjs';
-import { MIND, SECRETS, DB, readToken } from '../lib/paths.mjs';
+import { MIND, SECRETS, DB, ARCHIVE, readToken } from '../lib/paths.mjs';
 import { bashKind } from '../lib/allow.mjs';
 import { offLimits } from '../lib/guard.mjs';
 
@@ -70,6 +70,18 @@ if (process.env.LAX_REFLECT === '1') {
   process.exit(0);
 }
 
+// Lax recalling (lib/recall.mjs): read-only, and only its memory: its mind and the archived transcripts.
+if (process.env.LAX_RECALL === '1') {
+  if (ev === 'PreToolUse') {
+    const ti = input.tool_input || {}, f = ti.file_path || ti.path || '';
+    const within = (dir) => !!f && (path.resolve(input.cwd || MIND, f) + path.sep).startsWith(dir + path.sep);
+    const ok = /^(Read|Glob|Grep)$/.test(input.tool_name) && (within(MIND) || within(ARCHIVE) || (!f && /^(Glob|Grep)$/.test(input.tool_name)));
+    console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: ok ? 'allow' : 'deny',
+      permissionDecisionReason: ok ? 'Lax\'s own memory.' : 'While recalling, Lax only reads its mind and its archive.' } }));
+  }
+  process.exit(0);
+}
+
 try {
   // A new session starts with what Lax knows about its project (and about you), if anything.
   if (ev === 'SessionStart' && process.env.LAX_VOICE !== '1') {
@@ -108,6 +120,8 @@ try {
     console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision, permissionDecisionReason } }));
   if (ev === 'PreToolUse' && input.tool_name === 'mcp__lax__gap') { // "I can't" → a wish: it only writes to Lax's wish list
     decide('allow', 'It only adds to Lax\'s wish list.');
+  } else if (ev === 'PreToolUse' && input.tool_name === 'mcp__lax__recall') { // read-only: Lax searches its own memory
+    decide('allow', 'It only reads Lax\'s memory.');
   } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && privateHit) {
     decide('deny', 'Off limits: Lax\'s secrets and database are never touched by the assistant.');
   } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && /^(Edit|Write|MultiEdit)$/.test(input.tool_name) && within(MIND)) {

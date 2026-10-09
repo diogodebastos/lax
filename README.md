@@ -61,12 +61,21 @@ Talking from **Lax's own tab** (the first one, named after it) goes to Lax itsel
 
 These files are created on first use and never overwritten.
 
+### Long-term memory
+
+The notes are the short, current picture. Behind them, Lax keeps the past and finds it again when asked:
+- **Archive**: every Claude Code transcript is copied to `~/.lax/archive/transcripts` when its session goes quiet, with secrets scrubbed, so it outlives Claude Code's 30 days. A sweep at start and once a day backfills anything missed.
+- **Episodes**: after a quiet session the reflection also writes what happened (`mind/episodes/YYYY-MM/…md`: when, where, kind, outcome, tags, the transcript, then the story). How it remembers is in `mind/remembering.md`, which Lax may rewrite in its weekly review.
+- **Recall**: "how did we fix…?" Lax searches episodes, then notes, then the archive (grep, no index) and answers with date and project. By voice it does this itself. Every Claude Code session gets a `recall` tool for it.
+- **Skills**: a workflow you repeat becomes a draft `SKILL.md` in its mind. Lax offers it on the phone with the whole text, and only your yes installs it as `~/.claude/skills/lax-<name>`. Guardrails in code: one file, no tool grants, nothing about its secrets or getting around permissions.
+
 ## Life menu
 
 Tap **LAX ≡** to open the menu. It reads top to bottom:
 - **Settings**: name, species (what it hatched as and why; "pick it myself" while the bars get tuned), theme (system / light / dark), voice and pitch, whether it reads every "done", where talk goes, phone approvals and the wait time
 - **♥ Lax's life** (read-only): stats (level, stage, XP, streak, mood, traits…), favorite tools, milestones
-- **Rebirth**: hold for 2s to start a new life. Its life (`life.db`) is wiped; your settings stay
+- **What Lax knows**: how many notes and episodes, its skills (install or decline a draft after reading it; forget an installed one), its newest episodes (forget one: tap twice)
+- **Rebirth**: hold for 2s to start a new life. Its life (`life.db`) is wiped; your settings stay. What it knows stays too, unless you switch on "forget what it knows too" (notes, episodes and skills go; how it learns stays)
 
 ## Reaching Lax from anywhere (Cloudflare Tunnel + Access)
 
@@ -135,7 +144,7 @@ Already in a session that wasn't started with `lax` (the desktop app, or plain `
 - Tap Lax and speak. It arrives in that session as `← lax: …`. Claude does the work and calls the `reply` tool, and Lax reads the first sentence aloud.
 - Tool approvals in that session are **relayed** to the phone (✓/✗, plus ⋯ for the full command), in parallel with the terminal dialog; whichever answers first wins. Questions (`AskUserQuestion`) still use the options UI.
 - **Life menu → talk goes to** picks the target: *auto* (most recently active live session), a specific `🔗 project`, or *☁ background* (a separate `claude -p` session, the fallback when no live session is open).
-- The lax MCP server starts in every session but stays dormant (no tools, no link) unless the session was launched with the lax channel.
+- The lax MCP server starts in every session. Without the lax channel it only offers `recall` (Lax's long-term memory) and has no link to the phone.
 - Research preview: terminal sessions only (not the Desktop app), and the flag may change.
 - `node scripts/test-channel.mjs` runs an end-to-end check with a fake Claude Code.
 

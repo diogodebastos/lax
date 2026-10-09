@@ -136,6 +136,8 @@ Phases 3.4 and 5 give Lax an understanding of you: a short summary it rewrites a
 - **How it remembers is Lax's to change:** `mind/remembering.md`, next to `learning.md` and `wishing.md`, rewritten in the weekly review; code changes go through the wish flow.
 - Claude Code's memory and each repo's `CLAUDE.md` stay the short, current layers; Lax's long-term memory is the deep store behind them. The first run moves history out of today's notes, so the summary shrinks and nothing is lost.
 
+**Built** (2026-10-09; `lib/archive.mjs`, `lib/scrub.mjs`, `lib/recall.mjs`, `lib/skills.mjs`, episodes in `lib/brain.mjs`, tests in `scripts/test-archive.mjs`, `test-skills.mjs`, `test-memory.mjs`). Proven live: 400 transcripts archived with 87 secret lines scrubbed; the first run split the notes into 10 episodes (`projects/lax.md` 20 KB → 5 KB, every distinctive fact kept); recall answered from an episode and from an archived transcript, and through the `recall` tool in a plain Claude Code session; a real reflection wrote its episodes (with session and transcript). Still to prove in real use: "how did we…" by voice, a skill drafted by the weekly review and approved on the phone, then used in a later session; a transcript older than 30 days recalled (needs time).
+
 ### Phase 6.1: see the brain [diogodebastos/lax#24](https://github.com/diogodebastos/lax/issues/24)
 A picture of Lax's brain on [the website](https://lax.diogodebastos.com/demo) (not in the app, for now), updating as it learns: the summary, long-term memory, skills, the rules it learns by, and the links between them. A reflection lights up what it touched; "forget that" fades a node.
 - Same look as the demo, app and Lax: palette, VT323, pixels, no emoji. PNG preview first.
