@@ -45,8 +45,8 @@
   #bubble.away { background:#ffe7a8; opacity:.85; cursor:pointer; } /* another tab needs you: no buttons here */
   #bubble { touch-action:pan-y; } /* horizontal drags are ours: swipe to dismiss */
   #bubble .tag { font-size:13px; opacity:.6; display:block; margin-bottom:1px; }
-  #bubble .text { max-height:62px; overflow:hidden; word-break:break-word; }
-  #bubble.listening .text { overflow-y:auto; overscroll-behavior:contain; scrollbar-width:none; } /* long talk scrolls */
+  #bubble .text { max-height:62px; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:none; word-break:break-word; } /* long messages scroll */
+  #bubble .text::-webkit-scrollbar { display:none; }
   #bubble .actions { display:flex; gap:8px; margin-top:6px; }
   #bubble button { flex:1; font:inherit; font-size:18px; padding:3px 0 4px; border:0; color:#fff; cursor:pointer;
     box-shadow: inset -3px -3px 0 rgba(0,0,0,.35), 0 0 0 2px #000; }
@@ -310,6 +310,6 @@
 </div>
 <div id="wake"><div>tap to wake <span id="wakeName">Lax</span><small>(unlocks sound + mic)</small></div></div>
 <script src="heard.js?v=2"></script>
-<script src="lax.js?v=37"></script>
+<script src="lax.js?v=38"></script>
 </body>
 </html>
