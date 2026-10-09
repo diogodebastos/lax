@@ -845,7 +845,11 @@ function stopListening(discard) {
 // their "?" back. "Do"/"when"/"where" need more than the first word: "do the tests", "when you're done push" are orders.
 const AUX = 'is|are|am|was|were|does|did|can|could|would|should|will|shall|has|have|had|may|might|isn\'t|aren\'t|wasn\'t|doesn\'t|didn\'t|don\'t|can\'t|won\'t|wouldn\'t|shouldn\'t|couldn\'t|haven\'t|hasn\'t';
 const QUESTION = new RegExp(`^(?:(?:what|what's|whats|why|how|how's|who|who's|whose|which)\\b|(?:when|where)(?:'s| (?:${AUX}|do)\\b)|do (?:you|i|we|they)\\b|(?:${AUX}) (?:you|i|we|they|he|she|it|there|this|that|these|those|the|my|your|our|its|lax)\\b)`, 'i');
-const punctuate = (t) => !t || /[.!?…]$/.test(t) || !QUESTION.test(t) ? t : t + '?';
+// Portuguese: question words at the start, or a tag at the end ("vamos experimentar viste"). "Quando"/"que"/"porque"
+// need more: "quando acabares faz push" is an order, "que bom" a cheer, "porque não funcionava" an answer.
+const PT_END = '(?![\\p{L}])';
+const QUESTION_PT = new RegExp(`^(?:(?:o qu[eê]|quem|qual|quais|quant[oa]s?|como|onde|aonde|porqu[eê] é que|porquê|por que|será que|sabes|achas|podes|consegues|queres|estás|está tudo|tens a certeza)${PT_END}|quando (?:é|foi|vais|vamos|podes|chega)${PT_END}|que (?:tal|horas|dia|achas|é|foi|se passa)${PT_END})|(?:^|\\s)(?:viste|não é|percebeste|percebes|concordas|ou não)$`, 'iu');
+const punctuate = (t) => !t || /[.!?…]$/.test(t) || !(QUESTION.test(t) || QUESTION_PT.test(t)) ? t : t + '?';
 function finishListening() { // send what was heard
   if (!listening) return;
   const text = punctuate(words()), heard = LaxHeard.hear(raw(), vocab), h = answerHook; answerHook = null;
