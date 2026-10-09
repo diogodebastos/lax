@@ -1063,18 +1063,12 @@ function renderLife() {
   const miles = memory?.milestones || [];
   $('#miles').innerHTML = (miles.slice(0, showAll.miles ? miles.length : FEW).map((m) => `<li>${new Date(m.ts).toLocaleDateString()} ${m.text.replace(/</g, '&lt;')}</li>`).join('') || '<li>…</li>') + moreRow('miles', miles.length);
 }
-// Species: what it hatched as and why (each species' number against its bar), and while the bars get tuned, a hand pick.
-const pct = (v) => Math.round(v * 100) + '%', num = (v) => String(Math.round(v * 10) / 10);
-const WHY = [['electric', 'three', pct, 'of busy time 3+ at once'], ['fire', 'toolsPerH', num, 'tools a busy hour'],
-  ['water', 'sessionMin', num, 'busy minutes a session'], ['grass', 'promptsPerSession', num, 'prompts a session'], ['pink', 'repos', num, 'repos']];
+// Species: what it hatched as, and while the bars get tuned, a hand pick.
 function renderSpecies() {
-  const sp = pet.species, w = pet.why, bars = pet.bars || {};
+  const sp = pet.species;
   const head = pet.egg ? `an egg: ${pet.egg.pct}%${pet.egg.lead ? ', ' + (pet.choices || []).find((c) => c.id === pet.egg.lead)?.name + ' leads' : ''}`
     : sp ? sp.name + (pet.picked ? ' (picked)' : '') : '–';
-  const rows = w ? WHY.map(([id, k, f, what]) => { const over = (w[k] || 0) / bars[id] > 1;
-    return `<span class="${over ? 'over' : ''}">${id} <b>${f(w[k] || 0)}</b> / ${f(bars[id])} ${what}</span>`; }).join('') : '';
-  $('#species').innerHTML = `<div class="name"><i style="background:${pet.look?.color || 'var(--coral)'}"></i>${esc(head)}</div>`
-    + (rows ? `<div class="why">${rows}<span class="dim">${pet.egg ? 'so far' : 'while it was an egg'}${w ? ', ' + (w.busyH || 0).toFixed(1) + ' busy hours' : ''}</span></div>` : '');
+  $('#species').innerHTML = `<div class="name"><i style="background:${pet.look?.color || 'var(--coral)'}"></i>${esc(head)}</div>`;
   $('#sPick').style.display = pet.egg ? 'none' : '';
   const o = settings.speciesOverride || {}, on = settings.speciesPick && !pet.egg;
   $('#swatches').style.display = on ? '' : 'none';
