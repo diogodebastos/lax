@@ -642,8 +642,11 @@ function renderBubble() {
     const top = tEl.scrollTop, atEnd = top + tEl.clientHeight >= tEl.scrollHeight - 4;
     // Words Lax fixed (misheard → meant) are underlined while you talk and for a moment after, so you see it working.
     if (b.fixed?.length) tEl.innerHTML = marked(t, b.fixed); else tEl.textContent = t;
-    // Talking at length: the bubble scrolls, the newest words stay in sight unless you scrolled back to read.
+    // Long messages scroll. Talking at length, the newest words stay in sight unless you scrolled back to read;
+    // anything else keeps where you scrolled to across the 1s refresh, and a new bubble starts at the top.
+    const same = tEl.dataset.id === String(b.id); tEl.dataset.id = b.id;
     if (b.kind === 'listening') tEl.scrollTop = atEnd ? tEl.scrollHeight : top;
+    else tEl.scrollTop = same ? top : 0;
     elB.dataset.key = ''; return;
   }
   // Question: one at a time; only rebuild when something changed (the 1s refresh would wipe selections).
@@ -682,6 +685,10 @@ function answerQuestion(b, answer) {
   if (!DEMO) api('/api/decide', { id: b.id, decision: 'answer', answers: b.answers });
 }
 setInterval(renderBubble, 1000);
+// Reading a long bubble: scrolling it keeps it up a while longer, so it doesn't vanish mid-sentence.
+elB.querySelector('.text').addEventListener('scroll', () => {
+  const b = bubbles.find((x) => x.id === elB.dataset.id); if (b?.expires) b.expires = Math.max(b.expires, performance.now() + 9000);
+}, { passive: true });
 elB.addEventListener('pointerdown', (e) => e.stopPropagation());
 // Swipe a bubble sideways to dismiss it (like tapping). Bubbles that need an answer (✓/✗, questions) snap back.
 let swiped = false;
