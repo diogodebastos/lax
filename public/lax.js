@@ -638,9 +638,12 @@ function renderBubble() {
   // Cover screen: the project goes up in the tag and the bubble keeps only the gist ("$ npm test"), big enough to read.
   if (cover() && b.gist) { elB.querySelector('.tag').textContent = `${TAGS[b.kind]} · ${b.project}`; elB.querySelector('.text').textContent = b.gist; elB.dataset.key = ''; return; }
   if (b.kind !== 'question') {
-    const t = b.text + (b.details && !b.actions && !b.showDetails ? ' ⋯' : '');
+    const t = b.text + (b.details && !b.actions && !b.showDetails ? ' ⋯' : ''), tEl = elB.querySelector('.text');
+    const top = tEl.scrollTop, atEnd = top + tEl.clientHeight >= tEl.scrollHeight - 4;
     // Words Lax fixed (misheard → meant) are underlined while you talk and for a moment after, so you see it working.
-    if (b.fixed?.length) elB.querySelector('.text').innerHTML = marked(t, b.fixed); else elB.querySelector('.text').textContent = t;
+    if (b.fixed?.length) tEl.innerHTML = marked(t, b.fixed); else tEl.textContent = t;
+    // Talking at length: the bubble scrolls, the newest words stay in sight unless you scrolled back to read.
+    if (b.kind === 'listening') tEl.scrollTop = atEnd ? tEl.scrollHeight : top;
     elB.dataset.key = ''; return;
   }
   // Question: one at a time; only rebuild when something changed (the 1s refresh would wipe selections).
@@ -729,13 +732,19 @@ function sfx(notes) {
     o.connect(v).connect(ac.destination); o.start(t0); o.stop(t0 + 0.09); });
 }
 let voice;
-function pickVoice() { const vs = speechSynthesis.getVoices(); voice = vs.find((v) => /en[-_]/i.test(v.lang) && /female|samantha|google us/i.test(v.name)) || vs.find((v) => /^en/i.test(v.lang)) || vs[0]; }
+// Lax speaks in its language setting (English when it follows the phone, as before).
+const speakLang = () => (settings.listen && settings.listen !== 'phone' ? settings.listen : 'en-US');
+function pickVoice() {
+  const vs = speechSynthesis.getVoices(), l = speakLang(), base = l.split('-')[0], tag = (v) => v.lang.replace('_', '-');
+  voice = (base === 'en' && vs.find((v) => /^en/i.test(v.lang) && /female|samantha|google us/i.test(v.name)))
+    || vs.find((v) => tag(v).toLowerCase() === l.toLowerCase()) || vs.find((v) => tag(v).toLowerCase().startsWith(base)) || vs[0];
+}
 if (!NATIVE && 'speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
 function speak(text) {
   if (!text || !settings.voice) return;
-  if (NATIVE) return NATIVE.speak(text, settings.pitch);
+  if (NATIVE) return NATIVE.speakIn ? NATIVE.speakIn(text, settings.pitch, speakLang()) : NATIVE.speak(text, settings.pitch);
   if (!('speechSynthesis' in window)) return;
-  speechSynthesis.cancel();
+  speechSynthesis.cancel(); if (!voice || !voice.lang.replace('_', '-').toLowerCase().startsWith(speakLang().split('-')[0])) pickVoice();
   const u = new SpeechSynthesisUtterance(text.replace(/[`*_#]/g, '')); if (voice) u.voice = voice;
   u.pitch = settings.pitch; u.rate = 1.08;
   u.onstart = () => { speaking = true; }; u.onend = u.onerror = () => { speaking = false; };

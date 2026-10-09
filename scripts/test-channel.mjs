@@ -84,6 +84,10 @@ const v2 = JSON.parse(fs.readFileSync(path.join(DATA, 'vocab.json'), 'utf8'));
 check('a spelled name is kept to listen for; typed over, a pair', v2.words.includes('zorblat') && v2.heard['physic eye'] === 'fisicai', JSON.stringify(v2));
 await post('/api/settings', { listen: 'pt-PT' }); await post('/api/settings', { listen: 'klingon' });
 check('Lax listens in its own language (a known one)', JSON.parse(fs.readFileSync(path.join(DATA, 'settings.json'), 'utf8')).listen === 'pt-PT');
+await post('/api/talk', { text: 'olá' });
+await sleep(300);
+const pt = got.filter((n) => n.method === 'notifications/claude/channel').pop();
+check('…and asks the session to answer in it', /European Portuguese/.test(pt?.params?.meta?.note) && !/Dictated/.test(pt?.params?.meta?.note), pt?.params?.meta?.note);
 
 const r = await client.callTool({ name: 'reply', arguments: { chat_id: msg?.params?.meta?.chat_id, text: 'Done! I added the toggle.\n\n```js\ncode()\n```' } });
 await sleep(400);

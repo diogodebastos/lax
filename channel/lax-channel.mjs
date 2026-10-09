@@ -51,7 +51,8 @@ const mcp = new Server(
       'and do the work in this session. When done (or if you need to ask something), call the lax `reply` tool with the ' +
       'chat_id. Lax reads the reply aloud: make the first sentence short, plain and speakable (no markdown, no code); ' +
       'details may follow. ' +
-      'via="voice" means it was dictated, so words may be misheard; its note lists the names it may contain. If you had to ' +
+      'via="voice" means it was dictated, so words may be misheard; its note lists the names it may contain, and may say which ' +
+      'language to answer in (follow it). If you had to ' +
       'read a misheard word as one of them, call the lax `misheard` tool once so Lax fixes it next time. ' +
       'If you can\'t do what they asked through Lax (no tool, no access, not built yet), or they say "you should be able to…" ' +
       'or "learn to…", call the lax `gap` tool once, then answer as usual: Lax keeps a wish list and may offer to learn it.',

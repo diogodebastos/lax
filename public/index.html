@@ -46,6 +46,7 @@
   #bubble { touch-action:pan-y; } /* horizontal drags are ours: swipe to dismiss */
   #bubble .tag { font-size:13px; opacity:.6; display:block; margin-bottom:1px; }
   #bubble .text { max-height:62px; overflow:hidden; word-break:break-word; }
+  #bubble.listening .text { overflow-y:auto; overscroll-behavior:contain; scrollbar-width:none; } /* long talk scrolls */
   #bubble .actions { display:flex; gap:8px; margin-top:6px; }
   #bubble button { flex:1; font:inherit; font-size:18px; padding:3px 0 4px; border:0; color:#fff; cursor:pointer;
     box-shadow: inset -3px -3px 0 rgba(0,0,0,.35), 0 0 0 2px #000; }
@@ -279,7 +280,7 @@
     <label>pitch <input type="range" id="sPitch" min="0.5" max="2" step="0.1"></label>
     <label>reads every "done" <button class="tog" data-k="speakDone"></button></label>
     <label>captions on the cover screen <button class="tog" data-k="captions"></button></label>
-    <label>listens in <span class="seg" id="sListen"><button data-v="phone">phone</button><button data-v="en-US">english</button><button data-v="pt-PT">português</button></span></label>
+    <label>language <span class="seg" id="sListen"><button data-v="phone">phone</button><button data-v="en-US">english</button><button data-v="pt-PT">português</button></span></label>
     <h3>learning</h3>
     <label>learns from your sessions <button class="tog" data-k="learns"></button></label>
     <h3>talk goes to</h3>
@@ -309,6 +310,6 @@
 </div>
 <div id="wake"><div>tap to wake <span id="wakeName">Lax</span><small>(unlocks sound + mic)</small></div></div>
 <script src="heard.js?v=2"></script>
-<script src="lax.js?v=36"></script>
+<script src="lax.js?v=37"></script>
 </body>
 </html>

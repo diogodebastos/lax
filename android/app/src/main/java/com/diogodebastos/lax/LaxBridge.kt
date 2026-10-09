@@ -159,14 +159,21 @@ class LaxBridge(private val act: MainActivity, private val web: WebView) {
     }
 
     // ---------- text-to-speech ----------
+    /** The language Lax speaks in (its language setting, "pt-PT"): a voice on the phone, the country's if there is one. */
+    private var voiceLang = "en-US"
     private fun pickVoice() {
-        val en = tts.voices?.filter { it.locale.language == "en" && !it.isNetworkConnectionRequired }
-        val v = en?.firstOrNull { it.locale.country == "US" } ?: en?.firstOrNull()
-        if (v != null) tts.voice = v else tts.language = Locale.US
+        val want = Locale.forLanguageTag(voiceLang)
+        val same = tts.voices?.filter { it.locale.language == want.language && !it.isNetworkConnectionRequired }
+        val v = same?.firstOrNull { it.locale.country == want.country } ?: same?.firstOrNull()
+        if (v != null) tts.voice = v else tts.language = want
     }
 
-    @JavascriptInterface fun speak(text: String?, pitch: Double) = main.post {
+    @JavascriptInterface fun speak(text: String?, pitch: Double) = speakIn(text, pitch, null)
+
+    @JavascriptInterface fun speakIn(text: String?, pitch: Double, language: String?) = main.post {
         if (!ttsReady || text.isNullOrBlank()) return@post
+        val l = language?.takeIf { it.isNotBlank() } ?: "en-US"
+        if (l != voiceLang) { voiceLang = l; pickVoice() }
         tts.setPitch(pitch.toFloat().coerceIn(0.5f, 2f))
         tts.setSpeechRate(1.08f)
         tts.speak(text.replace(Regex("[`*_#]"), ""), TextToSpeech.QUEUE_FLUSH, null, "lax")
