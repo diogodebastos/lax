@@ -10,7 +10,7 @@ import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { ensureHome, commitMind, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice, addFreshAdvice, addEpisodesAdvice } from './lib/home.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS, VOCAB } from './lib/paths.mjs';
-import { readVocab, addHeard, addWord, allHeard, knownWords, dictatedNote, teachCommand, typedOver } from './lib/vocab.mjs';
+import { readVocab, addHeard, addWord, allHeard, knownWords, dictatedNote, answerIn, teachCommand, typedOver } from './lib/vocab.mjs';
 import { HOST, TOKEN, authed, isLocal, phoneUrl, pairPage } from './lib/auth.mjs'; // first: it loads Lax's home and local config
 import { grantKey, repoRoot } from './lib/allow.mjs';
 import { MAX_LEVEL, STAGES, levelOf as levelOn, stageIdx, barFor as barOn } from './lib/levels.mjs';
@@ -716,7 +716,9 @@ const assistantPrompt = (text, carry = '', voice = false) =>
   '[Context now: this replaces any earlier context block]\n' +
   (carry ? `This is a new conversation. The last one ended with:\n${carry}\n\n` : '') +
   `Their Claude Code sessions right now (tab name, status, latest activity):\n${sessionsBrief(text)}\n\n` +
-  `Their Claude plan usage: ${usageText(usage)}\n` + (voice ? `${dictatedNote(vocabNow().words)}\n` : '') + `[/Context]\n\n${text}`;
+  `Their Claude plan usage: ${usageText(usage)}\n` + (phoneNote(voice) ? `${phoneNote(voice)}\n` : '') + `[/Context]\n\n${text}`;
+// What a message from the phone says about itself: dictated (and the names it may hold), and the language to answer in.
+const phoneNote = (voice) => [voice && dictatedNote(vocabNow().words), answerIn(settings.listen)].filter(Boolean).join(' ');
 // A fresh conversation: the current one becomes the one before (for the recap and the phone's history).
 function freshTalk(why) {
   const id = voiceSessions[ASSISTANT]; if (!id) return false;
@@ -825,7 +827,7 @@ function talk(text, voice = false, spelled = []) {
   if (cid && quickAction(cid, voiceAction(text))) return true; // "clear", "stop"… (anything longer is a message)
   if (cid) { // into the running session
     const c = channels.get(cid);
-    sendChannel(cid, 'message', { chat_id: crypto.randomBytes(3).toString('hex'), text, via: voice ? 'voice' : 'typed', note: voice ? dictatedNote(vocabNow().words) : undefined });
+    sendChannel(cid, 'message', { chat_id: crypto.randomBytes(3).toString('hex'), text, via: voice ? 'voice' : 'typed', note: phoneNote(voice) || undefined });
     clearTimeout(channelWait?.timer);
     channelWait = { cid, timer: setTimeout(() => { channelWait = null; pushState(); }, 180000) };
     pet.voice++; gainXp(3); save();

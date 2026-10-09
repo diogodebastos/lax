@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fix, pick, spell, hear, readVocab, addHeard, addWord, allHeard, knownWords, teachCommand, typedOver, dictatedNote, SEED } from '../lib/vocab.mjs';
+import { fix, pick, spell, hear, readVocab, addHeard, addWord, allHeard, knownWords, teachCommand, typedOver, dictatedNote, answerIn, SEED } from '../lib/vocab.mjs';
 import { voiceAction } from '../lib/actions.mjs';
 
 let failed = 0;
@@ -55,6 +55,7 @@ const words = knownWords({ name: 'Lax', sessions: ['lax', 'side-project'], mind:
 check('its name, sessions, notes, words, folders; once each, no profile or dot folders',
   JSON.stringify(words) === JSON.stringify(['Lax', 'side-project', 'fisicai', 'Rita', 'Ritalicious', 'edge-cavai']), JSON.stringify(words));
 check('capped', knownWords({ sessions: Array.from({ length: 100 }, (_, i) => 'p' + i) }, 10).length === 10);
+check('answer in the language Lax speaks; following the phone asks nothing', /European Portuguese/.test(answerIn('pt-PT')) && /English/.test(answerIn('en-US')) && answerIn('phone') === '');
 check('the note says dictated and names them', /Dictated by voice/.test(dictatedNote(words)) && dictatedNote(words).includes('Lax, side-project, fisicai'));
 
 // Spelled out.
