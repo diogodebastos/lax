@@ -113,7 +113,7 @@ check('a plain session gets only recall', plain.names === 'recall', plain.names)
 const ans = await plain.c.callTool({ name: 'recall', arguments: { query: 'tunnel 502' } });
 check('…and recall answers through it', /restarting cloudflared/.test(ans.content[0].text) && !ans.isError);
 await plain.c.close();
-for (const [env, want, what] of [[{ LAX_CHANNEL_FORCE: '1' }, 'gap,recall,reply,share', 'a live lax session'], [{ LAX_CHANNEL_FORCE: '0', LAX_VOICE: '1' }, 'gap', 'the voice assistant'],
+for (const [env, want, what] of [[{ LAX_CHANNEL_FORCE: '1' }, 'gap,misheard,recall,reply,share', 'a live lax session'], [{ LAX_CHANNEL_FORCE: '0', LAX_VOICE: '1' }, 'gap,misheard', 'the voice assistant'],
   [{ LAX_CHANNEL_FORCE: '0', LAX_VOICE: '1', LAX_REFLECT: '1' }, '', 'a reflection'], [{ LAX_CHANNEL_FORCE: '0', LAX_RECALL: '1' }, '', 'a recall run']]) {
   const t = await tools(env); check(`${what}: ${want || 'no tools'}`, t.names === want, t.names); await t.c.close();
 }

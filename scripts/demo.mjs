@@ -14,8 +14,9 @@ const show = (f) => execFileSync('git', ['show', `${ref}:public/${f}`], { cwd: R
 const dist = path.join(ROOT, 'demo', 'dist');
 fs.rmSync(dist, { recursive: true, force: true }); fs.mkdirSync(path.join(dist, 'demo'), { recursive: true });
 fs.writeFileSync(path.join(dist, 'demo.html'), show('demo.html')); // served at /demo
-fs.writeFileSync(path.join(dist, 'demo', 'app.html'), show('index.html').replace('src="lax.js', 'src="/demo/lax.js')); // /demo/app
+fs.writeFileSync(path.join(dist, 'demo', 'app.html'), show('index.html').replace('src="lax.js', 'src="/demo/lax.js').replace('src="heard.js', 'src="/demo/heard.js')); // /demo/app
 fs.writeFileSync(path.join(dist, 'demo', 'lax.js'), show('lax.js'));
+fs.writeFileSync(path.join(dist, 'demo', 'heard.js'), show('heard.js'));
 console.log(`demo built from ${ref}`);
 
 if (deploy) execFileSync('npx', ['-y', 'wrangler@4', 'deploy', '--config', path.join(ROOT, 'demo', 'wrangler.jsonc')], { cwd: ROOT, stdio: 'inherit' });

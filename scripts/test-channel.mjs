@@ -57,6 +57,26 @@ await post('/api/talk', { text: 'hello from the phone' });
 await sleep(500);
 const msg = got.find((n) => n.method === 'notifications/claude/channel');
 check('talk → channel notification in the session', msg?.params?.content === 'hello from the phone', `chat_id=${msg?.params?.meta?.chat_id}`);
+check('typed: no dictation note', msg?.params?.meta?.via === 'typed' && !msg?.params?.meta?.note, JSON.stringify(msg?.params?.meta));
+
+// Lax hears you right (Phase 4.3): a dictated message says so and lists the names it may hold; a session that worked
+// out a misheard word tells Lax, and the phone fixes it from then on.
+await post('/api/talk', { text: 'open physic AI', voice: true });
+await sleep(500);
+const dictated = got.filter((n) => n.method === 'notifications/claude/channel').pop();
+check('dictated: says so, with the names it may hold', dictated?.params?.meta?.via === 'voice' && /misheard/.test(dictated?.params?.meta?.note) && /\bLax\b/.test(dictated?.params?.meta?.note), dictated?.params?.meta?.note?.slice(0, 80));
+check('misheard tool listed', (await client.listTools()).tools.some((t) => t.name === 'misheard'));
+const mh = await client.callTool({ name: 'misheard', arguments: { heard: 'physic AI', meant: 'fisicai' } });
+await sleep(300);
+const vocabState = phone.filter((e) => e.ev === 'state').pop()?.d?.vocab;
+check('misheard → kept, and the phone gets it', /fix it/.test(mh.content[0].text) && vocabState?.heard?.['physic ai'] === 'fisicai' && vocabState?.words?.includes('fisicai'), mh.content[0].text);
+check('…and it\'s in ~/.lax/vocab.json', JSON.parse(fs.readFileSync(path.join(DATA, 'vocab.json'), 'utf8')).heard['physic ai'] === 'fisicai');
+const before = got.length;
+await post('/api/talk', { text: 'you keep mishearing edge kavai, it\'s edge-cavai', voice: true });
+await sleep(300);
+const taught = phone.filter((e) => e.ev === 'bubble' && /^heard/.test(e.d.id)).pop()?.d;
+check('"you keep mishearing X, it\'s Y" teaches Lax (not sent to the session)', /edge kavai.*edge-cavai/.test(taught?.text) && got.length === before
+  && phone.filter((e) => e.ev === 'state').pop()?.d?.vocab?.heard?.['edge kavai'] === 'edge-cavai', taught?.text);
 
 const r = await client.callTool({ name: 'reply', arguments: { chat_id: msg?.params?.meta?.chat_id, text: 'Done! I added the toggle.\n\n```js\ncode()\n```' } });
 await sleep(400);

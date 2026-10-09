@@ -18,12 +18,13 @@ import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 
 /**
  * `window.LaxNative` for the page: Android's own speech recognition and TTS (no browser quirks), and vibration.
- * Results come back as calls to the page's globals: laxOnSpeech(text, final), laxOnSpeechError(code), laxOnSpeaking(on).
+ * Results come back as calls to the page's globals: laxOnSpeech(text, final, guesses), laxOnSpeechError(code), laxOnSpeaking(on).
  */
 class LaxBridge(private val act: MainActivity, private val web: WebView) {
     private val main = Handler(Looper.getMainLooper())
@@ -60,8 +61,14 @@ class LaxBridge(private val act: MainActivity, private val web: WebView) {
     // ---------- speech recognition ----------
     private var retried = false
 
-    @JavascriptInterface fun listen(language: String?) = main.post {
+    /** Names to listen for (Lax's vocabulary, a JSON array): the recognizer leans towards them (Android 13+). */
+    private var bias = arrayListOf<String>()
+
+    @JavascriptInterface fun listen(language: String?) = listenFor(language, null)
+
+    @JavascriptInterface fun listenFor(language: String?, words: String?) = main.post {
         retried = false
+        bias = try { JSONArray(words ?: "[]").let { a -> ArrayList((0 until a.length()).map { a.getString(it) }.take(100)) } } catch (_: Exception) { arrayListOf() }
         lang = language?.takeIf { it.isNotBlank() } ?: "en-US"
         if (act.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             act.requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), MainActivity.REQ_MIC)
@@ -86,7 +93,9 @@ class LaxBridge(private val act: MainActivity, private val web: WebView) {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5) // several guesses: the page keeps the one with a name it knows
+                if (android.os.Build.VERSION.SDK_INT >= 33 && bias.isNotEmpty())
+                    putStringArrayListExtra(RecognizerIntent.EXTRA_BIASING_STRINGS, bias)
                 putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, preferOffline)
                 // Punctuation (a question gets its "?"), where the recognizer can do it; the page adds a "?" otherwise.
                 if (android.os.Build.VERSION.SDK_INT >= 33)
@@ -107,12 +116,13 @@ class LaxBridge(private val act: MainActivity, private val web: WebView) {
 
     private inner class Listener(private val id: Int, private val preferOffline: Boolean) : RecognitionListener {
         private val current get() = id == session
-        private fun text(b: Bundle?) = b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
-        override fun onPartialResults(b: Bundle?) { val t = text(b); if (current && t.isNotEmpty()) js("laxOnSpeech", JSONObject.quote(t), "false") }
+        private fun guesses(b: Bundle?) = b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.filter { it.isNotBlank() } ?: emptyList()
+        private fun send(g: List<String>, final: Boolean) = js("laxOnSpeech", JSONObject.quote(g[0]), final.toString(), JSONArray(g).toString())
+        override fun onPartialResults(b: Bundle?) { val g = guesses(b); if (current && g.isNotEmpty()) send(g, false) }
         override fun onResults(b: Bundle?) {
             if (!current) return
-            val t = text(b)
-            if (t.isEmpty()) js("laxOnSpeechError", "'no-speech'") else js("laxOnSpeech", JSONObject.quote(t), "true")
+            val g = guesses(b)
+            if (g.isEmpty()) js("laxOnSpeechError", "'no-speech'") else send(g, true)
         }
         override fun onError(error: Int) {
             if (!current) return
