@@ -144,6 +144,8 @@
   .bar { display:grid; grid-template-columns:minmax(0,1fr) 90px 32px; align-items:center; gap:8px; font-size:15px; color:var(--text2); margin:2px 0; }
   .bar span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .bar b { font-weight:400; text-align:right; }
   body.big .bar { font-size:19px; grid-template-columns:minmax(0,1fr) 110px 40px; } body.big #miles { font-size:18px; }
+  #tools .bar { grid-template-columns:minmax(0,1fr) 70px 48px; } #tools .bar span em { font-style:normal; color:var(--dim); } #tools .bar.worn span { color:var(--fg); }
+  body.big #tools .bar { grid-template-columns:minmax(0,1fr) 90px 60px; }
   .bar .track { height:6px; background:var(--track); } .bar i { height:6px; background:var(--coral); display:block; }
   #miles { list-style:none; color:var(--text2); font-size:15px; } #miles li::before { content:'★ '; color:var(--amber); }
   /* What Lax knows: skills (a draft waits for your yes) and episodes, each one forgettable (tap twice). */
@@ -291,7 +293,7 @@
     <h2 class="group">♥ <span id="lifeName">LAX</span>'s life</h2>
     <h3>stats</h3>
     <div id="stats"></div>
-    <h3>favorite tools <small>this week, as traits count them</small></h3>
+    <h3>tools → traits <small>this week; the biggest from 30 wins</small></h3>
     <div id="tools"></div>
     <h3>milestones</h3>
     <ul id="miles"></ul>
@@ -307,6 +309,6 @@
   </div>
 </div>
 <div id="wake"><div>tap to wake <span id="wakeName">Lax</span><small>(unlocks sound + mic)</small></div></div>
-<script src="lax.js?v=30"></script>
+<script src="lax.js?v=32"></script>
 </body>
 </html>
