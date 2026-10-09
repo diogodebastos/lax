@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fix, pick, readVocab, addHeard, allHeard, knownWords, teachCommand, dictatedNote, SEED } from '../lib/vocab.mjs';
+import { fix, pick, spell, hear, readVocab, addHeard, addWord, allHeard, knownWords, teachCommand, typedOver, dictatedNote, SEED } from '../lib/vocab.mjs';
 import { voiceAction } from '../lib/actions.mjs';
 
 let failed = 0;
@@ -56,6 +56,26 @@ check('its name, sessions, notes, words, folders; once each, no profile or dot f
   JSON.stringify(words) === JSON.stringify(['Lax', 'job-hunt', 'fisicai', 'Vera', 'Veralicious', 'edge-cavai']), JSON.stringify(words));
 check('capped', knownWords({ sessions: Array.from({ length: 100 }, (_, i) => 'p' + i) }, 10).length === 10);
 check('the note says dictated and names them', /Dictated by voice/.test(dictatedNote(words)) && dictatedNote(words).includes('Lax, job-hunt, fisicai'));
+
+// Spelled out.
+check('spelled letters become the word', spell('open F I S I C A I please', W).text === 'open fisicai please');
+check('…as Lax knows it', spell('hey L A X', W).text === 'hey Lax' && spell('go to e-d-g-e-c-a-v-a-i', W).text === 'go to edge-cavai');
+check('…with dots too, and said which', JSON.stringify(spell('L. A. X. is here', W)) === '{"text":"Lax is here","spelled":["Lax"]}');
+check('single letters on their own stay', spell('I think a b is fine, and I am here', W).text === 'I think a b is fine, and I am here');
+const hh = hear('open physic AI and F O O B A R', { words: W, heard: H });
+check('hear: spelled joined, then fixed', hh.text === 'open fisicai and foobar' && hh.fixed.join() === 'foobar,fisicai' && hh.spelled.join() === 'foobar', JSON.stringify(hh));
+check('a spelled word is kept once, unless known', addWord(F, 'foobar', W) === 'foobar' && !addWord(F, 'FooBar', W) && !addWord(F, 'lax', W) && !addWord(F, 'ab', W)
+  && readVocab(F).words.join() === 'foobar');
+
+// Typed over.
+const o1 = typedOver('open physic eye', 'open fisicai');
+check('dictated then typed over: the pair', o1?.heard === 'physic eye' && o1?.meant === 'fisicai', JSON.stringify(o1));
+const o2 = typedOver('talk to edge kava i please', 'talk to edge-cavai please');
+check('…in the middle, as you typed it', o2?.heard === 'edge kava i' && o2?.meant === 'edge-cavai', JSON.stringify(o2));
+check('a different message is not a fix', !typedOver('open physic eye', 'what time is it'));
+check('a rephrase is not a fix', !typedOver('open physic eye', 'open the fisicai project in a new tab'));
+check('the same words are not a fix', !typedOver('open fisicai', 'Open fisicai.'));
+check('words that don\'t sound alike are not a fix', !typedOver('run the tests', 'run the deploy'));
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nall vocab checks passed');
 process.exit(failed ? 1 : 0);

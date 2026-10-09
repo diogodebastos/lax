@@ -77,6 +77,13 @@ await sleep(300);
 const taught = phone.filter((e) => e.ev === 'bubble' && /^heard/.test(e.d.id)).pop()?.d;
 check('"you keep mishearing X, it\'s Y" teaches Lax (not sent to the session)', /edge kavai.*edge-cavai/.test(taught?.text) && got.length === before
   && phone.filter((e) => e.ev === 'state').pop()?.d?.vocab?.heard?.['edge kavai'] === 'edge-cavai', taught?.text);
+await post('/api/talk', { text: 'open the physic eye project', voice: true, spelled: ['zorblat'] });
+await post('/api/talk', { text: 'open the fisicai project' });
+await sleep(300);
+const v2 = JSON.parse(fs.readFileSync(path.join(DATA, 'vocab.json'), 'utf8'));
+check('a spelled name is kept to listen for; typed over, a pair', v2.words.includes('zorblat') && v2.heard['physic eye'] === 'fisicai', JSON.stringify(v2));
+await post('/api/settings', { listen: 'pt-PT' }); await post('/api/settings', { listen: 'klingon' });
+check('Lax listens in its own language (a known one)', JSON.parse(fs.readFileSync(path.join(DATA, 'settings.json'), 'utf8')).listen === 'pt-PT');
 
 const r = await client.callTool({ name: 'reply', arguments: { chat_id: msg?.params?.meta?.chat_id, text: 'Done! I added the toggle.\n\n```js\ncode()\n```' } });
 await sleep(400);
