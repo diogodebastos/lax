@@ -73,7 +73,7 @@ The notes are the short, current picture. Behind them, Lax keeps the past and fi
 
 Tap **LAX ≡** to open the menu. It reads top to bottom:
 - **Settings**: name, species (what it hatched as and why; "pick it myself" while the bars get tuned), theme (system / light / dark), voice and pitch, whether it reads every "done", where talk goes, phone approvals and the wait time
-- **♥ Lax's life** (read-only): stats (level, stage, XP, streak, mood, traits…), tools → traits (this week, each trait's tools added up as the traits count them, Bash a tenth, against what it needs; the worn one marked), milestones
+- **♥ Lax's life** (read-only): stats (level, stage, XP, streak, mood, traits…), tools (this week, each trait's tools added up as the traits count them, Bash a tenth, against what it needs; the worn one marked), milestones
 - **What Lax knows**: how many notes and episodes, its skills (install or decline a draft after reading it; forget an installed one), its newest episodes (forget one: tap twice). Milestones and episodes show the newest 5; "show all" opens the rest
 - **Rebirth**: hold for 2s to start a new life. Its life (`life.db`) is wiped; your settings stay. What it knows stays too, unless you switch on "forget what it knows too" (notes, episodes and skills go; how it learns stays)
 
