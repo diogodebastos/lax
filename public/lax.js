@@ -1047,10 +1047,11 @@ function renderLife() {
   $('#stats').innerHTML = [['level', p.level], ['stage', p.stage], ['xp', p.xp], ['streak', (p.streak || 0) + 'd'], ['age', days + 'd'], ['mood', p.mood],
     ['turns', raw.turns ?? '–'], ['approved', raw.approvals ?? '–'], ['errors', raw.errors ?? '–'], ['voice', memory?.voiceProject ?? '–'],
     ['traits', (p.traits || []).join(', ') || 'none yet']].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
-  // As the traits count them: the last 7 days, Bash a tenth (it runs nearly everything).
-  const tools = Object.entries(p.weekTools || {}).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  const max = tools[0]?.[1] || 1, n = (v) => v >= 10 || Number.isInteger(v) ? Math.round(v) : v.toFixed(1);
-  $('#tools').innerHTML = tools.length ? tools.map(([k, v]) => `<div class="bar"><span>${esc(k.replace(/^mcp__.*?__/, ''))}${k === 'Bash' ? ' /10' : ''}</span><div class="track"><i style="width:${Math.round(100 * v / max)}%"></i></div><b>${n(v)}</b></div>`).join('') : '<div class="bar"><span>nothing this week</span></div>';
+  // Tools as the traits count them (this week, Bash a tenth): each trait's tools added up, the one it wears in full colour.
+  // Headband, glasses and monocle compete (the biggest wins, from 30); antenna and cape come on top.
+  const tally = p.traitTally || [], max = Math.max(1, ...tally.map((r) => r.n));
+  $('#tools').innerHTML = tally.length ? tally.map((r) => `<div class="bar${r.worn ? ' worn' : ''}"><span>${esc(r.tools)} <em>${r.trait}${r.worn ? ' (worn)' : ''}</em></span>`
+    + `<div class="track"><i style="width:${Math.round(100 * r.n / max)}%"></i></div><b>${r.n}/${r.need}</b></div>`).join('') : '<div class="bar"><span>nothing this week</span></div>';
   // Claude plan usage, from the status line of your terminal sessions (hooks/lax-status.mjs).
   const resets = (ms) => { if (!ms) return ''; const d = new Date(ms), hm = d.toTimeString().slice(0, 5);
     return d - Date.now() < 864e5 ? hm : d.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' + hm; };

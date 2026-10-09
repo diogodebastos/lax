@@ -208,8 +208,17 @@ function today() {
 }
 // What a tool counts for the traits: Bash a tenth (see traits()).
 const traitWeight = (tool, n) => tool === 'Bash' ? n / 10 : n;
-// This week's tools as the traits count them, for the Life menu's favorite tools.
-const weekTools = (p) => Object.fromEntries(Object.entries(week(p).tools).filter(([k]) => !k.startsWith('__')).map(([k, n]) => [k, traitWeight(k, n)]));
+// The tool traits and what they need this week (traits() below), for the Life menu: each with its tools added up.
+const TOOL_TRAITS = [['headband', ['Bash'], 30], ['glasses', ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'], 30], ['monocle', ['Read', 'Grep', 'Glob'], 30],
+  ['antenna', ['WebFetch', 'WebSearch'], 25], ['cape', ['Agent', 'Task'], 10]];
+function traitTally(p) {
+  const w = week(p), worn = traits(p);
+  return TOOL_TRAITS.map(([trait, tools, need]) => {
+    const used = tools.filter((t) => w.tools[t]);
+    return { trait, need, worn: worn.includes(trait), n: Math.round(used.reduce((a, t) => a + traitWeight(t, w.tools[t]), 0) * 10) / 10,
+      tools: (used.length ? used : tools.slice(0, 2)).map((t) => t === 'Bash' ? 'Bash /10' : t).join('+') };
+  }).filter((r) => r.n > 0).sort((a, b) => b.n - a.n);
+}
 const uses = (w, ...tools) => tools.reduce((a, t) => a + (w.tools[t] || 0), 0);
 function traits(p) {
   if (levelOf(p.xp) < TRAITS_FROM) return [];
@@ -281,7 +290,7 @@ function petView() {
   const species = sp && { id: sp.id, name: nameFor(sp, st), branch: st >= BRICK ? sp.branch || null : null, copy: sp.copy || null, rare: !!sp.rare && st >= BRICK };
   const lead = egg ? eggLead() : null;
   return { name: settings.name, born: pet.born, level, stage: stageOf(level), xp: pet.xp, prevXp, nextXp,
-    traits: traits(pet), weekTools: weekTools(pet), mood: mood(pet), streak: pet.streak, hatched: !egg, species,
+    traits: traits(pet), traitTally: traitTally(pet), mood: mood(pet), streak: pet.streak, hatched: !egg, species,
     look: egg ? { form: null, color: lead.v ? SPECIES[lead.v].color : '#8a8378', lift: 0 } : formFor(sp, st),
     egg: egg ? { pct: Math.round(eggProgress(pet) * 100), lead: lead.v } : null,
     // Why it is what it is: each species' value over its bar, from the egg's time (for the Life menu, while the bars get tuned).
