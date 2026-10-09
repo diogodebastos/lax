@@ -118,18 +118,19 @@ Two slices. **5a (what it couldn't do) is done** (2026-10-08; `lib/learn.mjs`, `
 - **How it learns.** It reviews its own record (declined wishes, corrected proposals, wrong notes) and proposes better ways to learn, through the same branch → merge flow.
 - Guardrails in code: never auth, tokens, the tunnel or the guardrails; never `main` without your yes. Auth lives in `lib/auth.mjs` so the off-limits list is a list of files; `package.json` may only gain tests; a wish is at most 800 lines.
 
-### Phase 6: Lax remembers [diogodebastos/lax#6](https://github.com/diogodebastos/lax/issues/6)
-Lax learns your projects, auto-generates skills, and never forgets how a problem was solved.
-- When a session ends, a background `claude -p` distills it into project notes, "problem → fix" solutions, and skill candidates.
-- Repeated workflows become draft skills. You approve them on the phone, and they're installed for every Claude Code session.
-- New sessions start with a short brief for their project; Claude (and you, by voice) can `recall` past fixes.
-- A "what Lax knows" view on the phone, where you can edit or forget each item. Learning gives XP, so the looks follow the brain.
-- Builds on Claude Code's own memory where it can; what Lax adds is how it reaches you.
+### Phase 6: long-term memory [diogodebastos/lax#6](https://github.com/diogodebastos/lax/issues/6)
+Phases 3.4 and 5 give Lax an understanding of you: a short summary it rewrites and compresses by design. This phase keeps the past and turns it into know-how, so "how did we fix that in August?" still has an answer.
+- **Keep the raw past.** Transcripts are archived into `~/.lax` when a session goes quiet (Claude Code deletes them after 30 days), secrets scrubbed.
+- **Episodes.** Reflections also write what happened, where, when and how it ended, as plain files in the mind. Phase 7 runs and Phase 8 friction use the same log.
+- **Recall.** Searched when needed, never loaded wholesale: `recall(query)` for Claude, "Lax, how did we…" by voice. Grep first; an index only when it gets slow, no embeddings.
+- **Skills.** Repeated workflows become draft skills; you approve them on the phone before they're installed for every Claude Code session.
+- **How it remembers is Lax's to change:** `mind/remembering.md`, next to `learning.md` and `wishing.md`, rewritten in the weekly review; code changes go through the wish flow.
+- Claude Code's memory and each repo's `CLAUDE.md` stay the short, current layers; Lax's long-term memory is the deep store behind them. The first run moves history out of today's notes, so the summary shrinks and nothing is lost.
 
 ### Phase 7: Lax schedules [diogodebastos/lax#7](https://github.com/diogodebastos/lax/issues/7)
 Focused automation: natural-language scheduling for reports, backups and briefings, running unattended through the Mac.
 - "Every weekday at 8:30, brief me on open PRs" becomes a job you confirm before it's saved.
-- Each run is a fresh, focused `claude -p` with its own cwd, tool allowlist and budget, plus Phase 6 memory.
+- Each run is a fresh, focused `claude -p` with its own cwd, tool allowlist and budget, plus Phase 6 long-term memory.
 - Anything outside the allowlist pauses and asks on the phone; results arrive as a spoken summary, a notification, and a run log.
 
 ### Phase 8: Lax improves itself [diogodebastos/lax#8](https://github.com/diogodebastos/lax/issues/8)
