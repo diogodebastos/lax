@@ -98,7 +98,7 @@ const tools = async (env) => {
   return c;
 };
 const dormant = await tools({ LAX_CHANNEL_FORCE: '0' });
-check('a session that doesn\'t hear Lax has no tools', (await dormant.listTools()).tools.length === 0);
+check('a session that doesn\'t hear Lax has no `gap` (only `recall`, Phase 6)', JSON.stringify((await dormant.listTools()).tools.map((t) => t.name)) === '["recall"]');
 await dormant.close();
 const voice = await tools({ LAX_CHANNEL_FORCE: '0', LAX_VOICE: '1' });
 check('Lax\'s own assistant gets only `gap`', JSON.stringify((await voice.listTools()).tools.map((t) => t.name)) === '["gap"]');

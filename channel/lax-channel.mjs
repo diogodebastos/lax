@@ -27,6 +27,10 @@ const CHANNEL_MODE = process.env.LAX_CHANNEL_FORCE ? process.env.LAX_CHANNEL_FOR
   : /--(dangerously-load-development-)?channels\b[^]*\blax\b/.test(processArgs(SESSION_PID));
 // Lax's own assistant (a voice run, lib/server talk()) gets only `gap`: it talks back through its answer, not `reply`.
 const VOICE_MODE = !CHANNEL_MODE && process.env.LAX_VOICE === '1' && !process.env.LAX_REFLECT && !process.env.LAX_BUILD;
+// Lax's own runs (reflecting, recalling, building) get nothing from here. Every other session may `recall`: Lax's
+// long-term memory is for all of them, live with Lax or not. (The voice assistant searches its memory itself.)
+const OWN_RUN = !!(process.env.LAX_REFLECT || process.env.LAX_RECALL || process.env.LAX_BUILD);
+const RECALL_MODE = !OWN_RUN && !VOICE_MODE;
 const log = (...a) => process.stderr.write(`[lax-channel] ${a.join(' ')}\n`); // stdout belongs to MCP
 
 const post = (body) => fetch(`${LAX}/api/channel/event`, {
@@ -68,8 +72,20 @@ const GAP = {
   },
 };
 
+const RECALL = {
+  name: 'recall',
+  description: 'Ask Lax\'s long-term memory about the past: "how did we fix the tunnel 502?", "when did we decide X, and why?", ' +
+    '"what did we try for Y?". Lax keeps every Claude Code session (episodes it wrote, its notes, and the archived transcripts, ' +
+    'kept past Claude Code\'s 30 days) across all projects, and searches them. Answers with date and project. Takes a minute or two.',
+  inputSchema: {
+    type: 'object',
+    properties: { query: { type: 'string', description: 'The question, in plain words, with the names that matter (project, error, file, tool)' } },
+    required: ['query'],
+  },
+};
+
 mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: VOICE_MODE ? [GAP] : !CHANNEL_MODE ? [] : [GAP, {
+  tools: VOICE_MODE ? [GAP] : !CHANNEL_MODE ? (RECALL_MODE ? [RECALL] : []) : [GAP, RECALL, {
     name: 'reply',
     description: 'Reply to the user through Lax (shown in a speech bubble on their phone and read aloud).',
     inputSchema: {
@@ -116,6 +132,12 @@ async function shareAndTell(args) {
 }
 
 mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
+  if (req.params.name === 'recall' && RECALL_MODE) {
+    const r = await fetch(`${LAX}/api/recall`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-lax-token': TOKEN },
+      body: JSON.stringify({ query: String(req.params.arguments?.query || ''), cwd: process.cwd() }), signal: AbortSignal.timeout(5 * 60e3) })
+      .then((x) => x.json()).catch((e) => ({ ok: false, answer: `Lax is not reachable (${e.message}).` }));
+    return { content: [{ type: 'text', text: r.answer || 'Nothing came back.' }], isError: !r.ok };
+  }
   if (req.params.name === 'share') {
     const { done, pick, ...r } = await shareAndTell(req.params.arguments || {});
     return { content: [{ type: 'text', text: JSON.stringify(r) }], isError: !r.ok };

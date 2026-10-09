@@ -85,7 +85,7 @@ function applyLook() {
   const color = pet.look?.color || settings.color || '#D97757'; // the species' colour (an egg: whatever leads); no server: Lax's own
   C.body = color; C.hi = shade(color, 0.3); C.lo = shade(color, -0.25);
   document.documentElement.style.setProperty('--coral', color);
-  $('#nameBtn').textContent = settings.name.toUpperCase(); $('#lifeName').textContent = settings.name.toUpperCase(); $('#menuName').textContent = settings.name.toUpperCase();
+  $('#nameBtn').textContent = settings.name.toUpperCase(); $('#lifeName').textContent = settings.name.toUpperCase(); $('#knowsName').textContent = settings.name.toUpperCase(); $('#menuName').textContent = settings.name.toUpperCase();
 }
 let pet = { name: 'Lax', level: 1, stage: 'sprout', traits: [], mood: 'happy', xp: 0, prevXp: 0, nextXp: 10 };
 let sessions = [], voiceBusy = false, thinking = false, lastWork = 0, channels = [], voiceTarget = 'background', usage = null;
@@ -986,22 +986,54 @@ function demo() {
 
 // ---------- life menu ----------
 const lifeEl = $('#life');
-let memory = null;
+let memory = null, knows = null;
 function saveSettings(patch) {
   settings = { ...settings, ...patch }; applyLook(); renderLife();
   if (!DEMO) api('/api/settings', patch);
 }
 async function openLife() {
   lifeEl.classList.add('open'); renderLife();
-  if (!DEMO) { try { memory = await fetch('/api/memory', { headers: { 'x-lax-token': TOKEN } }).then((r) => r.json()); } catch {} renderLife(); }
+  if (!DEMO) { try { memory = await fetch('/api/memory', { headers: { 'x-lax-token': TOKEN } }).then((r) => r.json()); } catch {} renderLife(); loadKnows(); }
 }
+// What Lax knows: its skills (a draft waits for your yes, with its whole text) and its newest episodes. Forget = two taps.
+async function loadKnows() { try { knows = await fetch('/api/knows', { headers: { 'x-lax-token': TOKEN } }).then((r) => r.json()); } catch {} renderKnows(); }
+const SKILL_STATE = { new: 'draft', later: 'draft', proposed: 'asking you', installed: '' };
+function renderKnows() {
+  const k = knows;
+  $('#knowsCount').textContent = k ? `${k.notes.projects} project${k.notes.projects === 1 ? '' : 's'} · ${k.notes.you} about you · ${k.episodes.total} episode${k.episodes.total === 1 ? '' : 's'}` : '';
+  $('#skills').innerHTML = !k ? '<div class="none">…</div>' : !k.skills.length ? '<div class="none">none yet: a workflow you repeat becomes one</div>'
+    : k.skills.map((s) => `<div class="sk" data-skill="${esc(s.name)}"><b>${esc(s.status === 'installed' ? 'lax-' + s.name : s.name)}</b><span class="st">${SKILL_STATE[s.status] ?? ''}</span>`
+      + `<p>${esc(s.description || '')}</p>${s.text ? `<pre hidden>${esc(s.text)}</pre>` : ''}<div class="knows-act">`
+      + (s.status === 'installed' ? '<button data-do="forget">forget</button>'
+        : '<button data-do="read">read it</button><button class="yes" data-do="install">install</button><button data-do="decline">no</button>')
+      + '</div></div>').join('');
+  $('#episodes').innerHTML = !k ? '<li class="none">…</li>' : !k.episodes.list.length ? '<li class="none">none yet: kept after each work session</li>'
+    : k.episodes.list.map((e) => `<li data-ep="${esc(e.file)}"><span><i>${esc((e.when || '').slice(0, 10))} ${esc(e.where)}</i> ${esc(e.title)}</span><button>forget</button></li>`).join('');
+}
+// Forgetting asks twice: the first tap turns the button into "sure?".
+const sure = (btn) => { if (btn.classList.contains('sure')) return true; btn.classList.add('sure'); btn.textContent = 'sure?';
+  setTimeout(() => { btn.classList.remove('sure'); btn.textContent = 'forget'; }, 3000); return false; };
+$('#skills').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button'), row = e.target.closest('[data-skill]'); if (!btn || !row) return;
+  const name = row.dataset.skill, what = btn.dataset.do;
+  if (what === 'read') { const pre = row.querySelector('pre'); pre.hidden = !pre.hidden; btn.textContent = pre.hidden ? 'read it' : 'hide'; return; }
+  if (what === 'forget' && !sure(btn)) return;
+  if (DEMO) return;
+  const r = await api('/api/knows', { skill: name, do: what });
+  if (r.ok && what === 'install') { sfx([659, 988]); setReact('happy', 1200); }
+  loadKnows();
+});
+$('#episodes').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button'), li = e.target.closest('[data-ep]'); if (!btn || !li || !sure(btn) || DEMO) return;
+  await api('/api/knows', { episode: li.dataset.ep }); loadKnows();
+});
 function renderLife() {
   $('#sRoute').innerHTML = [['background', 'assistant'], ...channels.map((c) => [c.cid, c.project])]
     .map(([v, l]) => `<button data-v="${esc(v)}" class="${v === voiceTarget ? 'on' : ''}">${esc(l)}</button>`).join('');
   $('#sName').value !== settings.name && document.activeElement !== $('#sName') && ($('#sName').value = settings.name);
   $('#sPitch').value = settings.pitch;
   renderSpecies();
-  lifeEl.querySelectorAll('.tog').forEach((t) => t.classList.toggle('on', !!settings[t.dataset.k]));
+  lifeEl.querySelectorAll('.tog[data-k]').forEach((t) => t.classList.toggle('on', !!settings[t.dataset.k]));
   $('#sWait').querySelectorAll('button').forEach((b) => b.classList.toggle('on', +b.dataset.v === settings.askTimeout));
   $('#sTheme').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === (settings.theme || 'system')));
   const raw = memory?.raw || {}, p = memory?.pet || pet;
@@ -1060,13 +1092,14 @@ $('#swatches').addEventListener('click', (e) => {
 });
 // No species at all: a plain Lax in a colour of your own (the rainbow swatch).
 $('#swatches').addEventListener('change', (e) => { if (e.target.id === 'sColor') { saveSettings({ speciesOverride: { id: 'plain', color: e.target.value, branch: null, rare: false } }); hop(1); } });
-lifeEl.querySelectorAll('.tog').forEach((t) => t.addEventListener('click', () => saveSettings({ [t.dataset.k]: !settings[t.dataset.k] })));
+lifeEl.querySelectorAll('.tog[data-k]').forEach((t) => t.addEventListener('click', () => saveSettings({ [t.dataset.k]: !settings[t.dataset.k] })));
+$('#wipeKnows').addEventListener('click', (e) => e.currentTarget.classList.toggle('on')); // not a setting: only for this rebirth
 $('#sWait').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ askTimeout: +e.target.dataset.v }));
 $('#sTheme').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ theme: e.target.dataset.v }));
 // Rebirth needs a 2-second hold so it can't happen by accident.
 { const btn = $('#rebirth'), fill = btn.querySelector('i'); let t0, raf;
   const tick = () => { const k = Math.min(1, (performance.now() - t0) / 2000); fill.style.width = k * 100 + '%';
-    if (k < 1) raf = requestAnimationFrame(tick); else { cancel(); lifeEl.classList.remove('open'); if (DEMO) location.reload(); else api('/api/rebirth'); } };
+    if (k < 1) raf = requestAnimationFrame(tick); else { cancel(); lifeEl.classList.remove('open'); if (DEMO) location.reload(); else api('/api/rebirth', { knowledge: $('#wipeKnows').classList.contains('on') }); $('#wipeKnows').classList.remove('on'); } };
   const cancel = () => { cancelAnimationFrame(raf); fill.style.width = 0; };
   btn.addEventListener('pointerdown', () => { t0 = performance.now(); tick(); });
   btn.addEventListener('pointerup', cancel); btn.addEventListener('pointerleave', cancel); }
