@@ -9,7 +9,8 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { ensureHome, commitMind, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice, addFreshAdvice, addEpisodesAdvice } from './lib/home.mjs';
-import { HOME, MIND, DB, OLD_DB, SETTINGS } from './lib/paths.mjs';
+import { HOME, MIND, DB, OLD_DB, SETTINGS, VOCAB } from './lib/paths.mjs';
+import { readVocab, addHeard, allHeard, knownWords, dictatedNote, teachCommand } from './lib/vocab.mjs';
 import { HOST, TOKEN, authed, isLocal, phoneUrl, pairPage } from './lib/auth.mjs'; // first: it loads Lax's home and local config
 import { grantKey, repoRoot } from './lib/allow.mjs';
 import { MAX_LEVEL, STAGES, levelOf as levelOn, stageIdx, barFor as barOn } from './lib/levels.mjs';
@@ -324,7 +325,18 @@ function sessionList() {
   return [...sessions.entries()].filter(([id, s]) => (s.pid || s.ts > cutoff) && !laxOwn(id)).map(([id, s]) => ({ id, ...s }));
 }
 const stateMsg = () => ({ pet: petView(), sessions: sessionList(), voiceBusy: !!voiceRun, thinking: !!channelWait, settings,
-  channels: channelList(), voiceTarget, usage });
+  channels: channelList(), voiceTarget, usage, vocab: vocabNow() });
+// What the phone listens for and fixes (lib/vocab.mjs): the names your words may contain, and misheard → meant.
+function vocabNow() {
+  const v = readVocab(VOCAB);
+  return { heard: allHeard(v), words: knownWords({ name: settings.name, sessions: sessionList().map((s) => s.project), mind: MIND, workdir: DEFAULT_WORKDIR, vocab: v }) };
+}
+// A pair learned (from a session that had to guess, or from you): kept, said in the feed, sent to the phone.
+function learnHeard(heard, meant, from) {
+  const p = addHeard(VOCAB, heard, meant); if (!p) return null;
+  diary(`heard "${p.heard}" as ${p.meant}${from ? ` (${from})` : ''}`); pushState();
+  return p;
+}
 // Your Claude plan usage, as the last terminal's status line saw it (hooks/lax-status.mjs). Kept across restarts.
 let usage = kvGet('usage', null);
 function setUsage(rl) {
@@ -585,6 +597,7 @@ function clearRelays(match) {
 }
 function channelEvent(b) {
   if (b.type === 'gap') return learn.gap({ ...b, project: proj(b.cwd) }); // from a live session, or from Lax's own assistant
+  if (b.type === 'misheard') return !!learnHeard(b.heard, b.meant, proj(b.cwd)); // a session had to read a word as another
   const c = channels.get(b.cid); if (!c) return false;
   c.active = Date.now();
   if (b.type === 'reply') {
@@ -698,11 +711,11 @@ const VOICE_RULE = 'The user is talking to you by voice: start with ONE short, p
 // What changes goes in the message itself, not the system prompt: a resumed conversation (--resume) keeps its first
 // system prompt, so the sessions and usage would be stale. Old blocks stay in the history; the newest one is current.
 // carry: the last turns of the previous conversation, on the first message of a new one (lib/talk.mjs recap).
-const assistantPrompt = (text, carry = '') =>
+const assistantPrompt = (text, carry = '', voice = false) =>
   '[Context now: this replaces any earlier context block]\n' +
   (carry ? `This is a new conversation. The last one ended with:\n${carry}\n\n` : '') +
   `Their Claude Code sessions right now (tab name, status, latest activity):\n${sessionsBrief(text)}\n\n` +
-  `Their Claude plan usage: ${usageText(usage)}\n[/Context]\n\n${text}`;
+  `Their Claude plan usage: ${usageText(usage)}\n` + (voice ? `${dictatedNote(vocabNow().words)}\n` : '') + `[/Context]\n\n${text}`;
 // A fresh conversation: the current one becomes the one before (for the recap and the phone's history).
 function freshTalk(why) {
   const id = voiceSessions[ASSISTANT]; if (!id) return false;
@@ -777,7 +790,17 @@ function askPick(cid, pickId, question, labels) {
   } });
   broadcast('bubble', bubble);
 }
-function talk(text) {
+// voice: dictated on the phone (not typed), so whoever reads it is told it may be misheard and which names it may hold.
+function talk(text, voice = false) {
+  // "You keep mishearing physic AI, it's fisicai": a pair Lax keeps, fixed from now on.
+  const teach = teachCommand(text);
+  if (teach) {
+    const name = settings.name.toLowerCase(); youSaid(text, name);
+    const p = learnHeard(teach.heard, teach.meant);
+    broadcast('bubble', { id: 'heard' + Date.now(), kind: 'reply', speak: true,
+      text: p ? `Got it. When I hear ${p.heard}, I'll write ${p.meant}.` : `I couldn't keep that one. Say: you keep mishearing this, it's that.` });
+    return true;
+  }
   // Answering a wish question, "any wishes?", "merge it" (lib/learn.mjs).
   if (learn.hears(text, { toLax: !pickChannel() })) return true;
   if (skills.hears(text)) return true; // answering "install this skill?"
@@ -789,7 +812,7 @@ function talk(text) {
   if (cid && quickAction(cid, voiceAction(text))) return true; // "clear", "stop"… (anything longer is a message)
   if (cid) { // into the running session
     const c = channels.get(cid);
-    sendChannel(cid, 'message', { chat_id: crypto.randomBytes(3).toString('hex'), text });
+    sendChannel(cid, 'message', { chat_id: crypto.randomBytes(3).toString('hex'), text, via: voice ? 'voice' : 'typed', note: voice ? dictatedNote(vocabNow().words) : undefined });
     clearTimeout(channelWait?.timer);
     channelWait = { cid, timer: setTimeout(() => { channelWait = null; pushState(); }, 180000) };
     pet.voice++; gainXp(3); save();
@@ -815,7 +838,7 @@ function talk(text) {
   const cwd = MIND;
   ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name });
   syncMindSelf(selfLine(petView())); // it knows what it is right now: species, form, level (or still an egg)
-  const args = ['-p', assistantPrompt(text, carry), '--output-format', 'stream-json', '--verbose', '--add-dir', DEFAULT_WORKDIR, '--append-system-prompt', VOICE_RULE];
+  const args = ['-p', assistantPrompt(text, carry, voice), '--output-format', 'stream-json', '--verbose', '--add-dir', DEFAULT_WORKDIR, '--append-system-prompt', VOICE_RULE];
   if (voiceSessions[ASSISTANT]) args.push('--resume', voiceSessions[ASSISTANT]);
   pet.voice++; gainXp(3); save();
   youSaid(text, name);
@@ -863,10 +886,10 @@ http.createServer(async (req, res) => {
   // The demo, live from the working folder (a local preview). Publicly, Cloudflare serves /demo itself from the last push
   // to main (scripts/demo.mjs), so it never reaches here. A fixed list from public/; the app runs in ?demo mode.
   if (req.method === 'GET' && (url.pathname === '/demo' || url.pathname.startsWith('/demo/'))) {
-    const DEMO_FILES = { '/demo': 'demo.html', '/demo/app': 'index.html', '/demo/lax.js': 'lax.js' };
+    const DEMO_FILES = { '/demo': 'demo.html', '/demo/app': 'index.html', '/demo/lax.js': 'lax.js', '/demo/heard.js': 'heard.js' };
     const f = DEMO_FILES[url.pathname]; if (!f) { res.writeHead(404); return res.end(); }
     let text = fs.readFileSync(path.join(ROOT, 'public', f), 'utf8');
-    if (f === 'index.html') text = text.replace('src="lax.js', 'src="/demo/lax.js');
+    if (f === 'index.html') text = text.replace('src="lax.js', 'src="/demo/lax.js').replace('src="heard.js', 'src="/demo/heard.js');
     res.writeHead(200, { 'content-type': MIME[path.extname(f)], 'cache-control': 'no-store' });
     return res.end(text);
   }
@@ -968,7 +991,7 @@ http.createServer(async (req, res) => {
       voiceTarget = b.target === 'auto' || channels.has(b.target) ? b.target : 'background'; pushState();
       return json(res, { ok: true, voiceTarget });
     case '/api/action': return json(res, { ok: quickAction(String(b.cid || ''), voiceAction(b.action)) });
-    case '/api/talk': return json(res, { ok: talk(String(b.text || '').slice(0, 2000)) });
+    case '/api/talk': return json(res, { ok: talk(String(b.text || '').slice(0, 2000), !!b.voice) });
     default: return json(res, { error: 'not found' }, 404);
   }
 }).listen(PORT, HOST, () => {

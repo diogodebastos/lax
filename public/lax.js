@@ -60,6 +60,8 @@ const C = { bg: '#000', shadow: '#2a2521', ink: '#000', out: '#120c0a', body: '#
 const SIZES = { sprout: [10, 9], blob: [13, 12], cube: [15, 14], brick: [17, 16], legend: [19, 18] };
 
 // ---------- world state ----------
+// What speech gets wrong (lib/vocab.mjs, from the Mac): the names you use, and misheard → meant (fixed by heard.js).
+let vocab = { words: [], heard: {} };
 let settings = { name: 'Lax', color: '#D97757', voice: true, pitch: 1.6, speakDone: false, captions: false, phoneApprovals: true, askTimeout: 30, theme: 'system' };
 const shade = (hex, amt) => { const n = parseInt(hex.slice(1), 16), t = amt < 0 ? 0 : 255, a = Math.abs(amt);
   return '#' + [16, 8, 0].map((sh) => Math.round(((n >> sh) & 255) * (1 - a) + t * a).toString(16).padStart(2, '0')).join(''); };
@@ -635,7 +637,12 @@ function renderBubble() {
   const det = elB.querySelector('.det'); det.textContent = b.details || ''; det.style.display = b.details && b.showDetails ? 'block' : 'none';
   // Cover screen: the project goes up in the tag and the bubble keeps only the gist ("$ npm test"), big enough to read.
   if (cover() && b.gist) { elB.querySelector('.tag').textContent = `${TAGS[b.kind]} · ${b.project}`; elB.querySelector('.text').textContent = b.gist; elB.dataset.key = ''; return; }
-  if (b.kind !== 'question') { elB.querySelector('.text').textContent = b.text + (b.details && !b.actions && !b.showDetails ? ' ⋯' : ''); elB.dataset.key = ''; return; }
+  if (b.kind !== 'question') {
+    const t = b.text + (b.details && !b.actions && !b.showDetails ? ' ⋯' : '');
+    // Words Lax fixed (misheard → meant) are underlined while you talk and for a moment after, so you see it working.
+    if (b.fixed?.length) elB.querySelector('.text').innerHTML = marked(t, b.fixed); else elB.querySelector('.text').textContent = t;
+    elB.dataset.key = ''; return;
+  }
   // Question: one at a time; only rebuild when something changed (the 1s refresh would wipe selections).
   b.qi ??= 0; b.answers ??= {}; b.picked ??= [];
   const q = b.questions[b.qi], key = `${b.id}:${b.qi}:${b.picked.join('|')}:${answerHook ? 1 : 0}`;
@@ -661,6 +668,7 @@ function renderCaption(here, now) {
   hint.className = 'said';
   hint.innerHTML = `<span class="cap"><span class="who">${esc(c.kind === 'reply' ? settings.name.toLowerCase() : TAGS[c.kind] || '')}</span>${esc(c.text.split(/(?<=[.!?])\s/)[0])}</span>`;
 }
+const marked = (t, words) => esc(t).replace(new RegExp(`(${words.map((w) => esc(w).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g'), '<u>$1</u>');
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 let answerHook = null; // when set, the next thing heard answers the open question instead of going to /api/talk
 function answerQuestion(b, answer) {
@@ -776,18 +784,21 @@ function beginListening(m) {
   NATIVE ? NATIVE.hush() : speechSynthesis.cancel();
   diag('talk-' + m, { native: !!NATIVE }); showHeard(); listenStretch();
 }
-const words = () => [said, heard].filter(Boolean).join(' ').trim();
+const raw = () => [said, heard].filter(Boolean).join(' ').trim();
+const words = () => LaxHeard.fix(raw(), vocab.heard).text; // what you said, misheard names fixed
 function showHeard(outside = false) {
   hint.textContent = talkMode === 'hold' ? (outside ? 'let go to cancel' : 'let go to send · slide off to cancel') : 'tap me to cancel';
-  showBubble({ id: 'listen', kind: 'listening', text: words() || '…' });
+  showBubble({ id: 'listen', kind: 'listening', text: words() || '…', fixed: LaxHeard.fix(raw(), vocab.heard).fixed });
 }
 // One stretch of recognition (until the recognizer stops at a pause).
 function listenStretch() {
-  if (NATIVE) return NATIVE.listen(navigator.language || 'en-US');
-  rec = new SR(); rec.lang = navigator.language || 'en-US'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+  // The names you use go to the recognizer as hints (an older app only takes the language).
+  if (NATIVE) return NATIVE.listenFor ? NATIVE.listenFor(navigator.language || 'en-US', JSON.stringify(vocab.words)) : NATIVE.listen(navigator.language || 'en-US');
+  rec = new SR(); rec.lang = navigator.language || 'en-US'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 5;
   let text = '';
   rec.onspeechstart = speechBegan;
-  rec.onresult = (e) => { text = [...e.results].map((r) => r[0].transcript).join(''); partial(text); };
+  // Of its guesses, the one with a name Lax knows.
+  rec.onresult = (e) => { text = [...e.results].map((r) => LaxHeard.pick([...r].map((a) => a.transcript), vocab.words, vocab.heard)).join(''); partial(text); };
   rec.onerror = (e) => {
     diag('sr-error', { error: e.error, message: e.message });
     if (['aborted', 'no-speech'].includes(e.error)) return;
@@ -825,9 +836,9 @@ const QUESTION = new RegExp(`^(?:(?:what|what's|whats|why|how|how's|who|who's|wh
 const punctuate = (t) => !t || /[.!?…]$/.test(t) || !QUESTION.test(t) ? t : t + '?';
 function finishListening() { // send what was heard
   if (!listening) return;
-  const text = punctuate(words()), h = answerHook; answerHook = null;
+  const text = punctuate(words()), fixed = LaxHeard.fix(raw(), vocab.heard).fixed, h = answerHook; answerHook = null;
   stopListening(false);
-  if (text) { sfx([330]); h ? h(text) : send(text); } else if (h) renderBubble();
+  if (text) { sfx([330]); h ? h(text) : send(text, fixed); } else if (h) renderBubble();
 }
 function cancelListening() {
   if (!listening) return;
@@ -848,7 +859,8 @@ function releaseHold(inside) {
   releaseTimer = setTimeout(finishListening, 1500); // in case the last words never come
 }
 // The app's speech recognizer calls these (LaxBridge.kt).
-window.laxOnSpeech = (text, final) => { if (!listening) return; final ? stretchEnded(text) : partial(text); };
+// alts: the recognizer's guesses, best first (a newer app); the one with a name Lax knows wins.
+window.laxOnSpeech = (text, final, alts) => { if (!listening) return; if (alts?.length) text = LaxHeard.pick(alts, vocab.words, vocab.heard); final ? stretchEnded(text) : partial(text); };
 window.laxOnSpeechBegin = () => { if (listening) speechBegan(); };
 window.laxOnSpeaking = (on) => { speaking = !!on; }; // the app's TTS started or stopped: Lax's mouth moves
 window.laxOnSpeechError = (error) => {
@@ -865,10 +877,11 @@ function typeInstead() {
   const text = prompt(h ? 'Your answer:' : 'Talk to Lax:');
   if (text?.trim()) (h ? h(text.trim()) : send(text.trim())); else if (h) renderBubble();
 }
-function send(text) {
-  showBubble({ id: 'you' + Date.now(), kind: 'you', text: '“' + text + '”' });
+// fixed: set when it was dictated (even if nothing needed fixing), the words Lax fixed; typed text is sent as is.
+function send(text, fixed) {
+  showBubble({ id: 'you' + Date.now(), kind: 'you', text: '“' + text + '”', fixed });
   if (DEMO) { voiceBusy = true; setTimeout(() => { voiceBusy = false; showBubble({ id: 'r' + Date.now(), kind: 'reply', text: 'Demo mode — I heard you!', speak: true }); }, 1800); return; }
-  api('/api/talk', { text }).then((r) => { if (!r.ok) showBubble({ id: 'busy', kind: 'error', text: 'I\'m busy, try again in a sec.' }); })
+  api('/api/talk', { text, voice: !!fixed }).then((r) => { if (!r.ok) showBubble({ id: 'busy', kind: 'error', text: 'I\'m busy, try again in a sec.' }); })
     .catch(() => showBubble({ id: 'net', kind: 'error', text: 'Couldn\'t reach your Mac.' }));
 }
 const topEl = $('#top');
@@ -920,7 +933,7 @@ wakeEl.addEventListener('click', async () => {
 });
 
 // ---------- live link ----------
-function applyState(s) { pet = s.pet; if (s.pet.hatched === false) shell = true; else if (shell && !hatchAt) hatch(); sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; usage = s.usage || null; updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
+function applyState(s) { pet = s.pet; if (s.pet.hatched === false) shell = true; else if (shell && !hatchAt) hatch(); sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; usage = s.usage || null; if (s.vocab) vocab = s.vocab; updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
 // Remember how Lax looks, so the app's offline page can show the same Lax asleep.
 const remember = () => { try { NATIVE?.remember(JSON.stringify({ pet, settings })); } catch {} };
 function setAsleep(v) { if (macAsleep === v) return; macAsleep = v; updateHint(); }

@@ -25,7 +25,7 @@ const SESSION_PID = claudePid();
 // everywhere else stay dormant: no tools, no link to Lax (voice would vanish into a session that can't hear it).
 const CHANNEL_MODE = process.env.LAX_CHANNEL_FORCE ? process.env.LAX_CHANNEL_FORCE === '1' // tests: on or off
   : /--(dangerously-load-development-)?channels\b[^]*\blax\b/.test(processArgs(SESSION_PID));
-// Lax's own assistant (a voice run, lib/server talk()) gets only `gap`: it talks back through its answer, not `reply`.
+// Lax's own assistant (a voice run, lib/server talk()) gets only `gap` and `misheard`: it talks back through its answer, not `reply`.
 const VOICE_MODE = !CHANNEL_MODE && process.env.LAX_VOICE === '1' && !process.env.LAX_REFLECT && !process.env.LAX_BUILD;
 // Lax's own runs (reflecting, recalling, building) get nothing from here. Every other session may `recall`: Lax's
 // long-term memory is for all of them, live with Lax or not. (The voice assistant searches its memory itself.)
@@ -51,6 +51,8 @@ const mcp = new Server(
       'and do the work in this session. When done (or if you need to ask something), call the lax `reply` tool with the ' +
       'chat_id. Lax reads the reply aloud: make the first sentence short, plain and speakable (no markdown, no code); ' +
       'details may follow. ' +
+      'via="voice" means it was dictated, so words may be misheard; its note lists the names it may contain. If you had to ' +
+      'read a misheard word as one of them, call the lax `misheard` tool once so Lax fixes it next time. ' +
       'If you can\'t do what they asked through Lax (no tool, no access, not built yet), or they say "you should be able to…" ' +
       'or "learn to…", call the lax `gap` tool once, then answer as usual: Lax keeps a wish list and may offer to learn it.',
   },
@@ -72,6 +74,21 @@ const GAP = {
   },
 };
 
+// A word speech got wrong that the session worked out ("physic AI" → fisicai): Lax fixes it before it's shown or sent.
+const MISHEARD = {
+  name: 'misheard',
+  description: 'Tell Lax that a dictated message had a misheard word you read as another ("physic AI" was fisicai), so Lax ' +
+    'fixes it on the phone from now on. Only for names and words you are sure of; once per word.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      heard: { type: 'string', description: 'The words as they came through ("physic AI")' },
+      meant: { type: 'string', description: 'What the user meant ("fisicai")' },
+    },
+    required: ['heard', 'meant'],
+  },
+};
+
 const RECALL = {
   name: 'recall',
   description: 'Ask Lax\'s long-term memory about the past: "how did we fix the tunnel 502?", "when did we decide X, and why?", ' +
@@ -85,7 +102,7 @@ const RECALL = {
 };
 
 mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: VOICE_MODE ? [GAP] : !CHANNEL_MODE ? (RECALL_MODE ? [RECALL] : []) : [GAP, RECALL, {
+  tools: VOICE_MODE ? [GAP, MISHEARD] : !CHANNEL_MODE ? (RECALL_MODE ? [RECALL] : []) : [GAP, MISHEARD, RECALL, {
     name: 'reply',
     description: 'Reply to the user through Lax (shown in a speech bubble on their phone and read aloud).',
     inputSchema: {
@@ -147,6 +164,11 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
     const r = await post({ type: 'gap', asked: String(asked || ''), why: String(why || ''), idea: String(idea || ''), cwd: process.cwd(), voice: VOICE_MODE });
     return { content: [{ type: 'text', text: r.ok ? 'Noted on Lax\'s wish list. Now answer the user as usual.' : 'Lax is not reachable; answer the user as usual.' }] };
   }
+  if (req.params.name === 'misheard' && (CHANNEL_MODE || VOICE_MODE)) {
+    const { heard, meant } = req.params.arguments || {};
+    const r = await post({ type: 'misheard', heard: String(heard || ''), meant: String(meant || ''), cwd: process.cwd() });
+    return { content: [{ type: 'text', text: r.ok ? 'Lax will fix it from now on. Carry on.' : 'Lax didn\'t keep that one (too short, or the same words). Carry on.' }] };
+  }
   if (req.params.name !== 'reply' || !CHANNEL_MODE) throw new Error(`unknown tool: ${req.params.name}`);
   const { chat_id, text } = req.params.arguments || {};
   const r = await post({ type: 'reply', chat_id: String(chat_id || ''), text: String(text || '') });
@@ -182,7 +204,7 @@ async function listen() {
           const d = JSON.parse(data);
           if (ev === 'message') {
             await mcp.notification({ method: 'notifications/claude/channel',
-              params: { content: d.text, meta: { chat_id: d.chat_id, via: d.via || 'voice' } } });
+              params: { content: d.text, meta: { chat_id: d.chat_id, via: d.via || 'voice', ...(d.note && { note: d.note }) } } });
           } else if (ev === 'pick') { // your answer to "Which Rita?"
             const p = picks.get(d.id); picks.delete(d.id);
             const contact = p && p.contacts[pickOption(p.contacts.map((c) => c.label), d.answer, p.contacts.map((c) => c.nickname))];

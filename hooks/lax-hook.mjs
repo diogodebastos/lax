@@ -122,6 +122,8 @@ try {
     decide('allow', 'It only adds to Lax\'s wish list.');
   } else if (ev === 'PreToolUse' && input.tool_name === 'mcp__lax__recall') { // read-only: Lax searches its own memory
     decide('allow', 'It only reads Lax\'s memory.');
+  } else if (ev === 'PreToolUse' && input.tool_name === 'mcp__lax__misheard') { // a word speech got wrong: Lax's vocabulary
+    decide('allow', 'It only adds to Lax\'s vocabulary.');
   } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && privateHit) {
     decide('deny', 'Off limits: Lax\'s secrets and database are never touched by the assistant.');
   } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && /^(Edit|Write|MultiEdit)$/.test(input.tool_name) && within(MIND)) {
