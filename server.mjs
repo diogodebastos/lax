@@ -8,7 +8,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { ensureHome, commitMind, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice, addFreshAdvice } from './lib/home.mjs';
+import { ensureHome, commitMind, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice, addFreshAdvice, addEpisodesAdvice } from './lib/home.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS } from './lib/paths.mjs';
 import { HOST, TOKEN, authed, isLocal, phoneUrl, pairPage } from './lib/auth.mjs'; // first: it loads Lax's home and local config
 import { grantKey, repoRoot } from './lib/allow.mjs';
@@ -438,7 +438,7 @@ function onHook(h) {
   const mine = sid && sid === voiceSessions[ASSISTANT]; // Lax's own assistant: talk() already shows what you said and the answer
   if (/^(PostToolUse|PostToolUseFailure|Stop|UserPromptSubmit)$/.test(h.hook_event_name)) clearRelays((c) => c.cwd === h.cwd);
   if (/^(Stop|SessionEnd)$/.test(h.hook_event_name)) grants.delete(sid); // the answer is done: your yeses were for that one
-  brain.onEvent(sid, h.hook_event_name); // a quiet session after real work → Lax reflects on it
+  brain.onEvent(sid, h.hook_event_name, !h.agent_id && h.transcript_path); // a quiet session after real work → Lax reflects on it
   if (!h.agent_id) archive.onEvent(sid, h.hook_event_name, h.transcript_path); // and keeps its transcript, scrubbed
   // Lax's conversation came up outside a voice run: it's open in a terminal on the Mac (until that ends).
   if (mine && h.hook_event_name === 'SessionStart' && !voiceRun) laxOnMac = true;
@@ -635,7 +635,7 @@ if (voiceSessions[ASSISTANT] && !laxTalk.last) {
 }
 
 // ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
-ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice();
+ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice(); addEpisodesAdvice();
 const brain = createBrain({ db, settings: () => settings, feed, diary: (t) => diary(t), broadcast, gainXp: (n) => { gainXp(n); save(); pushState(); },
   sessionInfo: (sid) => sessions.get(sid), skip: laxOwn, claude: process.env.LAX_CLAUDE,
   wish: (w) => learn.gap({ ...w, project: 'mind', via: 'review' }), // a fix its weekly review says needs code
