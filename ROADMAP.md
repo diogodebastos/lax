@@ -110,6 +110,15 @@ Replaces picking a colour (designed 2026-10-07; built in `lib/species.mjs`, test
 - **Existing Laxes re-hatch** under these rules.
 - **While the bars get tuned**, the Life menu's species section shows each number against its bar, and "pick it myself" chooses a species (and the fox's branch, or the rare pink) by hand. It wins everywhere until switched off.
 
+### Phase 4.3: Lax hears you right [diogodebastos/lax#25](https://github.com/diogodebastos/lax/issues/25)
+Dictation today gets common words right and your names wrong: "Lax" and "fisicai" only come through when spelled out. Android's recognizer (or Chrome's) hears each stretch between pauses on its own, returns one guess, and knows none of your words; the only fix-up is the quick actions' short list ("plan mouth", "aiko"). Cheapest first:
+- **Tell the listener.** Each voice message says it was dictated and may be misheard, and lists the names it may contain, so Claude reads "physic AI" as fisicai. Fixes what it does, not what the feed shows.
+- **A vocabulary Lax keeps** in `~/.lax`, built by itself from project folders, session names, its own name and the action words. It grows from use: a word you had to spell out or typed over becomes a misheard → meant pair, and "you keep mishearing X, it's Y" adds one. Fixes are applied before the text is shown or sent; the quick actions' list moves into it.
+- **Hint the recognizer** (a quick test on the Flip): Android 13+ takes a list of likely words (`EXTRA_BIASING_STRINGS`, best on the on-device recognizer), fed from the vocabulary. Ask for 3–5 guesses instead of one and pick the one with a known word.
+- **Whisper on the Mac, the real fix.** The phone records; whisper.cpp (large-v3-turbo, about a second) transcribes the whole message at once, with the vocabulary as its starting prompt, which is what gets odd names right. It adds punctuation itself (the question-mark guessing goes), copes with Portuguese and English mixed, and the audio stays home. Hybrid: Android's words still show live in the bubble and are replaced by Whisper's when you stop; with the Mac asleep, Android's text is sent.
+- A correction shows briefly in the bubble (the fixed word underlined), so you can see it working.
+- Lax listens in its own language setting, not the phone's: a phone in pt-PT hearing English (or the reverse) mishears a lot.
+
 ### Phase 5: Lax learns [diogodebastos/lax#13](https://github.com/diogodebastos/lax/issues/13)
 What makes Lax a personal agent. Everything it learns lives in `~/.lax`, and you approve each step.
 Two slices. **5a (what it couldn't do) is done** (2026-10-08; `lib/learn.mjs`, `lib/guard.mjs`, `scripts/after-merge.mjs`, tests in `scripts/test-learn.mjs`): its first real wish, "tell my Claude usage" in Lax's tab, went gap → wish → "any wishes?" → yes → issue #20 → build → PR #21 → "merge it" → restarted healthy, pushed. **5b (from every project, and how it learns) is built** (2026-10-08): notes say where and when, reflections see the other projects to connect them, "what do you know about me?" reads them back; a learning record (declined, refused, corrected, reverted, forgotten) feeds the weekly review, which may change `learning.md`/`wishing.md` by itself and turns a fix that needs code into a wish. Still to prove in real use: notes tagged by project after the next reflections, and a review acting on its record.
@@ -181,7 +190,6 @@ The Mac stays the brain; Cloudflare becomes the always-on link and Lax's public 
 
 **Talking**
 - Wake word or squeeze-to-talk on the app, without tapping.
-- On-device / local speech-to-text (whisper.cpp on the Mac) for privacy and offline use.
 - Multi-language voice, following the phone's language.
 - A conversation view: scroll back through what you said and what Claude answered.
 
