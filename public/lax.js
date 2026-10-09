@@ -987,12 +987,15 @@ function demo() {
 // ---------- life menu ----------
 const lifeEl = $('#life');
 let memory = null, knows = null;
+// Long lists show the newest few; "show all" opens the rest (closed again each time the menu opens).
+const FEW = 5, showAll = { miles: false, episodes: false };
+const moreRow = (k, n) => n > FEW ? `<li class="more" data-more="${k}">${showAll[k] ? 'show fewer' : `show all ${n}`}</li>` : '';
 function saveSettings(patch) {
   settings = { ...settings, ...patch }; applyLook(); renderLife();
   if (!DEMO) api('/api/settings', patch);
 }
 async function openLife() {
-  lifeEl.classList.add('open'); renderLife();
+  lifeEl.classList.add('open'); showAll.miles = showAll.episodes = false; renderLife();
   if (!DEMO) { try { memory = await fetch('/api/memory', { headers: { 'x-lax-token': TOKEN } }).then((r) => r.json()); } catch {} renderLife(); loadKnows(); }
 }
 // What Lax knows: its skills (a draft waits for your yes, with its whole text) and its newest episodes. Forget = two taps.
@@ -1008,7 +1011,8 @@ function renderKnows() {
         : '<button data-do="read">read it</button><button class="yes" data-do="install">install</button><button data-do="decline">no</button>')
       + '</div></div>').join('');
   $('#episodes').innerHTML = !k ? '<li class="none">…</li>' : !k.episodes.list.length ? '<li class="none">none yet: kept after each work session</li>'
-    : k.episodes.list.map((e) => `<li data-ep="${esc(e.file)}"><span><i>${esc((e.when || '').slice(0, 10))} ${esc(e.where)}</i> ${esc(e.title)}</span><button>forget</button></li>`).join('');
+    : k.episodes.list.slice(0, showAll.episodes ? k.episodes.list.length : FEW).map((e) => `<li data-ep="${esc(e.file)}"><span><i>${esc((e.when || '').slice(0, 10))} ${esc(e.where)}</i> ${esc(e.title)}</span><button>forget</button></li>`).join('')
+      + moreRow('episodes', k.episodes.list.length);
 }
 // Forgetting asks twice: the first tap turns the button into "sure?".
 const sure = (btn) => { if (btn.classList.contains('sure')) return true; btn.classList.add('sure'); btn.textContent = 'sure?';
@@ -1023,6 +1027,8 @@ $('#skills').addEventListener('click', async (e) => {
   if (r.ok && what === 'install') { sfx([659, 988]); setReact('happy', 1200); }
   loadKnows();
 });
+lifeEl.addEventListener('click', (e) => { const m = e.target.closest('[data-more]'); if (!m) return;
+  showAll[m.dataset.more] = !showAll[m.dataset.more]; m.dataset.more === 'miles' ? renderLife() : renderKnows(); });
 $('#episodes').addEventListener('click', async (e) => {
   const btn = e.target.closest('button'), li = e.target.closest('[data-ep]'); if (!btn || !li || !sure(btn) || DEMO) return;
   await api('/api/knows', { episode: li.dataset.ep }); loadKnows();
@@ -1052,7 +1058,8 @@ function renderLife() {
     return `<div class="bar"><span>${l}${w.resets ? ' · ' + resets(w.resets) : ''}</span><div class="track"><i style="width:${w.pct}%${hot ? ';background:var(--red)' : ''}"></i></div><b>${w.pct}%</b></div>`; }).join('')
     : '<div class="bar"><span>shows once a terminal session runs</span></div>';
   $('#usageAge').textContent = usage?.ts ? `${Math.round((Date.now() - usage.ts) / 60000)} min ago` : '';
-  $('#miles').innerHTML = (memory?.milestones || []).slice(0, 12).map((m) => `<li>${new Date(m.ts).toLocaleDateString()} ${m.text.replace(/</g, '&lt;')}</li>`).join('') || '<li>…</li>';
+  const miles = memory?.milestones || [];
+  $('#miles').innerHTML = (miles.slice(0, showAll.miles ? miles.length : FEW).map((m) => `<li>${new Date(m.ts).toLocaleDateString()} ${m.text.replace(/</g, '&lt;')}</li>`).join('') || '<li>…</li>') + moreRow('miles', miles.length);
 }
 // Species: what it hatched as and why (each species' number against its bar), and while the bars get tuned, a hand pick.
 const pct = (v) => Math.round(v * 100) + '%', num = (v) => String(Math.round(v * 10) / 10);

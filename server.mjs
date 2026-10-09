@@ -903,12 +903,12 @@ http.createServer(async (req, res) => {
   }
   if (url.pathname === '/api/brief') return json(res, { text: brief(url.searchParams.get('project') || '', settings.name) });
   if (url.pathname === '/api/memory') return json(res, { pet: petView(), raw: pet, voiceProject: pickChannel() ? channels.get(pickChannel()).project : 'assistant',
-    milestones: db.prepare('SELECT ts,text FROM milestones ORDER BY id DESC LIMIT 50').all() });
+    milestones: db.prepare('SELECT ts,text FROM milestones ORDER BY id DESC').all() });
   // What Lax knows (the life menu): counts of its notes, its skills, its newest episodes.
   if (url.pathname === '/api/knows' && req.method === 'GET') {
     let projects = 0; try { projects = fs.readdirSync(PROJECTS).filter((f) => f.endsWith('.md')).length; } catch {}
     let you = 0; try { you = (fs.readFileSync(path.join(MIND, 'CLAUDE.md'), 'utf8').split(/^## Notes\s*$/m)[1] || '').split('\n').filter((l) => /^\s*[-*] /.test(l)).length; } catch {}
-    return json(res, { notes: { projects, you }, skills: skills.view(), episodes: episodes(40) });
+    return json(res, { notes: { projects, you }, skills: skills.view(), episodes: episodes(1000) });
   }
   if (req.method !== 'POST') return json(res, { error: 'method' }, 405);
   const b = await body(req);
