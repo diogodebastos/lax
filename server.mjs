@@ -206,6 +206,10 @@ function today() {
   if (!pet.days[k]) { for (const d of Object.keys(pet.days)) if (d < dayKey(Date.now() - 8 * 864e5)) delete pet.days[d]; pet.days[k] = { tools: {}, tests: 0, errors: 0 }; }
   return pet.days[k];
 }
+// What a tool counts for the traits: Bash a tenth (see traits()).
+const traitWeight = (tool, n) => tool === 'Bash' ? n / 10 : n;
+// This week's tools as the traits count them, for the Life menu's favorite tools.
+const weekTools = (p) => Object.fromEntries(Object.entries(week(p).tools).filter(([k]) => !k.startsWith('__')).map(([k, n]) => [k, traitWeight(k, n)]));
 const uses = (w, ...tools) => tools.reduce((a, t) => a + (w.tools[t] || 0), 0);
 function traits(p) {
   if (levelOf(p.xp) < TRAITS_FROM) return [];
@@ -214,7 +218,7 @@ function traits(p) {
   const kinds = {};
   for (const [tool, n] of Object.entries(w.tools)) {
     const k = TOOL_TRAIT[tool];
-    if (k) kinds[k] = (kinds[k] || 0) + (tool === 'Bash' ? n / 10 : n);
+    if (k) kinds[k] = (kinds[k] || 0) + traitWeight(tool, n);
   }
   const top = Object.entries(kinds).sort((a, b) => b[1] - a[1])[0];
   if (top && top[1] >= 30) t.push(top[0]);
@@ -277,7 +281,7 @@ function petView() {
   const species = sp && { id: sp.id, name: nameFor(sp, st), branch: st >= BRICK ? sp.branch || null : null, copy: sp.copy || null, rare: !!sp.rare && st >= BRICK };
   const lead = egg ? eggLead() : null;
   return { name: settings.name, born: pet.born, level, stage: stageOf(level), xp: pet.xp, prevXp, nextXp,
-    traits: traits(pet), mood: mood(pet), streak: pet.streak, hatched: !egg, species,
+    traits: traits(pet), weekTools: weekTools(pet), mood: mood(pet), streak: pet.streak, hatched: !egg, species,
     look: egg ? { form: null, color: lead.v ? SPECIES[lead.v].color : '#8a8378', lift: 0 } : formFor(sp, st),
     egg: egg ? { pct: Math.round(eggProgress(pet) * 100), lead: lead.v } : null,
     // Why it is what it is: each species' value over its bar, from the egg's time (for the Life menu, while the bars get tuned).
