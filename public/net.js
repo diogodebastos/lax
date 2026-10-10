@@ -165,7 +165,9 @@
 
   // The small Lax on its own: on the floor it potters about (walks, stops, hops, looks around, says something in a
   // bubble too small to read); when there's work, it teleports to its seat in the middle and back when it's done.
-  const SEAT = 2.5; // Lax's feet when it sits in the middle (the core is at y 5)
+  // Lax's feet when it sits in the middle: its centre on the core (y 5), from how tall it's really drawn (onPixels).
+  const texel = () => Math.max(1, Math.round(0.5 / ((cam.right - cam.left) / Mind.current.W))) * ((cam.right - cam.left) / Mind.current.W);
+  const seatY = () => 5 - 10 * texel() / 2;
   const pet = { x: -20, dir: 1, mode: 'idle', until: 0, tx: 0, hops: 0, chat: 0, seat: false, busy: 0, tp: null };
   const floorY = () => cam.bottom + 3.5, roam = () => [cam.left + 5, cam.right - 5];
   function gibberish(thinking) { // a little speech bubble of scribbles (or dots while it thinks)
@@ -178,7 +180,7 @@
     return tex(cv);
   }
   function teleport(t, toSeat) { const [a, b] = roam();
-    pet.tp = { t0: t, from: pet.seat ? [0, SEAT] : [pet.x, floorY()], to: toSeat ? [0, SEAT] : [(pet.x = a + Math.random() * (b - a)), floorY()], toSeat };
+    pet.tp = { t0: t, from: pet.seat ? [0, seatY()] : [pet.x, floorY()], to: toSeat ? [0, seatY()] : [(pet.x = a + Math.random() * (b - a)), floorY()], toSeat };
   }
   function petUpdate(t, dt) {
     if (Mind.asleep()) { if (pet.seat && !pet.tp) teleport(t, false); pet.mode = 'sleep'; return; }
@@ -202,7 +204,7 @@
   }
   function drawPet(t, asleep, glow) {
     floor.position.set(0, floorY() - 0.25, 0);
-    let x = pet.seat ? 0 : pet.x, y = pet.seat ? SEAT : floorY(), sx = 1, sy = 1;
+    let x = pet.seat ? 0 : pet.x, y = pet.seat ? seatY() : floorY(), sx = 1, sy = 1;
     beam.visible = false;
     if (pet.tp) { // squeeze into a beam of light, then out of one where it's going
       const p = (t - pet.tp.t0) / 600, out = p < 0.5, k = out ? p * 2 : (1 - p) * 2, [bx, by] = out ? pet.tp.from : pet.tp.to;
@@ -226,7 +228,7 @@
   // pixel of Lax is never drawn wider than its neighbour (one eye bigger than the other). x is where its centerX
   // falls (0 = left edge, 0.5 = middle); y is its bottom.
   function onPixels(o, x, y, z, w, h, centerX) {
-    const upp = (cam.right - cam.left) / Mind.current.W, k = Math.max(1, Math.round(0.5 / upp)) * upp;
+    const upp = (cam.right - cam.left) / Mind.current.W, k = texel();
     const left = cam.left + Math.round((x - w * k * centerX - cam.left) / upp) * upp, bottom = cam.bottom + Math.round((y - cam.bottom) / upp) * upp;
     o.scale.set(w * k, h * k, 1); o.position.set(left + w * k * centerX, bottom, z);
   }
