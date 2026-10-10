@@ -141,10 +141,13 @@ Phases 3.4 and 5 give Lax an understanding of you: a short summary it rewrites a
 **Built** (2026-10-09; `lib/archive.mjs`, `lib/scrub.mjs`, `lib/recall.mjs`, `lib/skills.mjs`, episodes in `lib/brain.mjs`, tests in `scripts/test-archive.mjs`, `test-skills.mjs`, `test-memory.mjs`). Proven live: 400 transcripts archived with 87 secret lines scrubbed; the first run split the notes into 10 episodes (`projects/lax.md` 20 KB → 5 KB, every distinctive fact kept); recall answered from an episode and from an archived transcript, and through the `recall` tool in a plain Claude Code session; a real reflection wrote its episodes (with session and transcript). Still to prove in real use: "how did we…" by voice, a skill drafted by the weekly review and approved on the phone, then used in a later session; a transcript older than 30 days recalled (needs time).
 
 ### Phase 6.1: see the brain [diogodebastos/lax#24](https://github.com/diogodebastos/lax/issues/24)
-A picture of Lax's brain on [the website](https://lax.diogodebastos.com/demo) (not in the app, for now), updating as it learns: the summary, long-term memory, skills, the rules it learns by, and the links between them. A reflection lights up what it touched; "forget that" fades a node.
-- Same look as the demo, app and Lax: palette, VT323, pixels, no emoji. PNG preview first.
-- Public, so it shows the shape only (counts, links, events); project names from an allowlist, never note text.
-- A scrubbed snapshot sent to Cloudflare after each mind commit, so it updates by itself and still shows with the Mac off.
+Lax's mind, live, on [the website](https://lax.diogodebastos.com/demo/mind): not a brain's shape but what it's made of.
+- **The network:** its faculties (hearing, speech, memory and the archive, learning, skills, what it knows about you) and the projects, as pixel orbs that grow with what they hold, and the Claude Code sessions plugged in right now. Links that always exist are faint; a link in use carries pulses (a recall runs to memory and the archive, a reflection from the project through memory to learning). Three.js at a low resolution, so it stays pixel art; always turning slowly, drag to turn it, pinch or scroll to zoom.
+- **Tiny Lax** lives on a floor along the bottom, doing its own things (walks, hops, looks around, says something in a bubble too small to read). When it works or thinks, it beams up to its seat in the middle, among the network, and back down when it's done. It sleeps when the Mac does.
+- Public, so only the shape: counts, times, its colour, and the names of the projects you allow (`publicProjects` in settings.json, `lax` by default). Never a note, an episode's title, a skill or what a recall asked; the Worker refuses anything that isn't exactly that shape.
+- Works with the Mac off: the Mac pushes after each change and every 5 minutes; a Durable Object keeps the last of it and streams it to every viewer.
+
+**Built** (2026-10-10; `lib/mind-shape.mjs`, `lib/public-mind.mjs`, `demo/worker.mjs`, `public/mind.html`, `mind-view.js`, `net.js`, tests in `scripts/test-mind.mjs`). Three looks were tried first (a town, a pixel brain, a voxel brain); the network won. To prove: live on the website, with real reflections and recalls.
 
 ### Phase 7: Lax schedules [diogodebastos/lax#7](https://github.com/diogodebastos/lax/issues/7)
 Focused automation: natural-language scheduling for reports, backups and briefings, running unattended through the Mac.

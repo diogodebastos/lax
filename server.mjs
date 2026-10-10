@@ -27,6 +27,7 @@ import { FRESH, FRESH_HOURS, FRESH_TOKENS, freshDue, contextSize, recap } from '
 import { claudeAlive } from './lib/claude-pid.mjs';
 import { createArchive } from './lib/archive.mjs';
 import { recall } from './lib/recall.mjs';
+import { createPublicMind } from './lib/public-mind.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const PORT = Number(process.env.LAX_PORT || 7777);
@@ -74,7 +75,8 @@ if (!kvGet('newPath', false)) { if (kvGet('pet', null)) milestone(`${readSetting
 // Life menu settings — live on the Mac, edited from the phone.
 const DEFAULTS = { name: 'Lax', voice: true, pitch: 1.6, speakDone: false, captions: false,
   phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system', learns: true, listen: 'phone',
-  speciesPick: false, speciesOverride: null }; // while the species bars get tuned: pick one by hand
+  speciesPick: false, speciesOverride: null, // while the species bars get tuned: pick one by hand
+  publicProjects: ['lax'] }; // the projects whose names its mind on the website may show (the others show unnamed)
 // Preferences live in settings.json, a plain file you can read; rebirth leaves them alone.
 function readSettings() { try { return JSON.parse(fs.readFileSync(SETTINGS, 'utf8')); } catch { return {}; } }
 const writeSettings = (s) => fs.writeFileSync(SETTINGS, JSON.stringify(s, null, 2) + '\n');
@@ -315,9 +317,11 @@ function pruneSessions() {
   if (gone) { save(); pushState(); }
 }
 const pending = new Map(); // ask id -> {resolve, bubble}
+let publicMind = null; // its mind on the website (lib/public-mind.mjs), set up below
 function broadcast(type, data) {
   const msg = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const c of clients) c.write(msg);
+  if (type === 'bubble' && data.speak) publicMind?.event('speak');
 }
 // Lax's own conversation, this one or the one before it: never a session of yours (no tab, no reflection).
 const laxOwn = (sid) => !!sid && (sid === voiceSessions[ASSISTANT] || sid === laxTalk.prev);
@@ -349,7 +353,7 @@ function setUsage(rl) {
   if (changed) pushState(); // the status line runs often; the phone only hears when a number moves
   return true;
 }
-const pushState = () => broadcast('state', stateMsg());
+const pushState = () => { broadcast('state', stateMsg()); publicMind?.changed(); };
 // A session's status line (hooks/lax-status.mjs): its model and how full its context is, for the tab's status row.
 function sessionInfo(b) {
   const s = b.session_id && sessions.get(b.session_id); if (!s) return;
@@ -667,7 +671,11 @@ if (voiceSessions[ASSISTANT] && !laxTalk.last) {
 
 // ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
 ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addSkills(); addEpisodesToLearning(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice(); addEpisodesAdvice();
-const brain = createBrain({ db, settings: () => settings, feed, diary: (t) => diary(t), broadcast, gainXp: (n) => { gainXp(n); save(); pushState(); },
+// ---------- its mind on the website (lib/public-mind.mjs): the shape of what it knows and does, never what's in it ----------
+publicMind = createPublicMind({ live: () => { const v = petView(); return { color: v.look?.color, stage: v.stage, sessions: sessionList() }; },
+  allow: () => settings.publicProjects || [], log: (...a) => console.log('[mind]', ...a) });
+const mindEvent = (kind, extra) => publicMind.event(kind, extra);
+const brain = createBrain({ db, settings: () => settings, feed, mind: mindEvent, diary: (t) => diary(t), broadcast, gainXp: (n) => { gainXp(n); save(); pushState(); },
   sessionInfo: (sid) => sessions.get(sid), skip: laxOwn, claude: process.env.LAX_CLAUDE,
   wish: (w) => learn.gap({ ...w, project: 'mind', via: 'review' }), // a fix its weekly review says needs code
   milestone: (t) => { milestone(t); pushState(); }, skill: (k) => skills.drafted(k), skills: () => skills.list(),
@@ -675,7 +683,7 @@ const brain = createBrain({ db, settings: () => settings, feed, diary: (t) => di
 // The first run of long-term memory: today's notes split into the current picture and episodes (once, when it's calm).
 setTimeout(() => brain.migrate(), Number(process.env.LAX_MIGRATE_AFTER ?? 120) * 1000).unref();
 // The raw past, kept past Claude Code's 30 days (lib/archive.mjs): on quiet, plus a sweep soon after start and daily.
-const archive = createArchive({ log: (...a) => console.log('[archive]', ...a) });
+const archive = createArchive({ kept: (n) => mindEvent('archive', { n }), log: (...a) => console.log('[archive]', ...a) });
 setTimeout(() => archive.sweep(), 60e3).unref(); setInterval(() => archive.sweep(), 864e5).unref();
 // Its learning record (events of kind 'learning'), which the weekly review reads (lib/brain.mjs).
 const record = (kind, text) => logEvent('', 'mind', 'learning', `${kind}: ${short(text, 300)}`);
@@ -689,7 +697,7 @@ const learn = createLearn({ settings: () => settings, feed, diary: (t) => diary(
   record: (kind, text) => record(kind, text),
   log: (...a) => console.log('[learn]', ...a) });
 // ---------- know-how: workflows you repeat become skills, installed on your yes (lib/skills.mjs) ----------
-const skills = createSkills({ settings: () => settings, feed, diary: (t) => diary(t), broadcast, pending, quiet,
+const skills = createSkills({ settings: () => settings, feed, mind: mindEvent, diary: (t) => diary(t), broadcast, pending, quiet,
   gainXp: (n) => { gainXp(n); save(); pushState(); }, milestone: (t) => { milestone(t); pushState(); }, record: (kind, text) => record(kind, text),
   say: (text, kind = 'reply') => broadcast('bubble', { id: 'skill' + Date.now(), kind, text, speak: true }),
   log: (...a) => console.log('[skills]', ...a) });
@@ -799,6 +807,7 @@ const TYPED_OVER_MS = 120000;
 // voice: dictated on the phone (not typed), so whoever reads it is told it may be misheard and which names it may hold.
 // spelled: names you spelled out in it ("F I S I C A I"), kept as words to listen for.
 function talk(text, voice = false, spelled = []) {
+  publicMind?.event('hear');
   if (voice) {
     const known = vocabNow().words;
     for (const w of spelled.slice(0, 5)) { const k = addWord(VOCAB, w, known); if (k) { diary(`listens for ${k} (you spelled it)`); pushState(); } }
@@ -878,7 +887,7 @@ function talk(text, voice = false, spelled = []) {
   let err = ''; child.stderr.on('data', (d) => { err += d; });
   child.on('close', (code) => {
     const changed = commitMind(); // whatever Lax learned or changed in its mind, with history, described by what changed
-    if (changed.startsWith('forgot:')) record('forgot', changed.slice(8)); // a note that was wrong: its learning record
+    if (changed.startsWith('forgot:')) { record('forgot', changed.slice(8)); publicMind?.event('forget'); } // a note that was wrong: its learning record
     voiceRun = null;
     const ok = result && !result.is_error;
     const say = ok ? spoken(result.result) : `Something went wrong. ${short(err || result?.result, 120)}`;
@@ -901,7 +910,9 @@ http.createServer(async (req, res) => {
   // The demo, live from the working folder (a local preview). Publicly, Cloudflare serves /demo itself from the last push
   // to main (scripts/demo.mjs), so it never reaches here. A fixed list from public/; the app runs in ?demo mode.
   if (req.method === 'GET' && (url.pathname === '/demo' || url.pathname.startsWith('/demo/'))) {
-    const DEMO_FILES = { '/demo': 'demo.html', '/demo/app': 'index.html', '/demo/lax.js': 'lax.js', '/demo/heard.js': 'heard.js' };
+    if (url.pathname === '/demo/mind/api/snap') return json(res, publicMind.view()); // as the Worker serves it publicly
+    const DEMO_FILES = { '/demo': 'demo.html', '/demo/app': 'index.html', '/demo/lax.js': 'lax.js', '/demo/heard.js': 'heard.js',
+      '/demo/mind': 'mind.html', '/demo/mind-view.js': 'mind-view.js', '/demo/net.js': 'net.js' };
     const f = DEMO_FILES[url.pathname]; if (!f) { res.writeHead(404); return res.end(); }
     let text = fs.readFileSync(path.join(ROOT, 'public', f), 'utf8');
     if (f === 'index.html') text = text.replace('src="lax.js', 'src="/demo/lax.js').replace('src="heard.js', 'src="/demo/heard.js');
@@ -941,14 +952,14 @@ http.createServer(async (req, res) => {
     const pty = q.get('pty') || ''; // a `lax` wrapper's socket (quick actions); only ever one of ours, in ~/.lax/run
     channels.set(cid, { res, cwd, project: proj(cwd), sessionPid: Number(q.get('session_pid')) || null, active: Date.now(),
       pty: path.dirname(pty) === path.join(HOME, 'run') ? pty : null });
-    feed(`● live session: ${proj(cwd)}`, 'session', proj(cwd)); pushState();
+    feed(`● live session: ${proj(cwd)}`, 'session', proj(cwd)); pushState(); publicMind?.event('session', { n: 1 });
     const ping = setInterval(() => res.write(': ping\n\n'), 20000);
     req.on('close', () => {
       clearInterval(ping); channels.delete(cid); clearRelays(() => false);
       for (const [id, p] of pending) if (p.relay?.cid === cid) p.finish('none');
       if (channelWait?.cid === cid) { clearTimeout(channelWait.timer); channelWait = null; }
       if (voiceTarget === cid) voiceTarget = 'background';
-      feed(`○ live session closed: ${proj(cwd)}`, 'session', proj(cwd)); pushState();
+      feed(`○ live session closed: ${proj(cwd)}`, 'session', proj(cwd)); pushState(); publicMind?.event('session', { n: -1 });
     });
     return;
   }
@@ -980,7 +991,7 @@ http.createServer(async (req, res) => {
     case '/api/rebirth': rebirth(!!b.knowledge); broadcast('reborn', {}); pushState(); return json(res, { ok: true });
     case '/api/knows': { // from the life menu: forget an episode or a skill, install or decline a drafted one
       const me = settings.name.toLowerCase();
-      if (b.episode) { const t = forgetEpisode(String(b.episode)); if (t) { record('forgot', `episode ${t}`); feed(`  forgot: ${short(t, 80)}`, 'diary', me); } return json(res, { ok: !!t }); }
+      if (b.episode) { const t = forgetEpisode(String(b.episode)); if (t) { record('forgot', `episode ${t}`); publicMind?.event('forget'); feed(`  forgot: ${short(t, 80)}`, 'diary', me); } return json(res, { ok: !!t }); }
       const name = String(b.skill || '');
       if (b.do === 'forget') return json(res, { ok: skills.forget(name) });
       if (b.do === 'install') { const why = skills.install(name); return json(res, { ok: !why, why }); }
@@ -991,7 +1002,7 @@ http.createServer(async (req, res) => {
     case '/api/recall': { // a session's `recall` tool (channel/lax-channel.mjs): Lax searches its long-term memory
       if (!isLocal(req)) return json(res, { ok: false, answer: 'Only from this Mac.' }, 403);
       const q = String(b.query || '').slice(0, 1000), who = b.cwd ? proj(String(b.cwd)) : settings.name.toLowerCase();
-      feed(`  recalling for ${who}: ${short(q, 80)}`, 'diary', settings.name.toLowerCase());
+      feed(`  recalling for ${who}: ${short(q, 80)}`, 'diary', settings.name.toLowerCase()); publicMind?.event('recall');
       const r = await recall(q, { claude: process.env.LAX_CLAUDE, cwd: b.cwd ? String(b.cwd) : '' });
       if (r.ok && r.found) { gainXp(1); save(); pushState(); }
       feed(`  ${r.ok && r.found ? 'recalled' : r.ok ? 'nothing in my memory' : 'couldn\'t recall'}: ${short(q, 80)}`, r.ok ? 'diary' : 'error', settings.name.toLowerCase());

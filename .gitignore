@@ -1,6 +1,7 @@
 data/
 node_modules
 demo/dist/
+demo/build/
 demo/.wrangler/
 .wrangler/
 previews/
