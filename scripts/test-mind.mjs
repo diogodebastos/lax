@@ -29,10 +29,12 @@ const { shape, clean, cleanEvent, cleanEvents } = await import('../lib/mind-shap
 const { readMind, createPublicMind } = await import('../lib/public-mind.mjs');
 
 // ---------- the snapshot: counts, and only the names you allowed ----------
-const live = () => ({ color: '#D97757', stage: 'blob', heard: 5, spoke: 4, busy: true, sessions: [{ project: 'lax', status: 'working', cwd: '/some/folder' }, { project: 'hidden-thing', status: 'idle' }, { project: 'elsewhere', status: 'weird' }] });
+const live = () => ({ color: '#D97757', stage: 'blob', heard: 5, spoke: 4, busy: true, owner: 'Diogo', sessions: [{ project: 'lax', status: 'working', cwd: '/some/folder' }, { project: 'hidden-thing', status: 'idle' }, { project: 'elsewhere', status: 'weird' }] });
 const snap = shape(readMind(live()), ['lax']);
 assert.deepEqual(leaks(snap), []);
-assert.deepEqual(Object.keys(snap), ['v', 'seen', 'look', 'you', 'projects', 'episodes', 'archive', 'skills', 'rules', 'week', 'busy', 'sessions']);
+assert.equal(snap.owner, 'diogo');
+assert.equal(shape(readMind({ ...live(), owner: 'Diogo <me@x.com>' }), []).owner, ''); // only a plain name
+assert.deepEqual(Object.keys(snap), ['v', 'seen', 'look', 'owner', 'you', 'projects', 'episodes', 'archive', 'skills', 'rules', 'week', 'busy', 'sessions']);
 assert.equal(snap.busy, true);
 assert.equal(clean({ ...snap, busy: 'yes' }), null);
 assert.deepEqual(snap.week, { heard: 5, spoke: 4, changes: 2 }); // this week: talked to, answered aloud, its mind changed (commits)

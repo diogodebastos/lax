@@ -233,7 +233,7 @@
     const sessions = (s.sessions || []).length, working = (s.sessions || []).filter((x) => x.state === 'working').length;
     const list = [
       { ...place('hearing'), text: 'hearing', n: counts(s).hearing, hot: hot.hearing > t }, { ...place('speech'), text: 'speech', n: counts(s).speech, hot: hot.speech > t },
-      { ...place('you'), text: 'you', n: s.you, hot: hot.you > t }, { ...place('memory'), text: 'memory', n: s.episodes.total, hot: hot.memory > t },
+      { ...place('you'), text: s.owner || 'you', n: s.you, hot: hot.you > t }, { ...place('memory'), text: 'memory', n: s.episodes.total, hot: hot.memory > t },
       { ...place('learning'), text: 'learning', n: counts(s).learning, hot: hot.learning > t },
       { ...place('skills'), text: 'skills', n: s.skills.installed + (s.skills.drafts ? `+${s.skills.drafts}` : ''), hot: hot.skills > t },
       { ...place('archive'), text: 'archive', n: s.archive, hot: hot.archive > t },

@@ -14,7 +14,7 @@
   const SAY = {
     recall: () => 'recalling', reflect: () => 'thinking it over', episode: (e) => `remembered ${e.n || 1} episode${(e.n || 1) > 1 ? 's' : ''}`,
     skill: () => 'drafted a skill', install: () => 'learned a skill', forget: () => 'forgot something', review: () => 'weekly review',
-    learned: () => 'learned something about you', rules: () => 'changed how it learns', archive: () => 'kept a transcript',
+    learned: () => `learned something about ${Mind.snap?.owner || 'you'}`, rules: () => 'changed how it learns', archive: () => 'kept a transcript',
     hear: () => 'listening', speak: () => 'answering', session: (e) => e.n > 0 ? 'a session plugged in' : 'a session left',
   };
 
@@ -116,7 +116,7 @@
   // ?fake (and the PNG previews): a made-up mind that keeps doing things.
   function fake() {
     const now = Date.now(), day = 86400e3;
-    Mind.setSnap({ v: 1, seen: qs.has('asleep') ? now - day : now, look: { color: qs.get('color') || '#d97757', stage: 'blob' },
+    Mind.setSnap({ v: 1, seen: qs.has('asleep') ? now - day : now, owner: 'diogo', look: { color: qs.get('color') || '#d97757', stage: 'blob' },
       you: 9, projects: [{ name: 'lax', notes: 24 }, { name: '', notes: 11 }, { name: '', notes: 6 }, { name: '', notes: 3 }],
       episodes: { total: 14, week: 3 }, archive: 400, skills: { drafts: 1, installed: 2 },
       rules: { learning: now - 2 * day, wishing: now - 9 * day, remembering: now - 1 * day }, week: { heard: 23, spoke: 19, changes: 31 },
