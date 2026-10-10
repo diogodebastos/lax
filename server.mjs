@@ -76,7 +76,8 @@ if (!kvGet('newPath', false)) { if (kvGet('pet', null)) milestone(`${readSetting
 const DEFAULTS = { name: 'Lax', voice: true, pitch: 1.6, speakDone: false, captions: false,
   phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system', learns: true, listen: 'phone',
   speciesPick: false, speciesOverride: null, // while the species bars get tuned: pick one by hand
-  publicProjects: ['lax'] }; // the projects whose names its mind on the website may show (the others show unnamed)
+  publicProjects: ['lax'], // the projects whose names its mind on the website may show (the others show unnamed)
+  publicName: '' }; // what its mind on the website calls you ('' : "you")
 // Preferences live in settings.json, a plain file you can read; rebirth leaves them alone.
 function readSettings() { try { return JSON.parse(fs.readFileSync(SETTINGS, 'utf8')); } catch { return {}; } }
 const writeSettings = (s) => fs.writeFileSync(SETTINGS, JSON.stringify(s, null, 2) + '\n');
@@ -678,7 +679,7 @@ if (voiceSessions[ASSISTANT] && !laxTalk.last) {
 // ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
 ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addSkills(); addEpisodesToLearning(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice(); addEpisodesAdvice();
 // ---------- its mind on the website (lib/public-mind.mjs): the shape of what it knows and does, never what's in it ----------
-publicMind = createPublicMind({ live: () => { const v = petView(); return { color: v.look?.color, stage: v.stage, sessions: sessionList(), heard: weekCount('heard'), spoke: weekCount('spoke'), busy: working() }; },
+publicMind = createPublicMind({ live: () => { const v = petView(); return { color: v.look?.color, stage: v.stage, sessions: sessionList(), heard: weekCount('heard'), spoke: weekCount('spoke'), busy: working(), owner: settings.publicName || '' }; },
   allow: () => settings.publicProjects || [], log: (...a) => console.log('[mind]', ...a) });
 const mindEvent = (kind, extra) => publicMind.event(kind, extra);
 // Lax at work, as the app shows it: a session of yours working (any, as the hooks see them), its assistant answering
