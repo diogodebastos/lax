@@ -76,8 +76,9 @@
   };
   window.Mind = Mind;
 
-  // Live: the Worker (demo/worker.mjs) sends the snapshot and the last events when we connect, then every push from the
-  // Mac. Where there's no socket (the local preview, or it fails), the same thing is asked for every few seconds.
+  // Live: the Worker (demo/worker.mjs) sends the snapshot when we connect, then every push from the Mac with what just
+  // happened. Where there's no socket (the local preview, or it fails), the snapshot is asked for every few seconds
+  // (the local preview also has the last events, played as they come).
   const API = '/demo/mind/api/';
   function live() {
     let ws, opened = false;
