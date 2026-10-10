@@ -211,10 +211,11 @@
     }
     const hopping = !pet.seat && pet.mode === 'hop' && t < pet.until, up = hopping ? Math.abs(Math.sin((t - pet.hops) / 450 * Math.PI)) * 2.5 : pet.seat && hot.core > t ? Math.abs(Math.sin(t / 150)) * 0.8 : 0;
     const walking = !pet.seat && pet.mode === 'walk', z = pet.seat ? 0 : 3;
+    const breath = asleep && Math.floor(t / 1400) % 2 ? -0.6 : 0; // asleep: slow breaths, a pixel down and back
     for (const o of [lax, bubble]) o.material.depthTest = !!pet.seat && !pet.tp;
     lax.material.map = tex(Mind.sprite({ dir: asleep || pet.seat ? 0 : pet.dir, step: walking ? Math.floor(t / 140) % 2 : 0, sleep: asleep }));
     if (pet.tp) { lax.position.set(x, y + up, z); lax.scale.set(5.5 * sx, 5 * sy, 1); }
-    else onPixels(lax, x, y + up, z, 11, 10, 0.5);
+    else onPixels(lax, x, y + up + breath, z, 11, 10, 0.5);
     bubble.visible = !asleep && !pet.tp && t < pet.chat; if (bubble.visible) onPixels(bubble, x + 1.2, y + 5 + up, z, 15, 10, 0);
     ring.material.color.set(pet.seat ? (hot.core > t ? glow : '#8a8378') : '#3a332c');
     zzz.visible = asleep;

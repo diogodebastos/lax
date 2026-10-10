@@ -30,9 +30,10 @@
       body.forEach((r, j) => [...r].forEach((c, i) => { if (c === 'x') ctx.fillRect(ox + i - 1, oy + j - 1, 3, 3); }));
       body.forEach((r, j) => [...r].forEach((c, i) => { if (c !== 'x') return;
         ctx.fillStyle = j < 2 && i < 5 ? hi : j > 4 ? lo : color; ctx.fillRect(ox + i, oy + j, 1, 1); }));
-      const ex = dir < 0 ? [1, 4] : dir > 0 ? [4, 7] : [2, 6];
+      // Eyes: open, two tall white pixels; asleep, shut: a flat dash each, a row lower (like the app's closed eyes).
       ctx.fillStyle = sleep ? '#120c0a' : '#fff8ee';
-      for (const e of ex) ctx.fillRect(ox + e, oy + 3, 1, sleep ? 1 : 2);
+      if (sleep) for (const e of [1, 6]) ctx.fillRect(ox + e, oy + 4, 2, 1);
+      else for (const e of dir < 0 ? [1, 4] : dir > 0 ? [4, 7] : [2, 6]) ctx.fillRect(ox + e, oy + 3, 1, 2);
       ctx.fillStyle = lo; // feet
       ctx.fillRect(ox + (step ? 1 : 2), oy + 7, 2, 1); ctx.fillRect(ox + (step ? 6 : 5), oy + 7, 2, 1);
     },
@@ -46,8 +47,8 @@
     // A rising "z" while it sleeps, in pixels.
     zzz(ctx, x, y, t) {
       ctx.fillStyle = '#8a8378';
-      for (let k = 0; k < 2; k++) { const p = ((t / 1600) + k / 2) % 1, zx = Math.round(x + p * 6 + k * 2), zy = Math.round(y - p * 12);
-        ctx.globalAlpha = 1 - p; ctx.fillRect(zx, zy, 4, 1); ctx.fillRect(zx + 2, zy + 1, 1, 1); ctx.fillRect(zx + 1, zy + 2, 1, 1); ctx.fillRect(zx, zy + 3, 4, 1); }
+      for (let k = 0; k < 2; k++) { const p = ((t / 1600) + k / 2) % 1, zx = Math.round(x + p * 4), zy = Math.round(y - p * 10);
+        ctx.globalAlpha = 1 - p; ctx.fillRect(zx, zy, 5, 1); for (let d = 1; d < 4; d++) ctx.fillRect(zx + 4 - d, zy + d, 1, 1); ctx.fillRect(zx, zy + 4, 5, 1); }
       ctx.globalAlpha = 1;
     },
     event(e) {
