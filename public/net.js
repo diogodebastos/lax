@@ -17,14 +17,19 @@
   const PROJ = [[-22, 12, -12], [-24, -9, 9], [-8, 19, -18], [-18, 1, -24]];
   const LINKS = [['core', 'hearing'], ['core', 'speech'], ['core', 'you'], ['core', 'memory'], ['core', 'learning'], ['memory', 'you'],
     ['memory', 'learning'], ['learning', 'skills'], ['memory', 'archive'], ['learning', 'you']];
-  // What lights up for each event: hops in order, each pulse leaving as the last arrives.
-  const ROUTES = { recall: ['core', 'memory', 'archive'], reflect: ['memory', 'learning', 'you'], episode: ['core', 'memory'], skill: ['learning', 'skills'],
+  // Where each event goes, along the links: from one node to each of the others. An event that says where it went (to:
+  // a recall's sources, what a change touched) goes there instead.
+  const ROUTES = { recall: ['core', 'memory'], reflect: ['memory', 'learning'], episode: ['core', 'memory'], skill: ['learning', 'skills'],
     install: ['skills', 'core'], forget: ['core', 'memory'], learned: ['core', 'you'], review: ['memory', 'learning'], rules: ['memory', 'learning'],
     archive: ['memory', 'archive'], hear: ['hearing', 'core'], speak: ['core', 'speech'] };
+  // What it's doing for as long as it lasts (the snapshot's doing): pulses keep running on these links meanwhile.
+  const DOING = { hearing: { every: 450, links: [['hearing', 'core']] }, speaking: { every: 450, links: [['core', 'speech']] },
+    reflecting: { every: 900, links: [['memory', 'learning'], ['learning', 'you']] }, recalling: { every: 700, links: [['core', 'memory']] } };
 
   let renderer, scene, cam, amb, sun, world, net, lax, zzz, zzzCtx, ring, floor, bubble, beam;
   const nodes = {}, lines = {}, pulses = [], hot = {}, texs = new WeakMap();
-  let nextLive = 0, sig = '';
+  let sig = '';
+  const nextDo = {};
   // Turning the network: drag to turn it, pinch or scroll to zoom. It always turns slowly by itself, except while Lax sleeps.
   const view = { yaw: -0.3, pitch: 0.3, zoom: 1, vy: 0, vp: 0, touched: -1e9, ptrs: new Map(), pinch: 0 };
   const tex = (cv) => { let t = texs.get(cv); if (!t) { t = new T.CanvasTexture(cv); t.minFilter = t.magFilter = T.NearestFilter; texs.set(cv, t); } return t; };
@@ -128,9 +133,8 @@
     if (!view.ptrs.size) { view.yaw += view.vy * dt; view.pitch = Math.max(-1.2, Math.min(1.2, view.pitch + view.vp * dt)); view.vy *= 0.94; view.vp *= 0.94;
       if (!asleep) view.yaw += dt * 0.00008; } // always turning slowly, unless Lax sleeps
     petUpdate(t, dt);
-    // Working sessions keep talking to Lax: a pulse up their link every so often.
-    if (!asleep && t > nextLive) { nextLive = t + 900;
-      (s.sessions || []).slice(0, 6).forEach((ss, i) => { if (ss.state === 'working' && Math.random() < 0.6) pulse('s' + i, 'core', t); }); }
+    for (const [k, d] of Object.entries(DOING)) if (!asleep && s.doing?.[k] && !(nextDo[k] > t)) { nextDo[k] = t + d.every;
+      for (const [a, b] of d.links) pulse(a, b, t); hot[d.links[0][0]] = t + 1500; }
     for (let i = pulses.length - 1; i >= 0; i--) { const p = pulses[i];
       if (t - p.t0 > p.dur) { hot[p.to] = t + 2500; hot[p.from + '-' + p.to] = t + 1200; world.remove(...p.bits); pulses.splice(i, 1); } }
   }
@@ -245,11 +249,31 @@
 
   Mind.view('synapses', { W: 240, H: 160, init, resize, update, render,
     event(e) {
-      let r = ROUTES[e.kind]; if (!r) return;
-      if (e.kind === 'reflect' && e.project != null && nodes['p' + e.project]) r = ['p' + e.project, 'memory', 'learning', 'you'];
-      const t0 = performance.now(), t = t0 + (pet.seat || e.kind === 'archive' ? 0 : 650); // let it get to its seat first
-      if (e.kind !== 'archive') pet.busy = Math.max(pet.busy, t + r.length * 650 + 2200);
-      hot[r[0]] = t + 2500;
-      r.slice(1).forEach((to, i) => pulse(r[i], to, t + i * 650, e.kind === 'forget'));
+      const t0 = performance.now();
+      if (e.kind === 'tool') { // one pulse per real tool call, up its session's link
+        if (!nodes['s' + e.session]) return;
+        for (let i = 0; i < Math.min(8, e.n || 1); i++) pulse('s' + e.session, 'core', t0 + i * 180);
+        return;
+      }
+      const r = ROUTES[e.kind]; if (!r) return;
+      let from = r[0], targets = [r[1]];
+      if (e.to?.length) targets = e.to.map((p) => (p === 'project' ? 'p' + e.project : p)).filter((k) => nodes[k]);
+      if (e.kind === 'reflect' && nodes['p' + e.project]) { from = 'p' + e.project; targets = ['memory']; }
+      if (e.kind === 'recall' || e.to?.length) from = e.kind === 'rules' ? 'memory' : 'core';
+      const t = t0 + (pet.seat || ['archive', 'session'].includes(e.kind) ? 0 : 650); // let it get to its seat first
+      let longest = 0;
+      for (const to of targets) longest = Math.max(longest, travel(from, to, t, e.kind === 'forget'));
+      if (!['archive', 'session'].includes(e.kind)) pet.busy = Math.max(pet.busy, t + longest + 2200);
+      hot[from] = t + 2500;
     } });
+  // Pulses from one node to another along the links (the shortest way), each hop leaving as the last arrives. Its length in ms.
+  function travel(from, to, t, grey) {
+    const next = {}; for (const k of Object.keys(lines)) { const [a, b] = k.split('-'); (next[a] ||= new Set()).add(b); }
+    const prev = { [from]: null }, q = [from];
+    while (q.length) { const n = q.shift(); if (n === to) break; for (const m of next[n] || []) if (!(m in prev)) { prev[m] = n; q.push(m); } }
+    if (!(to in prev)) return 0;
+    const hops = []; for (let n = to; prev[n] != null; n = prev[n]) hops.unshift([prev[n], n]);
+    hops.forEach(([a, b], i) => pulse(a, b, t + i * 650, grey));
+    return hops.length * 650;
+  }
 })();

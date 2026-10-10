@@ -26,15 +26,16 @@ const NEVER = ['NOTE_ABOUT_YOU', 'NOTE_TWO', 'Lisbon', 'PROJECT_NOTE', 'hidden-t
 const leaks = (x) => NEVER.filter((w) => JSON.stringify(x).includes(w));
 
 const { shape, clean, cleanEvent, cleanEvents } = await import('../lib/mind-shape.mjs');
-const { readMind, createPublicMind } = await import('../lib/public-mind.mjs');
+const { readMind, createPublicMind, placesOf, filesIn } = await import('../lib/public-mind.mjs');
 
 // ---------- the snapshot: counts, and only the names you allowed ----------
-const live = () => ({ color: '#D97757', stage: 'blob', heard: 5, spoke: 4, busy: true, owner: 'Diogo', sessions: [{ project: 'lax', status: 'working', cwd: '/some/folder' }, { project: 'hidden-thing', status: 'idle' }, { project: 'elsewhere', status: 'weird' }] });
+const live = () => ({ color: '#D97757', stage: 'blob', heard: 5, spoke: 4, busy: true, owner: 'Diogo', doing: { hearing: true, secret: true }, sessions: [{ id: 'S1', project: 'lax', status: 'working', cwd: '/some/folder' }, { project: 'hidden-thing', status: 'idle' }, { project: 'elsewhere', status: 'weird' }] });
 const snap = shape(readMind(live()), ['lax']);
 assert.deepEqual(leaks(snap), []);
 assert.equal(snap.owner, 'diogo');
 assert.equal(shape(readMind({ ...live(), owner: 'Diogo <me@x.com>' }), []).owner, ''); // only a plain name
-assert.deepEqual(Object.keys(snap), ['v', 'seen', 'look', 'owner', 'you', 'projects', 'episodes', 'archive', 'skills', 'rules', 'week', 'busy', 'sessions']);
+assert.deepEqual(Object.keys(snap), ['v', 'seen', 'look', 'owner', 'you', 'projects', 'episodes', 'archive', 'skills', 'rules', 'week', 'busy', 'doing', 'sessions']);
+assert.deepEqual(snap.doing, { hearing: true, speaking: false, reflecting: false, recalling: false });
 assert.equal(snap.busy, true);
 assert.equal(clean({ ...snap, busy: 'yes' }), null);
 assert.deepEqual(snap.week, { heard: 5, spoke: 4, changes: 2 }); // this week: talked to, answered aloud, its mind changed (commits)
@@ -61,6 +62,15 @@ assert.equal(clean(null), null); assert.equal(clean({}), null);
 assert.deepEqual(cleanEvent({ kind: 'recall', at: 5 }), { kind: 'recall', at: 5 });
 assert.equal(cleanEvent({ kind: 'recall', at: 5, query: 'how did we' }), null); // what it asked never travels
 assert.equal(cleanEvent({ kind: 'rm -rf', at: 5 }), null);
+assert.deepEqual(cleanEvent({ kind: 'recall', at: 5, to: ['memory', 'archive'] }), { kind: 'recall', at: 5, to: ['memory', 'archive'] });
+assert.equal(cleanEvent({ kind: 'recall', at: 5, to: ['memory', '/etc/passwd'] }), null); // only the places there are
+assert.deepEqual(cleanEvent({ kind: 'tool', at: 5, n: 3, session: 1 }), { kind: 'tool', at: 5, n: 3, session: 1 });
+
+// ---------- where things went ----------
+assert.deepEqual(placesOf(['CLAUDE.md', 'projects/lax.md', 'episodes/2026-10/x.md']), { to: ['you', 'project', 'memory'], project: 'lax' });
+assert.deepEqual(placesOf(['learning.md', 'skills/deploy/SKILL.md']), { to: ['learning', 'skills'], project: undefined });
+assert.deepEqual(placesOf(filesIn('Fixed on 2026-10-07 in lax. Found in episodes/2026-10/2026-10-07-tunnel.md and -Users-me-lax/abc123.jsonl')).to, ['memory', 'archive']);
+assert.deepEqual(filesIn('nothing here'), []);
 assert.deepEqual(cleanEvents([{ kind: 'hear', at: 1 }, { kind: 'x', at: 2 }, { kind: 'reflect', at: 3, project: 1 }]), [{ kind: 'hear', at: 1 }, { kind: 'reflect', at: 3, project: 1 }]);
 
 // ---------- sending it ----------
@@ -68,10 +78,11 @@ const sent = [];
 const fakeFetch = async (url, o) => { sent.push({ url, auth: o.headers.authorization, body: JSON.parse(o.body) }); return { ok: true }; };
 const pm = createPublicMind({ live, allow: () => ['lax'], key: () => 'k3y', origin: () => 'https://lax.example', fetch: fakeFetch });
 pm.event('recall'); pm.event('reflect', { project: 'hidden-thing' }); pm.event('nonsense'); pm.event('episode', { n: 2 });
+pm.tool('S1'); pm.tool('S1'); pm.tool('S1'); pm.tool('not-a-session');
 assert.equal(await pm.push(), true);
 assert.equal(sent.length, 1);
 assert.equal(sent[0].url, 'https://lax.example/demo/mind/api/push'); assert.equal(sent[0].auth, 'Bearer k3y');
-assert.deepEqual(sent[0].body.events.map((e) => [e.kind, e.project, e.n]), [['recall', undefined, undefined], ['reflect', 1, undefined], ['episode', undefined, 2]]);
+assert.deepEqual(sent[0].body.events.map((e) => [e.kind, e.project, e.n, e.session]), [['recall', undefined, undefined, undefined], ['reflect', 1, undefined, undefined], ['episode', undefined, 2, undefined], ['tool', undefined, 3, 0]]);
 assert.deepEqual(clean(sent[0].body.snap), sent[0].body.snap);
 assert.deepEqual(leaks(sent[0].body), []);
 assert.equal(await pm.push(), false); // nothing changed, nothing new: not sent again

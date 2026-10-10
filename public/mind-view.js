@@ -63,7 +63,7 @@
       ctx.globalAlpha = 1;
     },
     event(e) {
-      Mind.say((SAY[e.kind] || (() => e.kind))(e));
+      if (SAY[e.kind]) Mind.say(SAY[e.kind](e)); // a tool call is only a pulse
       Mind.current?.event?.(e);
     },
     setSnap(s) { Mind.snap = s; Mind.current?.snap?.(s); },
@@ -91,7 +91,7 @@
   // Live: the Worker (demo/worker.mjs) sends the snapshot and the last events when we connect, then every push from the
   // Mac. Where there's no socket (the local preview, or it fails), the same thing is asked for every few seconds.
   const API = '/demo/mind/api/';
-  const sayLast = (recent) => { for (const e of (recent || []).slice(-3)) Mind.say((SAY[e.kind] || (() => e.kind))(e)); };
+  const sayLast = (recent) => { for (const e of (recent || []).filter((e) => SAY[e.kind]).slice(-3)) Mind.say(SAY[e.kind](e)); };
   function live() {
     let ws, opened = false;
     try { ws = new WebSocket(location.origin.replace(/^http/, 'ws') + API + 'live'); } catch { return poll(); }
@@ -119,15 +119,18 @@
     Mind.setSnap({ v: 1, seen: qs.has('asleep') ? now - day : now, owner: 'diogo', look: { color: qs.get('color') || '#d97757', stage: 'blob' },
       you: 9, projects: [{ name: 'lax', notes: 24 }, { name: '', notes: 11 }, { name: '', notes: 6 }, { name: '', notes: 3 }],
       episodes: { total: 14, week: 3 }, archive: 400, skills: { drafts: 1, installed: 2 },
-      rules: { learning: now - 2 * day, wishing: now - 9 * day, remembering: now - 1 * day }, week: { heard: 23, spoke: 19, changes: 31 },
+      rules: { learning: now - 2 * day, wishing: now - 9 * day, remembering: now - 1 * day }, week: { heard: 23, spoke: 19, changes: 31 }, doing: {},
       sessions: [{ p: 0, state: 'working' }, { p: 1, state: 'idle' }, { p: null, state: 'working' }] });
     if (qs.has('asleep')) return;
-    const kinds = ['hear', 'speak', 'recall', 'reflect', 'episode', 'skill', 'forget', 'learned', 'review', 'archive'];
+    const kinds = ['tool', 'hear', 'speak', 'tool', 'recall', 'reflect', 'episode', 'skill', 'forget', 'learned', 'review', 'archive'];
     let i = 0;
     const tick = () => {
       const kind = qs.get('event') || kinds[i++ % kinds.length], s = Mind.snap, e = { kind, at: Date.now() };
       if (kind === 'episode') { e.n = 1; s.episodes.total++; s.episodes.week++; }
       if (kind === 'skill') s.skills.drafts++;
+      const lasts = { hear: 'hearing', speak: 'speaking', reflect: 'reflecting', recall: 'recalling' }[kind]; // as if it took a moment
+      if (lasts) { s.doing[lasts] = true; setTimeout(() => { s.doing[lasts] = false; }, 3000); }
+      if (kind === 'tool') { e.session = 0; e.n = 4; }
       if (kind === 'hear') s.week.heard++; if (kind === 'speak') s.week.spoke++; if (['episode', 'learned', 'review', 'forget'].includes(kind)) s.week.changes++;
       if (kind === 'forget') s.episodes.total = Math.max(0, s.episodes.total - 1);
       if (kind === 'learned') s.you++;

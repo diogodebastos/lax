@@ -886,6 +886,9 @@ function releaseHold(inside) {
 window.laxOnSpeech = (text, final, alts) => { if (!listening) return; if (alts?.length) text = LaxHeard.pick(alts, vocab.words, vocab.heard); final ? stretchEnded(text) : partial(text); };
 window.laxOnSpeechBegin = () => { if (listening) speechBegan(); };
 window.laxOnSpeaking = (on) => { speaking = !!on; }; // the app's TTS started or stopped: Lax's mouth moves
+// Its mind on the website shows hearing and speaking for as long as they last: the Mac hears when each starts and stops.
+const told = { listening: false, speaking: false };
+if (!DEMO) setInterval(() => { for (const [k, v] of [['listening', listening], ['speaking', speaking]]) if (v !== told[k]) { told[k] = v; api('/api/voice-state', { [k]: v }).catch(() => {}); } }, 250);
 window.laxOnSpeechError = (error) => {
   if (!listening || error === 'aborted') return; // aborted: one of ours (a restart or a cancel)
   diag('sr-error', { error, native: true });
