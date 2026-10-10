@@ -21,6 +21,7 @@ put(path.join(MIND, 'learning.md'), 'LEARNING_TEXT');
 put(path.join(HOME, 'skills.json'), JSON.stringify({ skills: [{ name: 'SKILL_NAME', why: 'SKILL_WHY', status: 'installed' }, { name: 'draft-x', status: 'new' }] }));
 put(path.join(HOME, 'archive', 'state.json'), JSON.stringify({ files: { 'a/SECRET_SESSION.jsonl': {}, 'b/c.jsonl': {} } }));
 execFileSync('git', ['-C', MIND, 'init', '-q']);
+for (const m of ['learned from lax: a', 'kept an episode']) execFileSync('git', ['-C', MIND, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', m]);
 const NEVER = ['NOTE_ABOUT_YOU', 'NOTE_TWO', 'Lisbon', 'PROJECT_NOTE', 'hidden-thing', 'HIDDEN_NOTE', 'EPISODE', 'tunnel', 'OLD_TITLE', 'LEARNING_TEXT', 'SKILL_NAME', 'SKILL_WHY', 'draft-x', 'SECRET_SESSION', 'some/folder'];
 const leaks = (x) => NEVER.filter((w) => JSON.stringify(x).includes(w));
 
@@ -28,10 +29,11 @@ const { shape, clean, cleanEvent, cleanEvents } = await import('../lib/mind-shap
 const { readMind, createPublicMind } = await import('../lib/public-mind.mjs');
 
 // ---------- the snapshot: counts, and only the names you allowed ----------
-const live = () => ({ color: '#D97757', stage: 'blob', sessions: [{ project: 'lax', status: 'working', cwd: '/some/folder' }, { project: 'hidden-thing', status: 'idle' }, { project: 'elsewhere', status: 'weird' }] });
+const live = () => ({ color: '#D97757', stage: 'blob', heard: 5, spoke: 4, sessions: [{ project: 'lax', status: 'working', cwd: '/some/folder' }, { project: 'hidden-thing', status: 'idle' }, { project: 'elsewhere', status: 'weird' }] });
 const snap = shape(readMind(live()), ['lax']);
 assert.deepEqual(leaks(snap), []);
-assert.deepEqual(Object.keys(snap), ['v', 'seen', 'look', 'you', 'projects', 'episodes', 'archive', 'skills', 'rules', 'sessions']);
+assert.deepEqual(Object.keys(snap), ['v', 'seen', 'look', 'you', 'projects', 'episodes', 'archive', 'skills', 'rules', 'week', 'sessions']);
+assert.deepEqual(snap.week, { heard: 5, spoke: 4, changes: 2 }); // this week: talked to, answered aloud, its mind changed (commits)
 assert.equal(snap.you, 2);
 assert.deepEqual(snap.projects, [{ name: 'lax', notes: 3 }, { name: '', notes: 1 }]); // the hidden one: there, unnamed
 assert.deepEqual(snap.episodes, { total: 2, week: 1 });
@@ -48,6 +50,7 @@ assert.equal(clean({ ...snap, note: 'x' }), null); // an extra field
 assert.equal(clean({ ...snap, projects: [{ name: 'a'.repeat(40), notes: 1 }] }), null); // a long name
 assert.equal(clean({ ...snap, projects: [{ name: 'Has Spaces', notes: 1 }] }), null);
 assert.equal(clean({ ...snap, you: 'nine' }), null); // a wrong type
+assert.equal(clean({ ...snap, week: { ...snap.week, words: 'hi' } }), null);
 assert.equal(clean({ ...snap, look: { color: 'red', stage: 'blob' } }), null);
 assert.equal(clean({ ...snap, sessions: [{ p: 0, state: 'working', cwd: '/x' }] }), null);
 assert.equal(clean(null), null); assert.equal(clean({}), null);
