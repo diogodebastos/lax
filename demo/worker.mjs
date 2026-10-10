@@ -1,7 +1,9 @@
 // The public demo's one piece of code: Lax's mind, live (lax.diogodebastos.com/demo/mind, Phase 6.1). Everything else
 // under /demo is static (wrangler.jsonc: assets, built by scripts/demo.mjs). The Mac pushes the public shape of its mind
 // and what it's doing (lib/public-mind.mjs); one Durable Object keeps the last of it and hands it to every viewer, so the
-// page works with the Mac off. What comes in is checked against the shape (lib/mind-shape.mjs) before it's kept.
+// page works with the Mac off. What comes in is checked against the shape (lib/mind-shape.mjs) by the Worker in front,
+// which always runs the newest code: a Durable Object can outlive a deploy while viewers stay connected, so it only
+// keeps and hands out what it's given, and never needs to change when the shape does.
 //   POST /demo/mind/api/push   from the Mac, with its key (secret MIND_KEY): { snap, events }
 //   GET  /demo/mind/api/live   a WebSocket: { snap, recent } on connect, then { snap, events } on each push
 //   GET  /demo/mind/api/snap   the same as one JSON answer, for viewers without a socket
@@ -14,10 +16,7 @@ export class Mind extends DurableObject {
   async fetch(req) {
     const path = new URL(req.url).pathname;
     if (path.endsWith('/push')) {
-      let body; try { body = await req.json(); } catch { return new Response('bad json', { status: 400 }); }
-      const snap = clean(body?.snap); if (!snap) return new Response('not the shape', { status: 422 });
-      snap.seen = Date.now(); // the Worker's clock says when the Mac was last heard from
-      const events = cleanEvents(body.events);
+      const { snap, events } = await req.json(); // checked by the Worker (below)
       const recent = [...((await this.ctx.storage.get('recent')) || []), ...events].slice(-RECENT);
       await this.ctx.storage.put({ snap, recent });
       const msg = JSON.stringify({ snap, events });
@@ -52,7 +51,13 @@ export default {
     if (route === 'push') {
       if (req.method !== 'POST') return new Response('POST only', { status: 405 });
       if (!(await sameKey((req.headers.get('authorization') || '').replace(/^Bearer /, ''), env.MIND_KEY))) return new Response('no', { status: 401 });
+      let body; try { body = await req.json(); } catch { return new Response('bad json', { status: 400 }); }
+      const snap = clean(body?.snap); if (!snap) return new Response('not the shape', { status: 422 });
+      snap.seen = Date.now(); // the Worker's clock says when the Mac was last heard from
+      return room(env).fetch(new Request(req.url, { method: 'POST', body: JSON.stringify({ snap, events: cleanEvents(body.events) }) }));
     } else if (!['live', 'snap'].includes(route) || req.method !== 'GET') return new Response('not found', { status: 404 });
-    return env.MIND.get(env.MIND.idFromName('lax')).fetch(req);
+    return room(env).fetch(req);
   },
 };
+// The one room everyone watches. ('lax' was the first; it ran the shape check itself and outlived a deploy.)
+const room = (env) => env.MIND.get(env.MIND.idFromName('mind'));
