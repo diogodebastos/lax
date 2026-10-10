@@ -678,9 +678,13 @@ if (voiceSessions[ASSISTANT] && !laxTalk.last) {
 // ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
 ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addSkills(); addEpisodesToLearning(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice(); addEpisodesAdvice();
 // ---------- its mind on the website (lib/public-mind.mjs): the shape of what it knows and does, never what's in it ----------
-publicMind = createPublicMind({ live: () => { const v = petView(); return { color: v.look?.color, stage: v.stage, sessions: sessionList(), heard: weekCount('heard'), spoke: weekCount('spoke') }; },
+publicMind = createPublicMind({ live: () => { const v = petView(); return { color: v.look?.color, stage: v.stage, sessions: sessionList(), heard: weekCount('heard'), spoke: weekCount('spoke'), busy: working() }; },
   allow: () => settings.publicProjects || [], log: (...a) => console.log('[mind]', ...a) });
 const mindEvent = (kind, extra) => publicMind.event(kind, extra);
+// Lax at work, as the app shows it: a session of yours working (any, as the hooks see them), its assistant answering
+// you, a session thinking over what you said, a reflection or the weekly review, a recall.
+let recalling = 0;
+const working = () => sessionList().some((s) => s.status === 'working') || !!voiceRun || !!channelWait || brain.busy() || recalling > 0;
 const brain = createBrain({ db, settings: () => settings, feed, mind: mindEvent, diary: (t) => diary(t), broadcast, gainXp: (n) => { gainXp(n); save(); pushState(); },
   sessionInfo: (sid) => sessions.get(sid), skip: laxOwn, claude: process.env.LAX_CLAUDE,
   wish: (w) => learn.gap({ ...w, project: 'mind', via: 'review' }), // a fix its weekly review says needs code
@@ -1009,7 +1013,8 @@ http.createServer(async (req, res) => {
       if (!isLocal(req)) return json(res, { ok: false, answer: 'Only from this Mac.' }, 403);
       const q = String(b.query || '').slice(0, 1000), who = b.cwd ? proj(String(b.cwd)) : settings.name.toLowerCase();
       feed(`  recalling for ${who}: ${short(q, 80)}`, 'diary', settings.name.toLowerCase()); publicMind?.event('recall');
-      const r = await recall(q, { claude: process.env.LAX_CLAUDE, cwd: b.cwd ? String(b.cwd) : '' });
+      recalling++; publicMind.changed();
+      const r = await recall(q, { claude: process.env.LAX_CLAUDE, cwd: b.cwd ? String(b.cwd) : '' }).finally(() => { recalling--; publicMind.changed(); });
       if (r.ok && r.found) { gainXp(1); save(); pushState(); }
       feed(`  ${r.ok && r.found ? 'recalled' : r.ok ? 'nothing in my memory' : 'couldn\'t recall'}: ${short(q, 80)}`, r.ok ? 'diary' : 'error', settings.name.toLowerCase());
       return json(res, r);
