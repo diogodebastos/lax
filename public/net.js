@@ -180,8 +180,10 @@
     if (Mind.asleep()) { if (pet.seat && !pet.tp) teleport(t, false); pet.mode = 'sleep'; return; }
     if (pet.mode === 'sleep') pet.mode = 'idle';
     if (pet.tp) { if (t - pet.tp.t0 > 600) { pet.seat = pet.tp.toSeat; pet.tp = null; pet.until = t + 800; } return; }
-    if (!pet.seat && pet.busy > t) return teleport(t, true);
-    if (pet.seat) { if (pet.busy < t) teleport(t, false); else if (t > pet.chat && Math.random() < 0.004) { bubble.material.map = gibberish(true); pet.chat = t + 1600; } return; }
+    // At work (the Mac says so: a session working, answering you, reflecting, recalling), or a moment for an event.
+    const working = Mind.snap?.busy || pet.busy > t;
+    if (!pet.seat && working) return teleport(t, true);
+    if (pet.seat) { if (!working) teleport(t, false); else if (t > pet.chat && Math.random() < 0.004) { bubble.material.map = gibberish(true); pet.chat = t + 1600; } return; }
     const [a, b] = roam();
     if (pet.mode === 'walk') { const d = pet.tx - pet.x, v = 0.006 * dt; pet.dir = Math.sign(d) || pet.dir;
       if (Math.abs(d) <= v) { pet.x = pet.tx; pet.mode = 'idle'; pet.until = t + 600 + Math.random() * 1500; } else pet.x += Math.sign(d) * v; return; }
