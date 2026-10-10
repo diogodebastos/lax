@@ -27,7 +27,7 @@ import { FRESH, FRESH_HOURS, FRESH_TOKENS, freshDue, contextSize, recap } from '
 import { claudeAlive } from './lib/claude-pid.mjs';
 import { createArchive } from './lib/archive.mjs';
 import { recall } from './lib/recall.mjs';
-import { createPublicMind } from './lib/public-mind.mjs';
+import { createPublicMind, placesOf, lastCommitFiles, filesIn } from './lib/public-mind.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const PORT = Number(process.env.LAX_PORT || 7777);
@@ -502,6 +502,7 @@ function onHook(h) {
       if (/^(Edit|Write|MultiEdit)$/.test(n) && LANG[ext]) pet.langs[LANG[ext]] = (pet.langs[LANG[ext]] || 0) + 1;
       if (!mine) narrate(h, project);
       feed(describeTool(n, h.tool_input), 'tool', project, sid, stepParts(n, h.tool_input, h)); logEvent(sid, project, 'tool', describeTool(n, h.tool_input), repo);
+      publicMind?.tool(sid);
       break;
     }
     case 'PostToolUse': {
@@ -679,13 +680,18 @@ if (voiceSessions[ASSISTANT] && !laxTalk.last) {
 // ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
 ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addSkills(); addEpisodesToLearning(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice(); addEpisodesAdvice();
 // ---------- its mind on the website (lib/public-mind.mjs): the shape of what it knows and does, never what's in it ----------
-publicMind = createPublicMind({ live: () => { const v = petView(); return { color: v.look?.color, stage: v.stage, sessions: sessionList(), heard: weekCount('heard'), spoke: weekCount('spoke'), busy: working(), owner: settings.publicName || '' }; },
+publicMind = createPublicMind({ live: () => { const v = petView(); return { color: v.look?.color, stage: v.stage, sessions: sessionList(), heard: weekCount('heard'), spoke: weekCount('spoke'), busy: working(), owner: settings.publicName || '', doing: doing() }; },
   allow: () => settings.publicProjects || [], log: (...a) => console.log('[mind]', ...a) });
-const mindEvent = (kind, extra) => publicMind.event(kind, extra);
+// What it learned, forgot or changed in how it learns goes where its last commit says (lib/public-mind.mjs placesOf).
+const mindEvent = (kind, extra = {}) => { if (['learned', 'forget', 'rules'].includes(kind) && !extra.to) { const p = placesOf(lastCommitFiles()); extra = { ...extra, to: p.to, project: extra.project ?? p.project }; }
+  publicMind.event(kind, extra); };
 // Lax at work, as the app shows it: a session of yours working (any, as the hooks see them), its assistant answering
 // you, a session thinking over what you said, a reflection or the weekly review, a recall.
 let recalling = 0;
-const working = () => sessionList().some((s) => s.status === 'working') || !!voiceRun || !!channelWait || brain.busy() || recalling > 0;
+// The phone says while its mic is open and while it speaks (/api/voice-state); each lapses on its own if it never says stop.
+const voiceState = { listening: 0, speaking: 0 };
+const doing = () => ({ hearing: Date.now() < voiceState.listening, speaking: Date.now() < voiceState.speaking, reflecting: brain.busy(), recalling: recalling > 0 });
+const working = () => sessionList().some((s) => s.status === 'working') || !!voiceRun || !!channelWait || Object.values(doing()).some(Boolean);
 const brain = createBrain({ db, settings: () => settings, feed, mind: mindEvent, diary: (t) => diary(t), broadcast, gainXp: (n) => { gainXp(n); save(); pushState(); },
   sessionInfo: (sid) => sessions.get(sid), skip: laxOwn, claude: process.env.LAX_CLAUDE,
   wish: (w) => learn.gap({ ...w, project: 'mind', via: 'review' }), // a fix its weekly review says needs code
@@ -898,7 +904,7 @@ function talk(text, voice = false, spelled = []) {
   let err = ''; child.stderr.on('data', (d) => { err += d; });
   child.on('close', (code) => {
     const changed = commitMind(); // whatever Lax learned or changed in its mind, with history, described by what changed
-    if (changed.startsWith('forgot:')) { record('forgot', changed.slice(8)); publicMind?.event('forget'); } // a note that was wrong: its learning record
+    if (changed.startsWith('forgot:')) { record('forgot', changed.slice(8)); mindEvent('forget'); } // a note that was wrong: its learning record
     voiceRun = null;
     const ok = result && !result.is_error;
     const say = ok ? spoken(result.result) : `Something went wrong. ${short(err || result?.result, 120)}`;
@@ -1002,21 +1008,26 @@ http.createServer(async (req, res) => {
     case '/api/rebirth': rebirth(!!b.knowledge); broadcast('reborn', {}); pushState(); return json(res, { ok: true });
     case '/api/knows': { // from the life menu: forget an episode or a skill, install or decline a drafted one
       const me = settings.name.toLowerCase();
-      if (b.episode) { const t = forgetEpisode(String(b.episode)); if (t) { record('forgot', `episode ${t}`); publicMind?.event('forget'); feed(`  forgot: ${short(t, 80)}`, 'diary', me); } return json(res, { ok: !!t }); }
+      if (b.episode) { const t = forgetEpisode(String(b.episode)); if (t) { record('forgot', `episode ${t}`); mindEvent('forget'); feed(`  forgot: ${short(t, 80)}`, 'diary', me); } return json(res, { ok: !!t }); }
       const name = String(b.skill || '');
       if (b.do === 'forget') return json(res, { ok: skills.forget(name) });
       if (b.do === 'install') { const why = skills.install(name); return json(res, { ok: !why, why }); }
       if (b.do === 'decline') return json(res, { ok: skills.decline(name) });
       return json(res, { ok: false }, 400);
     }
+    case '/api/voice-state': { // the phone's mic opened or closed, it started or stopped speaking (its mind on the website)
+      for (const [k, max] of [['listening', 60e3], ['speaking', 120e3]]) if (typeof b[k] === 'boolean') voiceState[k] = b[k] ? Date.now() + max : 0;
+      publicMind?.changed(300); return json(res, { ok: true });
+    }
     case '/api/diag': console.log(`[phone ${new Date().toISOString().slice(11, 19)}] ${JSON.stringify(b).slice(0, 600)}`); return json(res, { ok: true });
     case '/api/recall': { // a session's `recall` tool (channel/lax-channel.mjs): Lax searches its long-term memory
       if (!isLocal(req)) return json(res, { ok: false, answer: 'Only from this Mac.' }, 403);
       const q = String(b.query || '').slice(0, 1000), who = b.cwd ? proj(String(b.cwd)) : settings.name.toLowerCase();
-      feed(`  recalling for ${who}: ${short(q, 80)}`, 'diary', settings.name.toLowerCase()); publicMind?.event('recall');
+      feed(`  recalling for ${who}: ${short(q, 80)}`, 'diary', settings.name.toLowerCase());
       recalling++; publicMind.changed();
       const r = await recall(q, { claude: process.env.LAX_CLAUDE, cwd: b.cwd ? String(b.cwd) : '' }).finally(() => { recalling--; publicMind.changed(); });
       if (r.ok && r.found) { gainXp(1); save(); pushState(); }
+      if (r.ok) { const p = placesOf(filesIn(r.answer)); mindEvent('recall', { to: p.to.length ? p.to : ['memory'], project: p.project }); } // where it found it
       feed(`  ${r.ok && r.found ? 'recalled' : r.ok ? 'nothing in my memory' : 'couldn\'t recall'}: ${short(q, 80)}`, r.ok ? 'diary' : 'error', settings.name.toLowerCase());
       return json(res, r);
     }
