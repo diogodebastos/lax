@@ -62,6 +62,7 @@ assert.equal(clean(null), null); assert.equal(clean({}), null);
 assert.deepEqual(cleanEvent({ kind: 'recall', at: 5 }), { kind: 'recall', at: 5 });
 assert.equal(cleanEvent({ kind: 'recall', at: 5, query: 'how did we' }), null); // what it asked never travels
 assert.equal(cleanEvent({ kind: 'rm -rf', at: 5 }), null);
+assert.equal(cleanEvent({ kind: 'archive', at: 5 }), null); assert.equal(cleanEvent({ kind: 'session', at: 5, n: 1 }), null); // not shown: more of your day than it needs
 assert.deepEqual(cleanEvent({ kind: 'recall', at: 5, to: ['memory', 'archive'] }), { kind: 'recall', at: 5, to: ['memory', 'archive'] });
 assert.equal(cleanEvent({ kind: 'recall', at: 5, to: ['memory', '/etc/passwd'] }), null); // only the places there are
 assert.deepEqual(cleanEvent({ kind: 'tool', at: 5, n: 3, session: 1 }), { kind: 'tool', at: 5, n: 3, session: 1 });

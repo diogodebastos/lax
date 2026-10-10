@@ -21,7 +21,7 @@
   // a recall's sources, what a change touched) goes there instead.
   const ROUTES = { recall: ['core', 'memory'], reflect: ['memory', 'learning'], episode: ['core', 'memory'], skill: ['learning', 'skills'],
     install: ['skills', 'core'], forget: ['core', 'memory'], learned: ['core', 'you'], review: ['memory', 'learning'], rules: ['memory', 'learning'],
-    archive: ['memory', 'archive'], hear: ['hearing', 'core'], speak: ['core', 'speech'] };
+    hear: ['hearing', 'core'], speak: ['core', 'speech'] };
   // What it's doing for as long as it lasts (the snapshot's doing): pulses keep running on these links meanwhile.
   const DOING = { hearing: { every: 450, links: [['hearing', 'core']] }, speaking: { every: 450, links: [['core', 'speech']] },
     reflecting: { every: 900, links: [['memory', 'learning'], ['learning', 'you']] }, recalling: { every: 700, links: [['core', 'memory']] } };
@@ -260,10 +260,10 @@
       if (e.to?.length) targets = e.to.map((p) => (p === 'project' ? 'p' + e.project : p)).filter((k) => nodes[k]);
       if (e.kind === 'reflect' && nodes['p' + e.project]) { from = 'p' + e.project; targets = ['memory']; }
       if (e.kind === 'recall' || e.to?.length) from = e.kind === 'rules' ? 'memory' : 'core';
-      const t = t0 + (pet.seat || ['archive', 'session'].includes(e.kind) ? 0 : 650); // let it get to its seat first
+      const t = t0 + (pet.seat ? 0 : 650); // let it get to its seat first
       let longest = 0;
       for (const to of targets) longest = Math.max(longest, travel(from, to, t, e.kind === 'forget'));
-      if (!['archive', 'session'].includes(e.kind)) pet.busy = Math.max(pet.busy, t + longest + 2200);
+      pet.busy = Math.max(pet.busy, t + longest + 2200);
       hot[from] = t + 2500;
     } });
   // Pulses from one node to another along the links (the shortest way), each hop leaving as the last arrives. Its length in ms.

@@ -700,7 +700,7 @@ const brain = createBrain({ db, settings: () => settings, feed, mind: mindEvent,
 // The first run of long-term memory: today's notes split into the current picture and episodes (once, when it's calm).
 setTimeout(() => brain.migrate(), Number(process.env.LAX_MIGRATE_AFTER ?? 120) * 1000).unref();
 // The raw past, kept past Claude Code's 30 days (lib/archive.mjs): on quiet, plus a sweep soon after start and daily.
-const archive = createArchive({ kept: (n) => mindEvent('archive', { n }), log: (...a) => console.log('[archive]', ...a) });
+const archive = createArchive({ log: (...a) => console.log('[archive]', ...a) });
 setTimeout(() => archive.sweep(), 60e3).unref(); setInterval(() => archive.sweep(), 864e5).unref();
 // Its learning record (events of kind 'learning'), which the weekly review reads (lib/brain.mjs).
 const record = (kind, text) => logEvent('', 'mind', 'learning', `${kind}: ${short(text, 300)}`);
@@ -969,14 +969,14 @@ http.createServer(async (req, res) => {
     const pty = q.get('pty') || ''; // a `lax` wrapper's socket (quick actions); only ever one of ours, in ~/.lax/run
     channels.set(cid, { res, cwd, project: proj(cwd), sessionPid: Number(q.get('session_pid')) || null, active: Date.now(),
       pty: path.dirname(pty) === path.join(HOME, 'run') ? pty : null });
-    feed(`● live session: ${proj(cwd)}`, 'session', proj(cwd)); pushState(); publicMind?.event('session', { n: 1 });
+    feed(`● live session: ${proj(cwd)}`, 'session', proj(cwd)); pushState();
     const ping = setInterval(() => res.write(': ping\n\n'), 20000);
     req.on('close', () => {
       clearInterval(ping); channels.delete(cid); clearRelays(() => false);
       for (const [id, p] of pending) if (p.relay?.cid === cid) p.finish('none');
       if (channelWait?.cid === cid) { clearTimeout(channelWait.timer); channelWait = null; }
       if (voiceTarget === cid) voiceTarget = 'background';
-      feed(`○ live session closed: ${proj(cwd)}`, 'session', proj(cwd)); pushState(); publicMind?.event('session', { n: -1 });
+      feed(`○ live session closed: ${proj(cwd)}`, 'session', proj(cwd)); pushState();
     });
     return;
   }
