@@ -14,8 +14,8 @@
   const SAY = {
     recall: () => 'recalling', reflect: () => 'thinking it over', episode: (e) => `remembered ${e.n || 1} episode${(e.n || 1) > 1 ? 's' : ''}`,
     skill: () => 'drafted a skill', install: () => 'learned a skill', forget: () => 'forgot something', review: () => 'weekly review',
-    learned: () => `learned something about ${Mind.snap?.owner || 'you'}`, rules: () => 'changed how it learns', archive: () => 'kept a transcript',
-    hear: () => 'listening', speak: () => 'answering', session: (e) => e.n > 0 ? 'a session plugged in' : 'a session left',
+    learned: () => `learned something about ${Mind.snap?.owner || 'you'}`, rules: () => 'changed how it learns',
+    hear: () => 'listening', speak: () => 'answering',
   };
 
   const Mind = {
@@ -122,7 +122,7 @@
       rules: { learning: now - 2 * day, wishing: now - 9 * day, remembering: now - 1 * day }, week: { heard: 23, spoke: 19, changes: 31 }, doing: {},
       sessions: [{ p: 0, state: 'working' }, { p: 1, state: 'idle' }, { p: null, state: 'working' }] });
     if (qs.has('asleep')) return;
-    const kinds = ['tool', 'hear', 'speak', 'tool', 'recall', 'reflect', 'episode', 'skill', 'forget', 'learned', 'review', 'archive'];
+    const kinds = ['tool', 'hear', 'speak', 'tool', 'recall', 'reflect', 'episode', 'skill', 'forget', 'learned', 'review'];
     let i = 0;
     const tick = () => {
       const kind = qs.get('event') || kinds[i++ % kinds.length], s = Mind.snap, e = { kind, at: Date.now() };
@@ -134,7 +134,6 @@
       if (kind === 'hear') s.week.heard++; if (kind === 'speak') s.week.spoke++; if (['episode', 'learned', 'review', 'forget'].includes(kind)) s.week.changes++;
       if (kind === 'forget') s.episodes.total = Math.max(0, s.episodes.total - 1);
       if (kind === 'learned') s.you++;
-      if (kind === 'archive') s.archive++;
       if (kind === 'review') s.rules.learning = Date.now();
       s.seen = Date.now(); Mind.setSnap(s); Mind.event(e);
       setTimeout(tick, qs.has('event') ? 4000 : 6000);
