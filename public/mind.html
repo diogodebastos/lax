@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#121110">
+<title>Lax's mind</title>
+<meta name="description" content="Lax's memory, live: what it keeps, and where it goes when it remembers.">
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<style>
+  /* Lax's mind on the website (/demo/mind): what it's made of and what it's doing, live, never what's in it.
+     net.js draws it; mind-view.js holds the snapshot and events (from demo/worker.mjs, or made up with ?fake). */
+  :root { --bg:#121110; --fg:#e8e2d6; --dim:#8a8378; --coral:#D97757; --line:#2c2824; }
+  * { box-sizing:border-box; margin:0; }
+  html, body { height:100%; }
+  body { background:var(--bg); color:var(--fg); font-family:'VT323',ui-monospace,monospace; display:flex; flex-direction:column; align-items:center;
+    padding:18px 16px 16px; gap:12px; overflow:hidden; }
+  header { text-align:center; }
+  h1 { color:var(--coral); font-weight:400; font-size:34px; line-height:1; }
+  .sub { color:var(--dim); font-size:19px; margin-top:4px; max-width:560px; }
+  /* The view takes whatever the window has left, like the other demo pages: no scrolling. */
+  #view { position:relative; flex:1; min-height:0; width:100%; display:flex; align-items:center; justify-content:center; }
+  #stage { position:relative; }
+  canvas { display:block; image-rendering:pixelated; image-rendering:crisp-edges; }
+  #labels { position:absolute; inset:0; pointer-events:none; }
+  #labels span { position:absolute; transform:translate(-50%,0); white-space:nowrap; font-size:inherit; line-height:1; color:var(--fg);
+    text-shadow:0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000; }
+  #labels span b { color:var(--dim); font-weight:400; }
+  #labels span.hot { color:var(--coral); }
+  #feed { width:min(100%,640px); height:3.3em; flex:none; overflow:hidden; font-size:20px; line-height:1.1; color:var(--dim); }
+  #feed div:first-child { color:var(--fg); }
+  .note { color:var(--dim); font-size:18px; text-align:center; max-width:560px; line-height:1.1; }
+  .note a { color:var(--fg); text-decoration:none; } .note a:hover { text-decoration:underline; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Lax's mind</h1>
+  <p class="sub" id="sub">What Lax keeps, live. Only the shape: never what's in it.</p>
+</header>
+<div id="view"><div id="stage"><canvas id="c"></canvas><div id="labels"></div></div></div>
+<div id="feed"></div>
+<p class="note"><a href="../demo">meet Lax</a> · <a href="https://diogodebastos.com">diogodebastos.com</a> · <a href="https://github.com/diogodebastos/lax">github</a></p>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="mind-view.js"></script>
+<script src="net.js"></script>
+<script>Mind.start();</script>
+</body>
+</html>
