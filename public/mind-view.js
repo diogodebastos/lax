@@ -1,5 +1,5 @@
 // Lax's mind on the website: the shared half of mind.html. Holds the snapshot (counts only, lib/mind.mjs builds it),
-// turns events into feed lines, sizes the canvas, runs the frame loop, and draws the small walking Lax both views use.
+// plays its events (no words: the network and Lax show them), sizes the canvas, runs the frame loop, and draws the small walking Lax both views use.
 // The view (net.js) registers itself with Mind.view(name, { init, resize, update, render, event }) and only draws.
 (() => {
   const qs = new URLSearchParams(location.search);
@@ -10,22 +10,10 @@
   const shade = (hex, amt) => { const n = parseInt(hex.slice(1), 16), t = amt < 0 ? 0 : 255, a = Math.abs(amt);
     return '#' + [16, 8, 0].map((sh) => Math.round(((n >> sh) & 255) * (1 - a) + t * a).toString(16).padStart(2, '0')).join(''); };
 
-  // What each event is called in the feed. Never what it was about: a recall's question stays on the Mac.
-  const SAY = {
-    recall: () => 'recalling', reflect: () => 'thinking it over', episode: (e) => `remembered ${e.n || 1} episode${(e.n || 1) > 1 ? 's' : ''}`,
-    skill: () => 'drafted a skill', install: () => 'learned a skill', forget: () => 'forgot something', review: () => 'weekly review',
-    learned: () => `learned something about ${Mind.snap?.owner || 'you'}`, rules: () => 'changed how it learns',
-    hear: () => 'listening', speak: () => 'answering',
-  };
-
   const Mind = {
     snap: null, shade,
     asleep() { return !this.snap || Date.now() - this.snap.seen > AWAY; },
     view(name, v) { views[name] = v; },
-    say(text) {
-      const feed = $('#feed'), line = document.createElement('div'); line.textContent = '> ' + text;
-      feed.prepend(line); while (feed.children.length > 3) feed.lastChild.remove();
-    },
     // A view's labels: [{ x, y, text, n, hot }] in the view's own pixels, placed over the canvas.
     labels(list) {
       const v = Mind.current, box = $('#labels');
@@ -63,7 +51,6 @@
       ctx.globalAlpha = 1;
     },
     event(e) {
-      if (SAY[e.kind]) Mind.say(SAY[e.kind](e)); // a tool call is only a pulse
       Mind.current?.event?.(e);
     },
     setSnap(s) { Mind.snap = s; Mind.current?.snap?.(s); },
@@ -91,14 +78,12 @@
   // Live: the Worker (demo/worker.mjs) sends the snapshot and the last events when we connect, then every push from the
   // Mac. Where there's no socket (the local preview, or it fails), the same thing is asked for every few seconds.
   const API = '/demo/mind/api/';
-  const sayLast = (recent) => { for (const e of (recent || []).filter((e) => SAY[e.kind]).slice(-3)) Mind.say(SAY[e.kind](e)); };
   function live() {
     let ws, opened = false;
     try { ws = new WebSocket(location.origin.replace(/^http/, 'ws') + API + 'live'); } catch { return poll(); }
     ws.onopen = () => (opened = true);
     ws.onmessage = (m) => { let d; try { d = JSON.parse(m.data); } catch { return; }
       if (d.snap) Mind.setSnap(d.snap);
-      if (d.recent) sayLast(d.recent); // what it did before you came: said, not played
       for (const e of d.events || []) Mind.event(e); };
     ws.onclose = () => (opened ? setTimeout(live, 5000) : poll());
   }
@@ -107,7 +92,7 @@
     const get = () => fetch(API + 'snap', { cache: 'no-store' }).then((r) => r.json()).then((d) => {
       if (d.snap) Mind.setSnap(d.snap);
       const recent = d.recent || [];
-      if (since < 0) sayLast(recent); else for (const e of recent) if (e.at > since) Mind.event(e);
+      if (since >= 0) for (const e of recent) if (e.at > since) Mind.event(e); // only what happens while you watch
       since = Math.max(since, ...recent.map((e) => e.at), 0);
     }).catch(() => {}).finally(() => setTimeout(get, 3000));
     get();

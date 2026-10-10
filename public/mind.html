@@ -27,8 +27,6 @@
     text-shadow:0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000; }
   #labels span b { color:var(--dim); font-weight:400; }
   #labels span.hot { color:var(--coral); }
-  #feed { width:min(100%,640px); height:3.3em; flex:none; overflow:hidden; font-size:20px; line-height:1.1; color:var(--dim); }
-  #feed div:first-child { color:var(--fg); }
   .note { color:var(--dim); font-size:18px; text-align:center; max-width:560px; line-height:1.1; }
   .note a { color:var(--fg); text-decoration:none; } .note a:hover { text-decoration:underline; }
 </style>
@@ -39,7 +37,6 @@
   <p class="sub" id="sub">What Lax keeps, live. Only the shape: never what's in it.</p>
 </header>
 <div id="view"><div id="stage"><canvas id="c"></canvas><div id="labels"></div></div></div>
-<div id="feed"></div>
 <p class="note"><a href="../demo">meet Lax</a> · <a href="https://diogodebastos.com">diogodebastos.com</a> · <a href="https://github.com/diogodebastos/lax">github</a></p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="mind-view.js"></script>
