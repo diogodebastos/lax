@@ -119,7 +119,7 @@
     Mind.setSnap({ v: 1, seen: qs.has('asleep') ? now - day : now, look: { color: qs.get('color') || '#d97757', stage: 'blob' },
       you: 9, projects: [{ name: 'lax', notes: 24 }, { name: '', notes: 11 }, { name: '', notes: 6 }, { name: '', notes: 3 }],
       episodes: { total: 14, week: 3 }, archive: 400, skills: { drafts: 1, installed: 2 },
-      rules: { learning: now - 2 * day, wishing: now - 9 * day, remembering: now - 1 * day },
+      rules: { learning: now - 2 * day, wishing: now - 9 * day, remembering: now - 1 * day }, week: { heard: 23, spoke: 19, changes: 31 },
       sessions: [{ p: 0, state: 'working' }, { p: 1, state: 'idle' }, { p: null, state: 'working' }] });
     if (qs.has('asleep')) return;
     const kinds = ['hear', 'speak', 'recall', 'reflect', 'episode', 'skill', 'forget', 'learned', 'review', 'archive'];
@@ -128,6 +128,7 @@
       const kind = qs.get('event') || kinds[i++ % kinds.length], s = Mind.snap, e = { kind, at: Date.now() };
       if (kind === 'episode') { e.n = 1; s.episodes.total++; s.episodes.week++; }
       if (kind === 'skill') s.skills.drafts++;
+      if (kind === 'hear') s.week.heard++; if (kind === 'speak') s.week.spoke++; if (['episode', 'learned', 'review', 'forget'].includes(kind)) s.week.changes++;
       if (kind === 'forget') s.episodes.total = Math.max(0, s.episodes.total - 1);
       if (kind === 'learned') s.you++;
       if (kind === 'archive') s.archive++;

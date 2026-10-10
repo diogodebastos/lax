@@ -318,10 +318,16 @@ function pruneSessions() {
 }
 const pending = new Map(); // ask id -> {resolve, bubble}
 let publicMind = null; // its mind on the website (lib/public-mind.mjs), set up below
+// When you talked to it and when it answered aloud, this week (its mind on the website sizes hearing and speech by them).
+// Its own rolling log, not the journal: the journal's rows shape its species.
+const WEEK = 7 * 864e5;
+function heardSpoke(k) { if (!publicMind) return; const w = kvGet('mindWeek', { heard: [], spoke: [] }), now = Date.now();
+  w[k] = [...(w[k] || []).filter((t) => now - t < WEEK), now]; kvSet('mindWeek', w); publicMind.event(k === 'heard' ? 'hear' : 'speak'); }
+const weekCount = (k) => (kvGet('mindWeek', {})[k] || []).filter((t) => Date.now() - t < WEEK).length;
 function broadcast(type, data) {
   const msg = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const c of clients) c.write(msg);
-  if (type === 'bubble' && data.speak) publicMind?.event('speak');
+  if (type === 'bubble' && data.speak) heardSpoke('spoke');
 }
 // Lax's own conversation, this one or the one before it: never a session of yours (no tab, no reflection).
 const laxOwn = (sid) => !!sid && (sid === voiceSessions[ASSISTANT] || sid === laxTalk.prev);
@@ -672,7 +678,7 @@ if (voiceSessions[ASSISTANT] && !laxTalk.last) {
 // ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
 ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addSkills(); addEpisodesToLearning(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice(); addEpisodesAdvice();
 // ---------- its mind on the website (lib/public-mind.mjs): the shape of what it knows and does, never what's in it ----------
-publicMind = createPublicMind({ live: () => { const v = petView(); return { color: v.look?.color, stage: v.stage, sessions: sessionList() }; },
+publicMind = createPublicMind({ live: () => { const v = petView(); return { color: v.look?.color, stage: v.stage, sessions: sessionList(), heard: weekCount('heard'), spoke: weekCount('spoke') }; },
   allow: () => settings.publicProjects || [], log: (...a) => console.log('[mind]', ...a) });
 const mindEvent = (kind, extra) => publicMind.event(kind, extra);
 const brain = createBrain({ db, settings: () => settings, feed, mind: mindEvent, diary: (t) => diary(t), broadcast, gainXp: (n) => { gainXp(n); save(); pushState(); },
@@ -807,7 +813,7 @@ const TYPED_OVER_MS = 120000;
 // voice: dictated on the phone (not typed), so whoever reads it is told it may be misheard and which names it may hold.
 // spelled: names you spelled out in it ("F I S I C A I"), kept as words to listen for.
 function talk(text, voice = false, spelled = []) {
-  publicMind?.event('hear');
+  heardSpoke('heard');
   if (voice) {
     const known = vocabNow().words;
     for (const w of spelled.slice(0, 5)) { const k = addWord(VOCAB, w, known); if (k) { diary(`listens for ${k} (you spelled it)`); pushState(); } }

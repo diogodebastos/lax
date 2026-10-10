@@ -12,7 +12,7 @@
     memory: { at: [0, -12, 5], color: '#c9a86a', label: 'memory' },
     learning: { at: [15, -5, 9], color: '#6fd36f', label: 'learning' },
     skills: { at: [20, 3, -14], color: '#b58ad9', label: 'skills' },
-    archive: { at: [-6, -19, 14], color: '#8a8378', label: 'archive', small: true },
+    archive: { at: [-6, -19, 14], color: '#8a8378', label: 'archive' },
   };
   const PROJ = [[-22, 12, -12], [-24, -9, 9], [-8, 19, -18], [-18, 1, -24]];
   const LINKS = [['core', 'hearing'], ['core', 'speech'], ['core', 'you'], ['core', 'memory'], ['core', 'learning'], ['memory', 'you'],
@@ -78,12 +78,16 @@
     nodes[key] = { g, core, bits, color: new T.Color(color), size };
   }
   const specks = (n) => Math.min(10, Math.ceil(Math.log2((n || 0) + 1)));
+  const sizeOf = (n) => 1.2 + Math.min(2.8, Math.log2((n || 0) + 1) / 3); // 1.2 for nothing yet, 4 at about 300
+  // This week: times you talked to it (hearing), it answered aloud (speech), its mind changed (learning).
+  const counts = (s) => ({ hearing: s.week?.heard || 0, speech: s.week?.spoke || 0, learning: s.week?.changes || 0 });
   function build(s) {
-    const now = JSON.stringify([s.you, s.episodes.total, s.archive, s.skills, s.projects.map((p) => p.notes), s.sessions, s.look?.color]); if (now === sig) return; sig = now;
+    const now = JSON.stringify([s.you, s.episodes.total, s.archive, s.skills, s.projects.map((p) => p.notes), s.sessions, s.week, s.look?.color]); if (now === sig) return; sig = now;
     net.clear(); for (const k in nodes) delete nodes[k]; for (const k in lines) delete lines[k];
     const color = s.look?.color || '#D97757', n = {
-      hearing: 3, speech: 3, you: s.you, memory: s.episodes.total, learning: 3 + s.skills.drafts, skills: s.skills.installed + s.skills.drafts, archive: s.archive };
-    for (const [k, d] of Object.entries(NODES)) orb(k, d.at, d.color || color, d.small ? 1.6 : 2 + Math.min(2, Math.log2(n[k] + 1) / 3), k === 'hearing' || k === 'speech' ? 0 : specks(n[k]));
+      ...counts(s), you: s.you, memory: s.episodes.total, skills: s.skills.installed + s.skills.drafts, archive: s.archive };
+    // Every orb's size and specks come from its own number: nothing is drawn bigger than what it holds.
+    for (const [k, d] of Object.entries(NODES)) orb(k, d.at, d.color || color, sizeOf(n[k]), specks(n[k]));
     s.projects.slice(0, 4).forEach((p, i) => orb('p' + i, PROJ[i], Mind.shade('#6fd36f', [-0.1, -0.35, 0.2, -0.5][i]), 1.3 + Math.min(1.4, Math.log2(p.notes + 1) / 4), 0));
     // Sessions plugged in right now: a small cube beside its project (or near Lax), linked straight to Lax.
     (s.sessions || []).slice(0, 6).forEach((ss, i) => {
@@ -226,9 +230,9 @@
       return { x: Math.round((v.x + 1) / 2 * Mind.current.W), y: Math.round((1 - v.y) / 2 * Mind.current.H) + (dy ?? Math.round(n.size * 2) + 6) }; };
     const sessions = (s.sessions || []).length, working = (s.sessions || []).filter((x) => x.state === 'working').length;
     const list = [
-      { ...place('hearing'), text: 'hearing', hot: hot.hearing > t }, { ...place('speech'), text: 'speech', hot: hot.speech > t },
+      { ...place('hearing'), text: 'hearing', n: counts(s).hearing, hot: hot.hearing > t }, { ...place('speech'), text: 'speech', n: counts(s).speech, hot: hot.speech > t },
       { ...place('you'), text: 'you', n: s.you, hot: hot.you > t }, { ...place('memory'), text: 'memory', n: s.episodes.total, hot: hot.memory > t },
-      { ...place('learning'), text: 'learning', hot: hot.learning > t },
+      { ...place('learning'), text: 'learning', n: counts(s).learning, hot: hot.learning > t },
       { ...place('skills'), text: 'skills', n: s.skills.installed + (s.skills.drafts ? `+${s.skills.drafts}` : ''), hot: hot.skills > t },
       { ...place('archive'), text: 'archive', n: s.archive, hot: hot.archive > t },
       ...s.projects.slice(0, 4).map((p, i) => ({ ...place('p' + i), text: p.name || '', n: p.notes, hot: hot['p' + i] > t })),
