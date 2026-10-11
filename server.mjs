@@ -449,16 +449,18 @@ const planText = (input) => {
   if (typeof input.plan === 'string' && input.plan.trim()) return input.plan;
   try { return input.planFilePath ? fs.readFileSync(input.planFilePath, 'utf8') : undefined; } catch { return undefined; }
 };
-function describeTool(name, input = {}) {
+// all: the whole command or prompt, for a bubble that scrolls; the feed and anything spoken keep the short form.
+function describeTool(name, input = {}, all = false) {
+  const cut = (v, n) => short(v, all ? 4000 : n);
   switch (name) {
-    case 'Bash': return `$ ${short(input.command, 80)}`;
+    case 'Bash': return `$ ${cut(input.command, 80)}`;
     case 'Read': case 'Edit': case 'Write': case 'MultiEdit': case 'NotebookEdit':
       return `${name} ${short(path.basename(input.file_path || input.notebook_path || ''), 50)}`;
-    case 'Grep': return `Grep "${short(input.pattern, 30)}"`;
-    case 'Glob': return `Glob ${short(input.pattern, 40)}`;
-    case 'WebFetch': return `Fetch ${short(input.url, 50)}`;
-    case 'WebSearch': return `Search "${short(input.query, 40)}"`;
-    case 'Task': case 'Agent': return `Agent: ${short(input.description || input.prompt, 50)}`;
+    case 'Grep': return `Grep "${cut(input.pattern, 30)}"`;
+    case 'Glob': return `Glob ${cut(input.pattern, 40)}`;
+    case 'WebFetch': return `Fetch ${cut(input.url, 50)}`;
+    case 'WebSearch': return `Search "${cut(input.query, 40)}"`;
+    case 'Task': case 'Agent': return `Agent: ${cut(all ? input.prompt || input.description : input.description || input.prompt, 50)}`;
     default: return name.replace(/^mcp__.*?__/, '');
   }
 }
@@ -571,7 +573,7 @@ function ask(h) {
     const questions = h.tool_name === 'AskUserQuestion' && Array.isArray(h.tool_input?.questions) ? h.tool_input.questions : null;
     const bubble = questions
       ? { id, kind: 'question', session: h.session_id, project, questions, text: `${project}: ${questions[0].question}`, speak: true }
-      : { id, kind: 'permission', session: h.session_id, project, gist: h.tool_name === 'Bash' && h.tool_input?.description ? `${short(h.tool_input.description, 50)}: ${describeTool(h.tool_name, h.tool_input)}` : describeTool(h.tool_name, h.tool_input), text: `${project} wants to: ${describeTool(h.tool_name, h.tool_input)}`, speak: true, actions: true,
+      : { id, kind: 'permission', session: h.session_id, project, gist: h.tool_name === 'Bash' && h.tool_input?.description ? `${short(h.tool_input.description, 50)}: ${describeTool(h.tool_name, h.tool_input)}` : describeTool(h.tool_name, h.tool_input), text: `${project} wants to: ${describeTool(h.tool_name, h.tool_input, true)}`, say: `${project} wants to: ${describeTool(h.tool_name, h.tool_input)}`, speak: true, actions: true,
         ...(grant?.startsWith('edit:') && { details: `A yes also lets it edit the rest of ${path.basename(grant.slice(5))} until it finishes this answer.` }) };
     // Questions are worth waiting longer for: they need reading.
     const timer = setTimeout(() => finish('none'), Math.min(600, settings.askTimeout * (questions ? 4 : 1)) * 1000);
@@ -635,7 +637,8 @@ function channelEvent(b) {
     const id = 'relay-' + b.request_id;
     const bubble = { id, kind: 'permission', session: channelSession(c), actions: true, speak: true, details: String(b.input_preview || ''),
       project: c.project, gist: `${b.tool_name}${b.description ? ' — ' + short(b.description, 60) : ''}`,
-      text: `${c.project} wants to: ${b.tool_name}${b.description ? ' — ' + short(b.description, 140) : ''}` };
+      text: `${c.project} wants to: ${b.tool_name}${b.description ? ' — ' + short(b.description, 4000) : ''}`, // all of it: the bubble scrolls
+      say: `${c.project} wants to: ${b.tool_name}${b.description ? ' — ' + short(b.description, 140) : ''}` };
     pending.set(id, { bubble, relay: { cid: b.cid, settles: true }, finish(decision) {
       if (!pending.delete(id)) return;
       broadcast('clear', { id });
