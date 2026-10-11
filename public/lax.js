@@ -608,7 +608,7 @@ function showBubble(b) {
   else if (b.kind === 'done') { sfx([784, 1046]); setReact('happy'); }
   else if (b.kind === 'learned') { sfx([659, 988]); setReact('happy', 1200); }
   else if (b.kind === 'error') { sfx([220, 160]); setReact('error'); }
-  if (b.speak || (b.kind === 'done' && settings.speakDone)) speak(b.kind === 'permission' ? 'I need you. ' + b.text : b.kind === 'question' ? 'Question. ' + b.questions[0].question : b.say || b.text);
+  if (b.speak || (b.kind === 'done' && settings.speakDone)) speak(b.kind === 'permission' ? 'I need you. ' + (b.say || b.text) : b.kind === 'question' ? 'Question. ' + b.questions[0].question : b.say || b.text);
 }
 function clearBubble(id) { const had = bubbles.find((x) => x.id === id); bubbles = bubbles.filter((x) => x.id !== id); renderBubble(); if (had?.session) renderHud(); }
 function renderBubble() {
