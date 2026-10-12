@@ -155,6 +155,8 @@ Focused automation: natural-language scheduling for reports, backups and briefin
 - Each run is a fresh, focused `claude -p` with its own cwd, tool allowlist and budget, plus Phase 6 long-term memory.
 - Anything outside the allowlist pauses and asks on the phone; results arrive as a spoken summary, a notification, and a run log.
 
+**Built** (2026-10-12; `lib/schedule.mjs`, the `schedule` tool in `channel/lax-channel.mjs`, the `LAX_JOB` fence in `hooks/lax-hook.mjs`, tests in `scripts/test-schedule.mjs`): Lax's assistant (and any live session) turns what you said into a job: when (weekdays, days, a date, "in 20 minutes"), what to do, the folder, and what it may do beyond reading (web, edit, run). "Save it?" on the phone, answered by tap or by voice; only a yes saves it. Runs are one at a time, each with its notes and `recall`, the answer spoken and kept in `~/.lax/runs/`. A reminder only speaks. A run missed by more than 12 hours is skipped. To prove: a real "every weekday" brief, by voice, running unattended on the Mac; an ask from a job answered on the phone. Later: the jobs in the Life menu (preview first).
+
 ### Phase 8: Lax improves itself [diogodebastos/lax#8](https://github.com/diogodebastos/lax/issues/8)
 The personal-agent loop: notice friction → fix its own code → ask → ship safely. Builds on Phase 5, which learns what you *asked for*; this phase is the unprompted part: what Lax notices by itself.
 - Logs friction: sessions started without Lax, approvals answered on the laptop, timeouts, failed voice, "Lax, that was annoying".

@@ -82,6 +82,32 @@ if (process.env.LAX_RECALL === '1') {
   process.exit(0);
 }
 
+// A job you scheduled (lib/schedule.mjs): it may do what you said it may (LAX_JOB_TOOLS: read, web, edit in its folder,
+// run local commands), never touch Lax's secrets or database, and anything else asks you on the phone. Not a session
+// of yours: no tab, no XP.
+if (process.env.LAX_JOB) {
+  if (ev === 'PreToolUse') {
+    const may = new Set(String(process.env.LAX_JOB_TOOLS || 'read').split(',')), ti = input.tool_input || {}, t = input.tool_name;
+    const cwd = input.cwd || process.cwd(), f = ti.file_path || ti.path || ti.notebook_path || '', abs = f && path.resolve(cwd, f);
+    const inside = (p, dir) => (p + path.sep).startsWith(path.resolve(dir) + path.sep);
+    const secret = (abs && (inside(abs, SECRETS) || abs === DB)) || [SECRETS, DB, '.lax/secrets', 'life.db'].some((p) => String(ti.command || '').includes(p));
+    const kind = t === 'Bash' ? bashKind(String(ti.command || ''), cwd) : null;
+    const ok = !secret && (/^(Read|Glob|Grep|LS|TodoWrite|ToolSearch|Task|Agent|mcp__lax__recall)$/.test(t)
+      || (/^(WebFetch|WebSearch)$/.test(t) && may.has('web'))
+      || (kind === 'read') || (kind === 'local' && may.has('run'))
+      || (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(t) && may.has('edit') && !!abs && inside(abs, process.env.LAX_JOB_DIR || cwd)));
+    const decide = (d, why) => console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: d, permissionDecisionReason: why } }));
+    if (secret) decide('deny', 'Lax\'s secrets and database are never touched.');
+    else if (ok) decide('allow', 'This scheduled job may.');
+    else {
+      const { decision, why } = await post('/api/ask', { ...input, lax_voice: true, lax_job: process.env.LAX_JOB }, 11 * 60e3).catch(() => ({}));
+      decide(decision === 'allow' ? 'allow' : 'deny', decision === 'allow' ? 'Approved from Lax.' : decision === 'deny' ? 'The user said no on the phone.'
+        : `Not allowed for this job${why ? ` and couldn't ask the user: ${why}` : ', and the user didn\'t answer on the phone'}. Do without it, and say so.`);
+    }
+  }
+  process.exit(0);
+}
+
 try {
   // A new session starts with what Lax knows about its project (and about you), if anything.
   if (ev === 'SessionStart' && process.env.LAX_VOICE !== '1') {
@@ -124,6 +150,8 @@ try {
     decide('allow', 'It only reads Lax\'s memory.');
   } else if (ev === 'PreToolUse' && input.tool_name === 'mcp__lax__misheard') { // a word speech got wrong: Lax's vocabulary
     decide('allow', 'It only adds to Lax\'s vocabulary.');
+  } else if (ev === 'PreToolUse' && input.tool_name === 'mcp__lax__schedule') { // Lax asks "save it?" on the phone itself
+    decide('allow', 'Nothing is scheduled without the user\'s yes on the phone.');
   } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && privateHit) {
     decide('deny', 'Off limits: Lax\'s secrets and database are never touched by the assistant.');
   } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && /^(Edit|Write|MultiEdit)$/.test(input.tool_name) && within(MIND)) {

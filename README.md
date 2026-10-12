@@ -69,6 +69,15 @@ The notes are the short, current picture. Behind them, Lax keeps the past and fi
 - **Recall**: "how did we fix…?" Lax searches episodes, then notes, then the archive (grep, no index) and answers with date and project. By voice it does this itself. Every Claude Code session gets a `recall` tool for it.
 - **Skills**: a workflow you repeat becomes a draft `SKILL.md` in its mind. Lax offers it on the phone with the whole text, and only your yes installs it as `~/.claude/skills/lax-<name>`. Guardrails in code: one file, no tool grants, nothing about its secrets or getting around permissions.
 
+### Jobs and reminders
+
+Say "every weekday at 8:30, brief me on open PRs" or "remind me in 20 minutes to call Vera". Lax's `schedule` tool turns it into a job and asks **save it?** on the phone (what it does, where, when, what it may do); nothing is saved without your yes. Jobs live in `~/.lax/jobs.json`.
+- Each run is a fresh `claude -p` in the job's folder, with a time limit (10 minutes unless you say otherwise), its project notes up front and the `recall` tool. It may always read (files, searches, read-only commands like `gh pr list`); the web, edits in its folder and local commands only if the job says so. Anything else asks on the phone and waits up to 10 minutes. Lax's secrets and database are never touched (`hooks/lax-hook.mjs`, `LAX_JOB`).
+- The answer is spoken on the phone (a notification when the app is closed), shown whole in Lax's tab, and kept in `~/.lax/runs/<job>/<date>-<time>.md`.
+- A reminder runs nothing: Lax just says it.
+- Times are the Mac's. A run missed by more than 12 hours (the Mac was asleep) is skipped, not run late.
+- "What's scheduled?", "cancel the PR brief", "run it now": the same tool (`list`, `remove`, `run`).
+
 ## Life menu
 
 Tap **LAX ≡** to open the menu. It reads top to bottom:
