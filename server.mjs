@@ -99,6 +99,7 @@ function updateSettings(b) {
   if ([15, 30, 60, 120].includes(b.askTimeout)) clean.askTimeout = b.askTimeout;
   if (['system', 'light', 'dark'].includes(b.theme)) clean.theme = b.theme;
   if (['phone', 'en-US', 'pt-PT'].includes(b.listen)) clean.listen = b.listen;
+  if (Array.isArray(b.hideTraits)) clean.hideTraits = [...new Set(b.hideTraits.filter((t) => typeof t === 'string' && /^[a-z]{1,16}$/.test(t)))];
   const renamed = clean.name && clean.name !== settings.name;
   settings = { ...settings, ...clean }; writeSettings(settings);
   if (renamed) syncMindName(settings.name); // its mind knows its new name
@@ -296,9 +297,11 @@ function petView() {
   const sp = activeSpecies(), st = stageNow();
   // The rare one keeps its secret until level 50: before that it is a pink like any other.
   const species = sp && { id: sp.id, name: nameFor(sp, st), branch: st >= BRICK ? sp.branch || null : null, copy: sp.copy || null, rare: !!sp.rare && st >= BRICK };
-  const lead = egg ? eggLead() : null;
+  const lead = egg ? eggLead() : null, worn = traits(pet);
+  // A trait you switched off and then lost comes back on the next time it is earned.
+  if (settings.hideTraits?.some((t) => !worn.includes(t))) { settings = { ...settings, hideTraits: settings.hideTraits.filter((t) => worn.includes(t)) }; writeSettings(settings); }
   return { name: settings.name, born: pet.born, level, stage: stageOf(level), xp: pet.xp, prevXp, nextXp,
-    traits: traits(pet), traitTally: traitTally(pet), mood: mood(pet), streak: pet.streak, hatched: !egg, species,
+    traits: worn, traitTally: traitTally(pet), mood: mood(pet), streak: pet.streak, hatched: !egg, species,
     look: egg ? { form: null, color: lead.v ? SPECIES[lead.v].color : '#8a8378', lift: 0 } : formFor(sp, st),
     egg: egg ? { pct: Math.round(eggProgress(pet) * 100), lead: lead.v } : null,
     // Why it is what it is: each species' value over its bar, from the egg's time (for the Life menu, while the bars get tuned).
