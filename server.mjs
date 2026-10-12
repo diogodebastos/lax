@@ -20,6 +20,7 @@ import { createSkills } from './lib/skills.mjs';
 import { matchSession, TELL_NOTE } from './lib/tell.mjs';
 import { createLearn } from './lib/learn.mjs';
 import { createSchedule } from './lib/schedule.mjs';
+import { createImprove, ANNOYED } from './lib/improve.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus, tabCommand } from './lib/actions.mjs';
 import { readUsage, usageText } from './lib/usage.mjs';
 import { openTerminal, q, ON_MAC } from './lib/terminal.mjs';
@@ -496,6 +497,9 @@ function onHook(h) {
       break;
     case 'UserPromptSubmit':
       s.status = 'working'; if (!mine) youSaid(h.prompt, project, sid); else if (laxOnMac) youSaid(said(h.prompt), settings.name.toLowerCase());
+      // A terminal session Lax can't hear (not started with `lax`): friction, once a day per project (lib/improve.mjs).
+      if (!mine && s.where === 'cli' && s.pid && ![...channels.values()].some((c) => c.sessionPid === s.pid))
+        improve.note('without lax', `a ${project} session in the terminal without Lax: it couldn't hear you there`, `nolax:${project}`);
       logEvent(sid, project, 'prompt', short(mine ? said(h.prompt) : h.prompt, 500), repo);
       break;
     case 'PreToolUse': {
@@ -580,7 +584,8 @@ function ask(h) {
       : { id, kind: 'permission', session: h.session_id, project, gist: h.tool_name === 'Bash' && h.tool_input?.description ? `${short(h.tool_input.description, 50)}: ${describeTool(h.tool_name, h.tool_input)}` : describeTool(h.tool_name, h.tool_input), text: `${project} wants to: ${describeTool(h.tool_name, h.tool_input, true)}`, say: `${project} wants to: ${describeTool(h.tool_name, h.tool_input)}`, speak: true, actions: true,
         ...(grant?.startsWith('edit:') && { details: `A yes also lets it edit the rest of ${path.basename(grant.slice(5))} until it finishes this answer.` }) };
     // Questions are worth waiting longer for: they need reading.
-    const timer = setTimeout(() => finish('none'), (job ? 600 : Math.min(600, settings.askTimeout * (questions ? 4 : 1))) * 1000);
+    const timer = setTimeout(() => { // nobody answered on the phone: friction (lib/improve.mjs)
+      improve.note('unanswered', `${project} asked ${bubble.gist || bubble.text}: no answer on the phone in time`); finish('none'); }, (job ? 600 : Math.min(600, settings.askTimeout * (questions ? 4 : 1))) * 1000);
     function finish(decision, answers) {
       clearTimeout(timer); pending.delete(id); broadcast('clear', { id });
       const ss = sessions.get(h.session_id); if (ss?.status === 'waiting') { ss.status = 'working'; pushState(); }
@@ -612,7 +617,11 @@ function pickChannel() {
 // A permission prompt or terminal menu relayed from a session is settled once that session moves on (answered at the
 // terminal). Sharing's questions ("Which Rita?", "Send it?") stay: the session keeps working while they wait.
 function clearRelays(match) {
-  for (const [id, p] of pending) if (p.relay?.settles && match(channels.get(p.relay.cid) || {})) p.finish('none');
+  for (const [id, p] of pending) if (p.relay?.settles && match(channels.get(p.relay.cid) || {})) {
+    // A yes or no given at the terminal while the phone was asking too: friction (lib/improve.mjs).
+    if (p.bubble.kind === 'permission' && clients.size) improve.note('laptop', `${p.bubble.gist || p.bubble.text} in ${p.bubble.project}: answered at the terminal, not on the phone`);
+    p.finish('none');
+  }
 }
 function channelEvent(b) {
   if (b.type === 'gap') return learn.gap({ ...b, project: proj(b.cwd) }); // from a live session, or from Lax's own assistant
@@ -720,6 +729,9 @@ const learn = createLearn({ settings: () => settings, feed, diary: (t) => diary(
   say: (text, kind = 'reply') => broadcast('bubble', { id: 'learn' + Date.now(), kind, text, speak: true }),
   record: (kind, text) => record(kind, text),
   log: (...a) => console.log('[learn]', ...a) });
+// ---------- what it notices by itself: friction, and one fix a night, told in the morning (lib/improve.mjs) ----------
+const improve = createImprove({ settings: () => settings, feed, learn, body: process.env.LAX_BODY || ROOT, claude: process.env.LAX_CLAUDE,
+  log: (...a) => console.log('[improve]', ...a) });
 // ---------- know-how: workflows you repeat become skills, installed on your yes (lib/skills.mjs) ----------
 const skills = createSkills({ settings: () => settings, feed, mind: mindEvent, diary: (t) => diary(t), broadcast, pending, quiet,
   gainXp: (n) => { gainXp(n); save(); pushState(); }, milestone: (t) => { milestone(t); pushState(); }, record: (kind, text) => record(kind, text),
@@ -873,6 +885,13 @@ function talk(text, voice = false, spelled = []) {
   // Answering a wish question, "any wishes?", "merge it" (lib/learn.mjs).
   if (learn.hears(text, { toLax: !pickChannel() })) return true;
   if (skills.hears(text)) return true; // answering "install this skill?"
+  // "Lax, that was annoying": friction, with what it was just doing, for tonight (lib/improve.mjs).
+  if (!pickChannel() && ANNOYED.test(text.trim())) {
+    const me = settings.name.toLowerCase(), before = laxFeed.slice(-4).map((f) => short(f.line, 80)).join(' / ');
+    improve.note('you said', `"${short(text, 100)}" after: ${before || 'nothing'}`); youSaid(text, me);
+    broadcast('bubble', { id: 'annoyed' + Date.now(), kind: 'reply', text: `Sorry. I noted it, and I'll look at it tonight.`, speak: true });
+    return true;
+  }
 
   // "Talk to edge cava" / "back to you": the phone changes tab, as if you'd tapped it (whichever tab you said it in).
   const tab = voiceAction(text) ? null : tabCommand(text, sessionList().slice(0, 8), settings.name);
@@ -938,7 +957,7 @@ function talk(text, voice = false, spelled = []) {
     const say = ok ? spoken(result.result) : `Something went wrong. ${short(err || result?.result, 120)}`;
     broadcast('bubble', { id: 'voice' + Date.now(), kind: ok ? 'reply' : 'error', text: say, speak: true });
     feed(`↩ ${ok ? clip(result.result) : say}`, ok ? 'done' : 'error', name, undefined, { answer: true, text: ok ? clip(result.result) : undefined }); // the full answer; the bubble says the short one
-    if (!ok) { pet.errors++; if (voiceSessions[ASSISTANT] && /session|resume/i.test(err)) delete voiceSessions[ASSISTANT]; }
+    if (!ok) { improve.note('voice failed', short(err || result?.result || `exit ${code}`, 200)); pet.errors++; if (voiceSessions[ASSISTANT] && /session|resume/i.test(err)) delete voiceSessions[ASSISTANT]; }
     save(); pushState();
   });
   return true;
@@ -1059,6 +1078,7 @@ http.createServer(async (req, res) => {
       feed(`  ${r.ok && r.found ? 'recalled' : r.ok ? 'nothing in my memory' : 'couldn\'t recall'}: ${short(q, 80)}`, r.ok ? 'diary' : 'error', settings.name.toLowerCase());
       return json(res, r);
     }
+    case '/api/improve/night': return json(res, { ok: isLocal(req) && await improve.night(true) }); // local only: tonight's fix, now
     case '/api/brain/review': return json(res, { ok: isLocal(req) && brain.review(true) }); // local only: the weekly review, now
     case '/api/brain/reflect': return json(res, { ok: isLocal(req) && !!b.session && (brain.enqueue(String(b.session)), true) }); // local only: reflect now
     case '/api/learn/merged': return json(res, { ok: isLocal(req) && learn.merged({ id: String(b.id || ''), ok: !!b.ok, why: String(b.why || '') }) });
