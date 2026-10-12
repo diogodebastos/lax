@@ -19,7 +19,7 @@ fs.writeFileSync(path.join(dist, 'demo', 'lax.js'), show('lax.js'));
 fs.writeFileSync(path.join(dist, 'demo', 'heard.js'), show('heard.js'));
 // Lax's mind, live (/demo/mind): the page and what it loads, and the Worker that keeps it (from demo/ and lib/).
 fs.writeFileSync(path.join(dist, 'demo', 'mind.html'), show('mind.html'));
-for (const f of ['mind-view.js', 'net.js']) fs.writeFileSync(path.join(dist, 'demo', f), show(f));
+for (const f of ['mind-view.js', 'net.js', 'favicon.svg']) fs.writeFileSync(path.join(dist, 'demo', f), show(f));
 const build = path.join(ROOT, 'demo', 'build'), git = (f) => execFileSync('git', ['show', `${ref}:${f}`], { cwd: ROOT, encoding: 'utf8' });
 fs.rmSync(build, { recursive: true, force: true }); fs.mkdirSync(build, { recursive: true });
 fs.writeFileSync(path.join(build, 'worker.mjs'), git('demo/worker.mjs').replace("'../lib/mind-shape.mjs'", "'./mind-shape.mjs'"));
