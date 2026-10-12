@@ -101,7 +101,7 @@ const dormant = await tools({ LAX_CHANNEL_FORCE: '0' });
 check('a session that doesn\'t hear Lax has no `gap` (only `recall`, Phase 6)', JSON.stringify((await dormant.listTools()).tools.map((t) => t.name)) === '["recall"]');
 await dormant.close();
 const voice = await tools({ LAX_CHANNEL_FORCE: '0', LAX_VOICE: '1' });
-check('Lax\'s own assistant gets only `gap`, `misheard` and `schedule`', JSON.stringify((await voice.listTools()).tools.map((t) => t.name)) === '["gap","misheard","schedule"]');
+check('Lax\'s own assistant gets only `gap`, `misheard`, `schedule` and `tell`', JSON.stringify((await voice.listTools()).tools.map((t) => t.name)) === '["gap","misheard","schedule","tell"]');
 const live = await tools({ LAX_CHANNEL_FORCE: '1' });
 check('a live session gets `gap` next to reply and share', (await live.listTools()).tools.some((t) => t.name === 'gap'));
 

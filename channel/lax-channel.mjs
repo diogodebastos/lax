@@ -25,7 +25,7 @@ const SESSION_PID = claudePid();
 // everywhere else stay dormant: no tools, no link to Lax (voice would vanish into a session that can't hear it).
 const CHANNEL_MODE = process.env.LAX_CHANNEL_FORCE ? process.env.LAX_CHANNEL_FORCE === '1' // tests: on or off
   : /--(dangerously-load-development-)?channels\b[^]*\blax\b/.test(processArgs(SESSION_PID));
-// Lax's own assistant (a voice run, lib/server talk()) gets only `gap`, `misheard` and `schedule`: it talks back through its answer, not `reply`.
+// Lax's own assistant (a voice run, lib/server talk()) gets only `gap`, `misheard`, `schedule` and `tell`: it talks back through its answer, not `reply`.
 const VOICE_MODE = !CHANNEL_MODE && process.env.LAX_VOICE === '1' && !process.env.LAX_REFLECT && !process.env.LAX_BUILD;
 // Lax's own runs (reflecting, recalling, building) get nothing from here. Every other session may `recall`: Lax's
 // long-term memory is for all of them, live with Lax or not. (The voice assistant searches its memory itself.)
@@ -129,8 +129,24 @@ const SCHEDULE = {
   },
 };
 
+// Only Lax's own assistant may pass your words into a live session (sessions can't tell each other).
+const TELL = {
+  name: 'tell',
+  description: 'Pass the user\'s words into one of their live Lax sessions (the tabs on the phone, e.g. "reports"), as a message from ' +
+    'them: "tell the reports session to restyle the guide". The user approves the call on the phone first; the ' +
+    'session then answers on its own tab. Use the user\'s words, made self-contained (the session hasn\'t heard this conversation).',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      session: { type: 'string', description: 'The session as the user named it: its tab or project name ("reports")' },
+      text: { type: 'string', description: 'What to tell it, as the user would say it to that session' },
+    },
+    required: ['session', 'text'],
+  },
+};
+
 mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: VOICE_MODE ? [GAP, MISHEARD, SCHEDULE] : !CHANNEL_MODE ? (RECALL_MODE ? [RECALL] : []) : [GAP, MISHEARD, RECALL, SCHEDULE, {
+  tools: VOICE_MODE ? [GAP, MISHEARD, SCHEDULE, TELL] : !CHANNEL_MODE ? (RECALL_MODE ? [RECALL] : []) : [GAP, MISHEARD, RECALL, SCHEDULE, {
     name: 'reply',
     description: 'Reply to the user through Lax (shown in a speech bubble on their phone and read aloud).',
     inputSchema: {
@@ -200,6 +216,11 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
   if (req.params.name === 'schedule' && (CHANNEL_MODE || VOICE_MODE)) {
     const r = await post({ type: 'schedule', ...(req.params.arguments || {}) });
     return { content: [{ type: 'text', text: r.say || 'Lax is not reachable; nothing was scheduled.' }], isError: !r.ok };
+  }
+  if (req.params.name === 'tell' && VOICE_MODE) {
+    const { session, text } = req.params.arguments || {};
+    const r = await post({ type: 'tell', session: String(session || ''), text: String(text || '') });
+    return { content: [{ type: 'text', text: r.say || 'Lax is not reachable; nothing was passed on.' }], isError: !r.ok };
   }
   if (req.params.name !== 'reply' || !CHANNEL_MODE) throw new Error(`unknown tool: ${req.params.name}`);
   const { chat_id, text } = req.params.arguments || {};

@@ -17,6 +17,7 @@ import { MAX_LEVEL, STAGES, levelOf as levelOn, stageIdx, barFor as barOn } from
 import { SPECIES, BRANCHES, BARS, BRICK, EGG_XP, RARE, LIMIT_PCT, signals, ratios, pick, branch, dayNight, dayKey, eggProgress, shouldHatch, formFor, nameFor, curveFor, replayEgg, aName, selfLine } from './lib/species.mjs';
 import { createBrain, ensureBrain, addAcross, addSkills, addEpisodesToLearning, brief, episodes, forgetEpisode, wipeKnowledge, PROJECTS } from './lib/brain.mjs';
 import { createSkills } from './lib/skills.mjs';
+import { matchSession, TELL_NOTE } from './lib/tell.mjs';
 import { createLearn } from './lib/learn.mjs';
 import { createSchedule } from './lib/schedule.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus, tabCommand } from './lib/actions.mjs';
@@ -462,6 +463,7 @@ function describeTool(name, input = {}, all = false) {
     case 'WebFetch': return `Fetch ${cut(input.url, 50)}`;
     case 'WebSearch': return `Search "${cut(input.query, 40)}"`;
     case 'Task': case 'Agent': return `Agent: ${cut(all ? input.prompt || input.description : input.description || input.prompt, 50)}`;
+    case 'mcp__lax__tell': return `tell ${short(input.session, 30)}: "${cut(input.text, 120)}"`;
     default: return name.replace(/^mcp__.*?__/, '');
   }
 }
@@ -814,6 +816,21 @@ function askShare(cid, what, who) {
   } });
   broadcast('bubble', bubble);
 }
+// My assistant's `tell` (lib/tell.mjs): your words go into that live session as if you'd said them on its tab. The
+// asking is the guardrail's: in a voice run, any lax tool but gap/recall/misheard/schedule asks you on the phone first
+// ("lax wants to: tell reports: …"), so this only runs after your yes. Answers the tool with what to tell you.
+function tellSession(b) {
+  const text = String(b.text || '').trim().slice(0, 2000);
+  if (!text) return { ok: false, say: 'There was nothing to pass on.' };
+  const m = matchSession(channelList(), b.session);
+  if (m.many) return { ok: false, say: `Several live sessions match "${b.session}": ${m.many.join(', ')}. Ask the user which one.` };
+  if (!m.cid) return { ok: false, say: m.names.length ? `No live session is called "${b.session}". Live now: ${m.names.join(', ')}.` : 'No live sessions are open right now.' };
+  const c = channels.get(m.cid);
+  sendChannel(m.cid, 'message', { chat_id: crypto.randomBytes(3).toString('hex'), text, via: 'lax', note: TELL_NOTE });
+  youSaid(text, c.project, channelSession(c)); feed(`  told ${c.project}: ${short(text, 80)}`, 'diary', settings.name.toLowerCase());
+  c.active = Date.now(); pushState();
+  return { ok: true, say: `Passed on to ${c.project}; it answers on its own tab.` };
+}
 // Several contacts match: "Which Rita?" on the phone. The answer (tapped or said) goes back to the channel, which shares on.
 function askPick(cid, pickId, question, labels) {
   const c = channels.get(cid); if (!c || !labels.length) return;
@@ -1047,6 +1064,7 @@ http.createServer(async (req, res) => {
     case '/api/learn/merged': return json(res, { ok: isLocal(req) && learn.merged({ id: String(b.id || ''), ok: !!b.ok, why: String(b.why || '') }) });
     case '/api/channel/event': // the schedule tool answers with what to tell you; the rest just ok
       if (b.type === 'schedule') return json(res, isLocal(req) ? schedule.tool(b) : { ok: false });
+      if (b.type === 'tell') return json(res, isLocal(req) ? tellSession(b) : { ok: false });
       return json(res, { ok: isLocal(req) && channelEvent(b) });
     case '/api/usage': if (isLocal(req)) sessionInfo(b); return json(res, { ok: isLocal(req) && setUsage(b.rate_limits) });
     case '/api/target':
