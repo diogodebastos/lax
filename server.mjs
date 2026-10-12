@@ -297,9 +297,9 @@ function petView() {
   const sp = activeSpecies(), st = stageNow();
   // The rare one keeps its secret until level 50: before that it is a pink like any other.
   const species = sp && { id: sp.id, name: nameFor(sp, st), branch: st >= BRICK ? sp.branch || null : null, copy: sp.copy || null, rare: !!sp.rare && st >= BRICK };
+  // A trait you switched off stays off until you switch it on (settings.hideTraits), even while it comes and goes:
+  // glasses and monocle can trade places many times a day.
   const lead = egg ? eggLead() : null, worn = traits(pet);
-  // A trait you switched off and then lost comes back on the next time it is earned.
-  if (settings.hideTraits?.some((t) => !worn.includes(t))) { settings = { ...settings, hideTraits: settings.hideTraits.filter((t) => worn.includes(t)) }; writeSettings(settings); }
   return { name: settings.name, born: pet.born, level, stage: stageOf(level), xp: pet.xp, prevXp, nextXp,
     traits: worn, traitTally: traitTally(pet), mood: mood(pet), streak: pet.streak, hatched: !egg, species,
     look: egg ? { form: null, color: lead.v ? SPECIES[lead.v].color : '#8a8378', lift: 0 } : formFor(sp, st),
