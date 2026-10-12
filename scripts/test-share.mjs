@@ -1,5 +1,5 @@
 // Sharing (lib/share.mjs): WhatsApp numbers and links, who "Rita" means, and picking one by voice.
-import { waNumber, waLink, contactChoices, pickOption, pressScript, sameName } from '../lib/share.mjs';
+import { waNumber, waLink, contactChoices, pickOption, pressScript, sameName, chipIs } from '../lib/share.mjs';
 
 let failed = 0;
 const check = (name, got, want) => { const ok = JSON.stringify(got) === JSON.stringify(want);
@@ -33,6 +33,8 @@ check('a chat named like what was said: first names, accents, emoji', ['Rui Pere
   .map((n) => [sameName(n, 'Rui'), sameName(n, 'joao'), sameName(n, 'nuno ramos'), sameName(n, 'Rui Pereira')]),
   [[true, false, false, true], [false, true, false, false], [false, false, true, false], [true, false, false, false]]);
 check('nothing said is no one', sameName('Rui', ''), false);
+check('file preview chip: short or full name, either way', [chipIs(['You'], '+351 900 000 000 (You)'), chipIs(['Inês Sá Brandão'], 'Inês'),
+  chipIs(['Inês'], 'Inês Sá Brandão'), chipIs(['made by Lax', 'Rita'], 'Inês Sá Brandão'), chipIs([], 'Rita')], [true, true, true, false, false]);
 check('WhatsApp keystrokes: activate first, numbers are pauses', pressScript(0.3, 'keystroke "v" using command down').split('\n'),
   ['tell application "WhatsApp" to activate', 'delay 0.3', 'tell application "System Events" to keystroke "v" using command down']);
 
