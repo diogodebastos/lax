@@ -9,7 +9,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { voiceAction, sendAction, screenMode, readStatus, tabCommand } from '../lib/actions.mjs';
-import { verdict, WISH_ASK, MERGE_IT } from '../lib/learn.mjs';
+import { verdict, laterFor, WISH_ASK, MERGE_IT } from '../lib/learn.mjs';
 import { FRESH } from '../lib/talk.mjs';
 
 const pty = createRequire(import.meta.url)('node-pty');
@@ -66,6 +66,8 @@ check('PT tabs: "volta para ti" / "fala com o Lax" go to Lax\'s own tab', tabCom
 check('PT tabs: "vai para lax cli dois" goes to the second', tabCommand('vai para lax cli dois', TWO) === 's4');
 check('PT tabs: "vai para a loja" is a message', tabCommand('vai para a loja', TABS) === null);
 check('PT wish answers: "sim" / "claro" yes, "não" / "nem pensar" no, "mais tarde" / "amanhã" later', verdict('Sim.') === 'yes' && verdict('claro') === 'yes' && verdict('não') === 'no' && verdict('nem pensar') === 'no' && verdict('mais tarde') === 'later' && verdict('amanhã') === 'later');
+check('"ask me in one week" / "next month" / "daqui a 3 dias" are a later, with how long', verdict('ask me in one week') === 'later' && laterFor('Ask me in one week.') === 7 * 86400e3 && laterFor('next month') === 30 * 86400e3 && laterFor('pergunta-me daqui a 3 dias') === 3 * 86400e3 && laterFor('as I said before try in two weeks') === 14 * 86400e3);
+check('"later" has no time; "yes, in a week" and "on the Mac" aren\'t a later', laterFor('later') === 0 && verdict('yes but in a week') === 'other' && verdict('on the Mac, not the phone') === 'other');
 check('PT: "sim mas no Mac" is a correction', verdict('sim mas no Mac') === 'other');
 check('PT: "tens desejos?" / "o que queres aprender?" / "lê-me a tua lista de desejos" ask for wishes', WISH_ASK.test('tens desejos?') && WISH_ASK.test('Lax, o que queres aprender?') && WISH_ASK.test('lê-me a tua lista de desejos'));
 check('PT: "faz o merge" / "sim, junta isso" merge', MERGE_IT.test('faz o merge') && MERGE_IT.test('sim, junta isso'));
