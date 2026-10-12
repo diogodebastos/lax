@@ -90,6 +90,8 @@ function applyLook() {
   $('#nameBtn').textContent = settings.name.toUpperCase(); $('#lifeName').textContent = settings.name.toUpperCase(); $('#knowsName').textContent = settings.name.toUpperCase(); $('#menuName').textContent = settings.name.toUpperCase();
 }
 let pet = { name: 'Lax', level: 1, stage: 'sprout', traits: [], mood: 'happy', xp: 0, prevXp: 0, nextXp: 10 };
+// A trait it earned, unless you switched it off in the Life menu.
+const wears = (t) => pet.traits.includes(t) && !settings.hideTraits?.includes(t);
 let sessions = [], voiceBusy = false, thinking = false, lastWork = 0, channels = [], voiceTarget = 'background', usage = null;
 // The Mac is asleep or off (no link): Lax sleeps too. ASLEEP = the app's offline copy of this page (no Mac at all).
 const ASLEEP = qs.has('asleep'); let macAsleep = ASLEEP;
@@ -264,7 +266,7 @@ function draw(m, t) {
   px(cx - shadowW / 2, GROUND + 1, shadowW, 1, C.shadow);
 
   // cape behind
-  if (pet.traits.includes('cape')) { const fl = Math.round(Math.sin(t / 120) * 2); px(x0 - 3 + fl, y0 + 3, 3, h - 2, C.cape); px(x0 - 4 + fl * 2, y0 + 5, 2, h - 5, C.cape); }
+  if (wears('cape')) { const fl = Math.round(Math.sin(t / 120) * 2); px(x0 - 3 + fl, y0 + 3, 3, h - 2, C.cape); px(x0 - 4 + fl * 2, y0 + 5, 2, h - 5, C.cape); }
   if (form) formBack(form, x0, y0, w, h, m, t);
 
   // feet: the body's shade, not its outline colour, so they show on a dark background too
@@ -281,7 +283,7 @@ function draw(m, t) {
     for (const [cx2, cy2] of [[x0 - 1, y0 - 1], [x0 + w, y0 - 1], [x0 - 1, y0 + h], [x0 + w, y0 + h]]) px(cx2, cy2, 1, 1, C.bg);
     for (const [cx2, cy2] of [[x0, y0], [x0 + w - 1, y0], [x0, y0 + h - 1], [x0 + w - 1, y0 + h - 1]]) px(cx2, cy2, 1, 1, C.out);
   }
-  if (pet.traits.includes('scar')) { px(x0 + w - 5, y0 + h - 6, 1, 1, C.out); px(x0 + w - 4, y0 + h - 5, 1, 1, C.out); px(x0 + w - 3, y0 + h - 4, 1, 1, C.out); }
+  if (wears('scar')) { px(x0 + w - 5, y0 + h - 6, 1, 1, C.out); px(x0 + w - 4, y0 + h - 5, 1, 1, C.out); px(x0 + w - 3, y0 + h - 4, 1, 1, C.out); }
   if (form) formFront(form, x0, y0, w, h, m, t);
 
   // arms when waving
@@ -305,9 +307,9 @@ function draw(m, t) {
   eye(ex1); eye(ex2);
   // A frame all round an eye (5 x 6, just outside it).
   const frame = (ex, c) => { px(ex - 1, eyeY - 1, 5, 1, c); px(ex - 1, eyeY + 4, 5, 1, c); px(ex - 1, eyeY, 1, 4, c); px(ex + 3, eyeY, 1, 4, c); };
-  if (pet.traits.includes('glasses')) { frame(ex1, C.out); frame(ex2, C.out); px(ex1 + 4, eyeY + 1, ex2 - ex1 - 5, 1, C.out); // bridge
+  if (wears('glasses')) { frame(ex1, C.out); frame(ex2, C.out); px(ex1 + 4, eyeY + 1, ex2 - ex1 - 5, 1, C.out); // bridge
     px(x0, eyeY + 1, ex1 - 1 - x0, 1, C.out); px(ex2 + 4, eyeY + 1, x0 + w - ex2 - 4, 1, C.out); } // arms to the sides
-  if (pet.traits.includes('monocle')) { frame(ex2, C.gold); px(ex2 + 3, eyeY + 5, 1, 3, C.gold); } // and its chain
+  if (wears('monocle')) { frame(ex2, C.gold); px(ex2 + 3, eyeY + 5, 1, 3, C.gold); } // and its chain
 
   // mouth
   const my = eyeY + 6, mx = cx - 2;
@@ -317,14 +319,14 @@ function draw(m, t) {
   else if (m === 'working') px(mx, my + 1, 4, 1, C.out);
 
   // headgear
-  if (pet.traits.includes('headband')) { px(x0, y0 + 1, w, 2, C.band); const fl = Math.round(Math.sin(t / 80) * 1.5);
+  if (wears('headband')) { px(x0, y0 + 1, w, 2, C.band); const fl = Math.round(Math.sin(t / 80) * 1.5);
     px(x0 - 3, y0 + 1 + fl, 3, 1, C.band); px(x0 - 5, y0 + 2 - fl, 2, 1, C.band); }
-  if (pet.traits.includes('goggles')) { px(x0 + 1, y0, w - 2, 1, C.out); px(ex1, y0 - 1, 3, 2, C.glass); px(ex2, y0 - 1, 3, 2, C.glass); }
-  if (pet.traits.includes('antenna')) { px(cx, y0 - 5, 1, 4, C.stick); px(cx - 1, y0 - 7, 3, 2, Math.sin(t / 200) > 0 ? C.gold : '#fff1a8'); }
+  if (wears('goggles')) { px(x0 + 1, y0, w - 2, 1, C.out); px(ex1, y0 - 1, 3, 2, C.glass); px(ex2, y0 - 1, 3, 2, C.glass); }
+  if (wears('antenna')) { px(cx, y0 - 5, 1, 4, C.stick); px(cx - 1, y0 - 7, 3, 2, Math.sin(t / 200) > 0 ? C.gold : '#fff1a8'); }
   if (pet.stage === 'sprout' && !form) { px(cx, y0 - 3, 1, 2, C.green); px(cx + 1, y0 - 4, 2, 1, C.green); px(cx - 2, y0 - 3, 2, 1, C.green); }
   if (form) formTop(form, x0, y0, w, h, eyeY, m, t);
   if (pet.stage === 'legend') { const cy = y0 - crownLift; px(cx - 4, cy - 3, 9, 2, C.gold); px(cx - 4, cy - 5, 1, 2, C.gold); px(cx, cy - 5, 1, 2, C.gold); px(cx + 4, cy - 5, 1, 2, C.gold); }
-  if (pet.traits.includes('flame') && m !== 'sleep') { const f = Math.round(t / 100) % 2; px(x0 + w + 2, y0 - 2 - f, 2, 3, C.gold); px(x0 + w + 2, y0, 2, 1, C.red); }
+  if (wears('flame') && m !== 'sleep') { const f = Math.round(t / 100) % 2; px(x0 + w + 2, y0 - 2 - f, 2, 3, C.gold); px(x0 + w + 2, y0, 2, 1, C.red); }
 
   // overlays
   const top = y0 - 10;
@@ -1078,6 +1080,9 @@ function renderLife() {
   $('#sName').value !== settings.name && document.activeElement !== $('#sName') && ($('#sName').value = settings.name);
   $('#sPitch').value = settings.pitch;
   renderSpecies();
+  // Traits it earned, each one yours to switch off (it keeps earning it; you just don't see it).
+  $('#sTraits').innerHTML = (pet.traits || []).map((t) => `<label>${t} <button class="tog${wears(t) ? ' on' : ''}" data-t="${t}"></button></label>`).join('')
+    || `<label><span style="color:var(--dim)">none yet${pet.level < 10 ? ' (from level 10)' : ''}</span></label>`;
   lifeEl.querySelectorAll('.tog[data-k]').forEach((t) => t.classList.toggle('on', !!settings[t.dataset.k]));
   $('#sWait').querySelectorAll('button').forEach((b) => b.classList.toggle('on', +b.dataset.v === settings.askTimeout));
   $('#sListen').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === (settings.listen || 'phone')));
@@ -1136,6 +1141,8 @@ $('#swatches').addEventListener('click', (e) => {
 // No species at all: a plain Lax in a colour of your own (the rainbow swatch).
 $('#swatches').addEventListener('change', (e) => { if (e.target.id === 'sColor') { saveSettings({ speciesOverride: { id: 'plain', color: e.target.value, branch: null, rare: false } }); hop(1); } });
 lifeEl.querySelectorAll('.tog[data-k]').forEach((t) => t.addEventListener('click', () => saveSettings({ [t.dataset.k]: !settings[t.dataset.k] })));
+$('#sTraits').addEventListener('click', (e) => { const t = e.target.dataset.t; if (!t) return;
+  const off = settings.hideTraits || []; saveSettings({ hideTraits: off.includes(t) ? off.filter((x) => x !== t) : [...off, t] }); });
 $('#wipeKnows').addEventListener('click', (e) => e.currentTarget.classList.toggle('on')); // not a setting: only for this rebirth
 $('#sWait').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ askTimeout: +e.target.dataset.v }));
 $('#sListen').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ listen: e.target.dataset.v }));
