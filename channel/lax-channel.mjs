@@ -25,7 +25,7 @@ const SESSION_PID = claudePid();
 // everywhere else stay dormant: no tools, no link to Lax (voice would vanish into a session that can't hear it).
 const CHANNEL_MODE = process.env.LAX_CHANNEL_FORCE ? process.env.LAX_CHANNEL_FORCE === '1' // tests: on or off
   : /--(dangerously-load-development-)?channels\b[^]*\blax\b/.test(processArgs(SESSION_PID));
-// Lax's own assistant (a voice run, lib/server talk()) gets only `gap` and `misheard`: it talks back through its answer, not `reply`.
+// Lax's own assistant (a voice run, lib/server talk()) gets only `gap`, `misheard` and `schedule`: it talks back through its answer, not `reply`.
 const VOICE_MODE = !CHANNEL_MODE && process.env.LAX_VOICE === '1' && !process.env.LAX_REFLECT && !process.env.LAX_BUILD;
 // Lax's own runs (reflecting, recalling, building) get nothing from here. Every other session may `recall`: Lax's
 // long-term memory is for all of them, live with Lax or not. (The voice assistant searches its memory itself.)
@@ -102,8 +102,35 @@ const RECALL = {
   },
 };
 
+// Phase 7 (lib/schedule.mjs): a job, or a reminder, that Lax saves only on the user's yes on the phone.
+const SCHEDULE = {
+  name: 'schedule',
+  description: 'Schedule something for Lax to do by itself on this Mac, unattended: "every weekday at 8:30, brief me on open PRs", ' +
+    '"remind me in 20 minutes to call Rita". Each run is a fresh Claude Code in its own folder (cwd) with a time limit; its answer is ' +
+    'read aloud on the phone. A reminder (say) is just spoken, no run. action "add" asks the user "save it?" on the phone and saves ' +
+    'only on their yes; "list" shows what is scheduled (with ids); "remove" and "run" (now, to try it) take an id. Times are the ' +
+    'Mac\'s local time.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      action: { type: 'string', enum: ['add', 'list', 'remove', 'run'], description: 'Default add' },
+      title: { type: 'string', description: 'add: what it does, as "I\'ll …" would end ("brief you on open PRs")' },
+      when: { type: 'object', description: 'add: {"time": "08:30", "days": "weekdays"} (days: "daily", "weekdays", "weekends" or ["mon","thu"]); ' +
+        'once: {"time": "09:00", "date": "2026-10-14"}; a reminder from now: {"in_minutes": 20}',
+        properties: { time: { type: 'string' }, days: {}, date: { type: 'string' }, in_minutes: { type: 'number' } } },
+      prompt: { type: 'string', description: 'add, a job: the full instructions for each run, self-contained (it starts with no conversation)' },
+      say: { type: 'string', description: 'add, a reminder instead of a job: what Lax says at that time' },
+      cwd: { type: 'string', description: 'add, a job: the folder it runs in (a repo for PRs); default the user\'s projects folder' },
+      tools: { type: 'array', items: { type: 'string', enum: ['web', 'edit', 'run'] }, description: 'add, a job: what it may do beyond reading ' +
+        '(always allowed: files, searches, read-only commands like gh pr list, Lax\'s memory). Default ["web"]. Anything else asks on the phone.' },
+      max_minutes: { type: 'number', description: 'add, a job: time limit per run (default 10, max 60)' },
+      id: { type: 'string', description: 'remove / run: the job id from list' },
+    },
+  },
+};
+
 mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: VOICE_MODE ? [GAP, MISHEARD] : !CHANNEL_MODE ? (RECALL_MODE ? [RECALL] : []) : [GAP, MISHEARD, RECALL, {
+  tools: VOICE_MODE ? [GAP, MISHEARD, SCHEDULE] : !CHANNEL_MODE ? (RECALL_MODE ? [RECALL] : []) : [GAP, MISHEARD, RECALL, SCHEDULE, {
     name: 'reply',
     description: 'Reply to the user through Lax (shown in a speech bubble on their phone and read aloud).',
     inputSchema: {
@@ -169,6 +196,10 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
     const { heard, meant } = req.params.arguments || {};
     const r = await post({ type: 'misheard', heard: String(heard || ''), meant: String(meant || ''), cwd: process.cwd() });
     return { content: [{ type: 'text', text: r.ok ? 'Lax will fix it from now on. Carry on.' : 'Lax didn\'t keep that one (too short, or the same words). Carry on.' }] };
+  }
+  if (req.params.name === 'schedule' && (CHANNEL_MODE || VOICE_MODE)) {
+    const r = await post({ type: 'schedule', ...(req.params.arguments || {}) });
+    return { content: [{ type: 'text', text: r.say || 'Lax is not reachable; nothing was scheduled.' }], isError: !r.ok };
   }
   if (req.params.name !== 'reply' || !CHANNEL_MODE) throw new Error(`unknown tool: ${req.params.name}`);
   const { chat_id, text } = req.params.arguments || {};

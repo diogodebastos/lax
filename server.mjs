@@ -8,7 +8,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { ensureHome, commitMind, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice, addFreshAdvice, addEpisodesAdvice } from './lib/home.mjs';
+import { ensureHome, commitMind, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice, addFreshAdvice, addEpisodesAdvice, addScheduleAdvice } from './lib/home.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS, VOCAB } from './lib/paths.mjs';
 import { readVocab, addHeard, addWord, allHeard, knownWords, dictatedNote, answerIn, teachCommand, typedOver } from './lib/vocab.mjs';
 import { HOST, TOKEN, authed, isLocal, phoneUrl, pairPage } from './lib/auth.mjs'; // first: it loads Lax's home and local config
@@ -18,6 +18,7 @@ import { SPECIES, BRANCHES, BARS, BRICK, EGG_XP, RARE, LIMIT_PCT, signals, ratio
 import { createBrain, ensureBrain, addAcross, addSkills, addEpisodesToLearning, brief, episodes, forgetEpisode, wipeKnowledge, PROJECTS } from './lib/brain.mjs';
 import { createSkills } from './lib/skills.mjs';
 import { createLearn } from './lib/learn.mjs';
+import { createSchedule } from './lib/schedule.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus, tabCommand } from './lib/actions.mjs';
 import { readUsage, usageText } from './lib/usage.mjs';
 import { openTerminal, q, ON_MAC } from './lib/terminal.mjs';
@@ -569,14 +570,15 @@ function ask(h) {
     // Sessions with a live lax channel relay tool approvals themselves (no duplicate bubble); questions still come here.
     if (h.tool_name !== 'AskUserQuestion' && h.lax_session_pid && [...channels.values()].some((c) => c.sessionPid === h.lax_session_pid))
       return resolve({ decision: 'none' });
-    const id = crypto.randomBytes(6).toString('hex'), project = proj(h.cwd);
+    // A scheduled job (lib/schedule.mjs) asks under its own name, and waits longer: you may not be looking.
+    const id = crypto.randomBytes(6).toString('hex'), job = h.lax_job && schedule.jobs().find((j) => j.id === h.lax_job), project = job ? short(job.title, 40) : proj(h.cwd);
     const questions = h.tool_name === 'AskUserQuestion' && Array.isArray(h.tool_input?.questions) ? h.tool_input.questions : null;
     const bubble = questions
       ? { id, kind: 'question', session: h.session_id, project, questions, text: `${project}: ${questions[0].question}`, speak: true }
       : { id, kind: 'permission', session: h.session_id, project, gist: h.tool_name === 'Bash' && h.tool_input?.description ? `${short(h.tool_input.description, 50)}: ${describeTool(h.tool_name, h.tool_input)}` : describeTool(h.tool_name, h.tool_input), text: `${project} wants to: ${describeTool(h.tool_name, h.tool_input, true)}`, say: `${project} wants to: ${describeTool(h.tool_name, h.tool_input)}`, speak: true, actions: true,
         ...(grant?.startsWith('edit:') && { details: `A yes also lets it edit the rest of ${path.basename(grant.slice(5))} until it finishes this answer.` }) };
     // Questions are worth waiting longer for: they need reading.
-    const timer = setTimeout(() => finish('none'), Math.min(600, settings.askTimeout * (questions ? 4 : 1)) * 1000);
+    const timer = setTimeout(() => finish('none'), (job ? 600 : Math.min(600, settings.askTimeout * (questions ? 4 : 1))) * 1000);
     function finish(decision, answers) {
       clearTimeout(timer); pending.delete(id); broadcast('clear', { id });
       const ss = sessions.get(h.session_id); if (ss?.status === 'waiting') { ss.status = 'working'; pushState(); }
@@ -681,7 +683,7 @@ if (voiceSessions[ASSISTANT] && !laxTalk.last) {
 }
 
 // ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
-ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addSkills(); addEpisodesToLearning(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice(); addEpisodesAdvice();
+ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addSkills(); addEpisodesToLearning(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice(); addEpisodesAdvice(); addScheduleAdvice();
 // ---------- its mind on the website (lib/public-mind.mjs): the shape of what it knows and does, never what's in it ----------
 publicMind = createPublicMind({ live: () => { const v = petView(); return { color: v.look?.color, stage: v.stage, sessions: sessionList(), heard: weekCount('heard'), spoke: weekCount('spoke'), busy: working(), owner: settings.publicName || '', doing: doing() }; },
   allow: () => settings.publicProjects || [], log: (...a) => console.log('[mind]', ...a) });
@@ -721,6 +723,11 @@ const skills = createSkills({ settings: () => settings, feed, mind: mindEvent, d
   gainXp: (n) => { gainXp(n); save(); pushState(); }, milestone: (t) => { milestone(t); pushState(); }, record: (kind, text) => record(kind, text),
   say: (text, kind = 'reply') => broadcast('bubble', { id: 'skill' + Date.now(), kind, text, speak: true }),
   log: (...a) => console.log('[skills]', ...a) });
+// ---------- jobs you scheduled: confirmed on the phone, run unattended on the Mac (lib/schedule.mjs) ----------
+const schedule = createSchedule({ settings: () => settings, feed, diary: (t) => diary(t), broadcast, pending, workdir: DEFAULT_WORKDIR,
+  say: (text, kind = 'reply') => broadcast('bubble', { id: 'sched' + Date.now(), kind, text, speak: true }),
+  brief: (project) => brief(project, settings.name), spoken: (t) => spoken(t), claude: process.env.LAX_CLAUDE,
+  log: (...a) => console.log('[schedule]', ...a) });
 const tabLabel = (s) => `${s.project}·${s.where || 'cli'}`;
 // One line per session (and its latest step); the last few steps only for a session the message names, so the
 // block stays small: every message carries one, and they all stay in the conversation.
@@ -845,6 +852,7 @@ function talk(text, voice = false, spelled = []) {
       text: p ? `Got it. When I hear ${p.heard}, I'll write ${p.meant}.` : `I couldn't keep that one. Say: you keep mishearing this, it's that.` });
     return true;
   }
+  if (schedule.hears(text)) return true; // answering "save it?" for a job you just asked for (lib/schedule.mjs)
   // Answering a wish question, "any wishes?", "merge it" (lib/learn.mjs).
   if (learn.hears(text, { toLax: !pickChannel() })) return true;
   if (skills.hears(text)) return true; // answering "install this skill?"
@@ -1037,7 +1045,9 @@ http.createServer(async (req, res) => {
     case '/api/brain/review': return json(res, { ok: isLocal(req) && brain.review(true) }); // local only: the weekly review, now
     case '/api/brain/reflect': return json(res, { ok: isLocal(req) && !!b.session && (brain.enqueue(String(b.session)), true) }); // local only: reflect now
     case '/api/learn/merged': return json(res, { ok: isLocal(req) && learn.merged({ id: String(b.id || ''), ok: !!b.ok, why: String(b.why || '') }) });
-    case '/api/channel/event': return json(res, { ok: isLocal(req) && channelEvent(b) });
+    case '/api/channel/event': // the schedule tool answers with what to tell you; the rest just ok
+      if (b.type === 'schedule') return json(res, isLocal(req) ? schedule.tool(b) : { ok: false });
+      return json(res, { ok: isLocal(req) && channelEvent(b) });
     case '/api/usage': if (isLocal(req)) sessionInfo(b); return json(res, { ok: isLocal(req) && setUsage(b.rate_limits) });
     case '/api/target':
       voiceTarget = b.target === 'auto' || channels.has(b.target) ? b.target : 'background'; pushState();
