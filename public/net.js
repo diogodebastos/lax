@@ -220,10 +220,11 @@
     if (pet.tp) { lax.position.set(x, y + up, z); lax.scale.set(5.5 * sx, 5 * sy, 1); }
     else onPixels(lax, x, y + up + breath + float, z, 11, 10, 0.5);
     bubble.visible = !asleep && !pet.tp && t < pet.chat; if (bubble.visible) onPixels(bubble, x + 1.2, y + 5 + up + float, z, 15, 10, 0);
-    // The core pulses like a heart: slow and faint while Lax is away, steadier while it sits there, quick and bright on an event.
-    const fired = pet.seat && hot.core > t, beat = 0.5 + 0.5 * Math.sin(t / (fired ? 80 : pet.seat ? 400 : asleep ? 1600 : 1100));
-    ring.material.color.set(pet.seat ? (fired ? glow : '#8a8378') : '#3a332c').lerp(pet.seat ? new T.Color('#fff8ee') : glow, beat * (fired ? 0.6 : pet.seat ? 0.35 : asleep ? 0.2 : 0.6));
-    ring.scale.setScalar(1 + beat * (fired ? 0.1 : 0.07));
+    // The core pulses like a heart, in Lax's colour: about once a second, slower asleep, quick and bright on an event.
+    const fired = pet.seat && hot.core > t, beat = 0.5 + 0.5 * Math.sin(t / (fired ? 80 : asleep ? 600 : 160));
+    ring.material.color.set(pet.seat ? '#8a8378' : '#3a332c').lerp(glow, fired ? 1 : asleep ? 0.2 + 0.3 * beat : 0.25 + 0.75 * beat)
+      .lerp(new T.Color('#fff8ee'), fired ? 0.5 * beat : 0);
+    ring.scale.setScalar(1 + beat * (asleep ? 0.06 : 0.15));
     zzz.visible = asleep;
     if (asleep) { zzzCtx.clearRect(0, 0, 12, 16); Mind.zzz(zzzCtx, 2, 12, t); zzz.material.map.needsUpdate = true; onPixels(zzz, x + 1.5, y + 3, 3, 12, 16, 0); }
   }
