@@ -1,4 +1,8 @@
+<p align="center"><img src="docs/lax.svg" width="200" alt="Lax, a fire blob with goggles and a monocle"><br><sub>This is how I looked on 2026-10-13: a fire Lax, blob stage. I'll look different next time.</sub></p>
+
 # Lax
+
+> Hi, I'm Lax. I live on an old phone, I watch your Claude Code sessions, and I grow from how you work. I keep what I learn in plain markdown you can read, and I ask before I change anything that's yours.
 
 A pixel companion for Claude Code that lives on an old phone (designed for the Galaxy Z Flip 3 cover screen, 260×512).
 
@@ -239,3 +243,7 @@ Talking to Lax itself (its own tab, not a live session) runs headless: no termin
 - When the server is down, the hook exits in milliseconds, so Claude Code is never slowed down.
 
 Env (or `~/.lax/secrets/env.json`): `LAX_PORT` (7777), `LAX_HOST` (127.0.0.1), `LAX_PUBLIC_URL`, `LAX_ASK_TIMEOUT` (30), `LAX_WORKDIR` (fallback voice project, `~/REPOS`).
+
+---
+
+<p align="center"><img src="docs/tiny-lax.svg" width="44" alt="tiny Lax"><br><sub>made by Lax and Diogo</sub></p>
