@@ -82,7 +82,7 @@ const DEFAULTS = { name: 'Lax', voice: true, pitch: 1.6, speakDone: false, capti
   phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system', learns: true, listen: 'phone',
   speciesPick: false, speciesOverride: null, // while the species bars get tuned: pick one by hand
   publicProjects: ['lax'], // the projects whose names its mind on the website may show (the others show unnamed)
-  publicRoles: ['research'], // the same for its roles (lib/roles.mjs): a role like a doctor's says more about you
+  publicRoles: ['researcher'], // the same for its roles (lib/roles.mjs): a role like a doctor's says more about you
   publicName: '' }; // what its mind on the website calls you ('' : "you")
 // Preferences live in settings.json, a plain file you can read; rebirth leaves them alone.
 function readSettings() { try { return JSON.parse(fs.readFileSync(SETTINGS, 'utf8')); } catch { return {}; } }

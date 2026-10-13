@@ -15,7 +15,7 @@
     archive: { at: [-6, -19, 14], color: '#8a8378', label: 'archive' },
   };
   const PROJ = [[-22, 12, -12], [-24, -9, 9], [-8, 19, -18], [-18, 1, -24]];
-  // Its roles (what it has become from the work it does: research first), across from the projects.
+  // Its roles (who it has become from the work it does: your researcher first), across from the projects.
   const ROLE = [[27, 16, 12], [28, -14, -2], [8, 23, 16], [30, 2, 22]];
   const LINKS = [['core', 'hearing'], ['core', 'speech'], ['core', 'you'], ['core', 'memory'], ['core', 'learning'], ['memory', 'you'],
     ['memory', 'learning'], ['learning', 'skills'], ['memory', 'archive'], ['learning', 'you']];
