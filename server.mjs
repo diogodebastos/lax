@@ -8,7 +8,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { ensureHome, commitMind, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice, addFreshAdvice, addEpisodesAdvice, addScheduleAdvice, addSelfAdvice } from './lib/home.mjs';
+import { ensureHome, commitMind, mindHead, forgotSince, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice, addFreshAdvice, addEpisodesAdvice, addScheduleAdvice, addSelfAdvice } from './lib/home.mjs';
 import { ensureSelf, self } from './lib/self.mjs';
 import { createRoles, workLog } from './lib/roles.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS, VOCAB } from './lib/paths.mjs';
@@ -950,7 +950,7 @@ function talk(text, voice = false, spelled = []) {
   pet.voice++; gainXp(3); save();
   youSaid(text, name);
   const child = spawn(process.env.LAX_CLAUDE || 'claude', args, { cwd, env: { ...process.env, LAX_VOICE: '1', LAX_HOME: HOME }, stdio: ['ignore', 'pipe', 'pipe'] });
-  voiceRun = { child, cwd, sessionId: voiceSessions[ASSISTANT] || null };
+  voiceRun = { child, cwd, sessionId: voiceSessions[ASSISTANT] || null, head: mindHead() };
   broadcast('react', { state: 'thinking' }); pushState();
   let buf = '', result = null, pendingSay = null;
   child.stdout.on('data', (d) => {
@@ -969,8 +969,9 @@ function talk(text, voice = false, spelled = []) {
   });
   let err = ''; child.stderr.on('data', (d) => { err += d; });
   child.on('close', (code) => {
-    const changed = commitMind(); // whatever Lax learned or changed in its mind, with history, described by what changed
-    if (changed.startsWith('forgot:')) { record('forgot', changed.slice(8)); mindEvent('forget'); } // a note that was wrong: its learning record
+    commitMind(); // whatever Lax learned or changed in its mind, with history, described by what changed
+    // A note that was wrong goes to its learning record, whether it committed the forget itself or we just did.
+    const forgot = forgotSince(voiceRun.head); for (const f of forgot) record('forgot', f); if (forgot.length) mindEvent('forget');
     voiceRun = null;
     const ok = result && !result.is_error;
     const say = ok ? spoken(result.result) : `Something went wrong. ${short(err || result?.result, 120)}`;
