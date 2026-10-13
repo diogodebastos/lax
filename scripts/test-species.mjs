@@ -86,8 +86,8 @@ check('a busy morning hatches on 1000 XP, from its events so far', [r2.at < T0 +
 check('too little history: still an egg', replayEgg(run('a', T0, 10)).at, null);
 check('local days', dayKey(new Date('2026-10-05T23:59').getTime()), '2026-10-05');
 
-// The phone draws every form the lines use.
-const ui = fs.readFileSync(new URL('../public/lax.js', import.meta.url), 'utf8');
+// The phone draws every form the lines use (public/body.js, its body's drawing).
+const ui = fs.readFileSync(new URL('../public/body.js', import.meta.url), 'utf8');
 const forms = new Set(['grass', 'fire', 'water', 'electric', 'fox'].flatMap((id) => line({ id })).concat(Object.values(BRANCHES).map((b) => b.form), ['float']));
 check('the phone draws every form', [...forms].filter((f) => !ui.includes(`f === '${f}'`)), []);
 

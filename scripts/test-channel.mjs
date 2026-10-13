@@ -19,7 +19,8 @@ const server = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server
 const cleanup = () => { server.kill(); fs.rmSync(DATA, { recursive: true, force: true }); };
 process.on('exit', cleanup);
 for (let i = 0; i < 50 && !fs.existsSync(path.join(DATA, 'secrets', 'token')); i++) await new Promise((r) => setTimeout(r, 100));
-await new Promise((r) => setTimeout(r, 300));
+// Then until it answers: the token comes first, before the mind is set up.
+for (let i = 0; i < 50; i++) { try { await fetch(LAX + '/'); break; } catch { await new Promise((r) => setTimeout(r, 100)); } }
 const TOKEN = fs.readFileSync(path.join(DATA, 'secrets', 'token'), 'utf8').trim();
 const H = { 'content-type': 'application/json', 'x-lax-token': TOKEN };
 const post = (p, b) => fetch(LAX + p, { method: 'POST', headers: H, body: JSON.stringify(b) }).then((r) => r.json());

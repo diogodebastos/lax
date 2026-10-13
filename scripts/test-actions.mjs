@@ -133,7 +133,7 @@ check('an unreadable screen says so', readStatus('usage', 'nothing here').say ==
 const server = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server.mjs')], { env: ENV, stdio: 'ignore' });
 process.on('exit', () => { server.kill(); fs.rmSync(HOME, { recursive: true, force: true }); });
 for (let i = 0; i < 50 && !fs.existsSync(path.join(HOME, 'secrets', 'token')); i++) await sleep(100);
-await sleep(300);
+for (let i = 0; i < 50; i++) { try { await fetch(LAX + '/'); break; } catch { await sleep(100); } } // then until it answers
 const TOKEN = fs.readFileSync(path.join(HOME, 'secrets', 'token'), 'utf8').trim();
 const post = (p, b) => fetch(LAX + p, { method: 'POST', headers: { 'content-type': 'application/json', 'x-lax-token': TOKEN },
   body: JSON.stringify(b) }).then((r) => r.json());

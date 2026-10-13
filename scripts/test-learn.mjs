@@ -69,7 +69,7 @@ const cleanup = () => { server.kill(); fs.rmSync(HOME, { recursive: true, force:
 process.on('exit', cleanup);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 for (let i = 0; i < 50 && !fs.existsSync(path.join(HOME, 'secrets', 'token')); i++) await sleep(100);
-await sleep(300);
+for (let i = 0; i < 50; i++) { try { await fetch(LAX + '/'); break; } catch { await sleep(100); } } // then until it answers
 const TOKEN = fs.readFileSync(path.join(HOME, 'secrets', 'token'), 'utf8').trim();
 const H = { 'content-type': 'application/json', 'x-lax-token': TOKEN };
 const post = (p, b) => fetch(LAX + p, { method: 'POST', headers: H, body: JSON.stringify(b) }).then((r) => r.json());
@@ -98,10 +98,10 @@ const tools = async (env) => {
   return c;
 };
 const dormant = await tools({ LAX_CHANNEL_FORCE: '0' });
-check('a session that doesn\'t hear Lax has no `gap` (only `recall`, Phase 6)', JSON.stringify((await dormant.listTools()).tools.map((t) => t.name)) === '["recall"]');
+check('a session that doesn\'t hear Lax has no `gap` (only `recall` and `self`, Phases 6 and 6.2)', JSON.stringify((await dormant.listTools()).tools.map((t) => t.name)) === '["recall","self"]');
 await dormant.close();
 const voice = await tools({ LAX_CHANNEL_FORCE: '0', LAX_VOICE: '1' });
-check('Lax\'s own assistant gets only `gap`, `misheard`, `schedule` and `tell`', JSON.stringify((await voice.listTools()).tools.map((t) => t.name)) === '["gap","misheard","schedule","tell"]');
+check('Lax\'s own assistant gets only `gap`, `misheard`, `schedule`, `tell` and `self`', JSON.stringify((await voice.listTools()).tools.map((t) => t.name)) === '["gap","misheard","schedule","tell","self"]');
 const live = await tools({ LAX_CHANNEL_FORCE: '1' });
 check('a live session gets `gap` next to reply and share', (await live.listTools()).tools.some((t) => t.name === 'gap'));
 

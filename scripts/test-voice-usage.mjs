@@ -26,7 +26,7 @@ const cleanup = () => { server.kill(); fs.rmSync(HOME, { recursive: true, force:
 process.on('exit', cleanup);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 for (let i = 0; i < 50 && !fs.existsSync(path.join(HOME, 'secrets', 'token')); i++) await sleep(100);
-await sleep(300);
+for (let i = 0; i < 50; i++) { try { await fetch(LAX + '/'); break; } catch { await sleep(100); } } // then until it answers
 const TOKEN = fs.readFileSync(path.join(HOME, 'secrets', 'token'), 'utf8').trim();
 const H = { 'content-type': 'application/json', 'x-lax-token': TOKEN };
 const post = (p, b) => fetch(LAX + p, { method: 'POST', headers: H, body: JSON.stringify(b) }).then((r) => r.json());
