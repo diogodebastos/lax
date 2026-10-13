@@ -34,7 +34,7 @@ const snap = shape(readMind(live()), ['lax']);
 assert.deepEqual(leaks(snap), []);
 assert.equal(snap.owner, 'diogo');
 assert.equal(shape(readMind({ ...live(), owner: 'Diogo <me@x.com>' }), []).owner, ''); // only a plain name
-assert.deepEqual(Object.keys(snap), ['v', 'seen', 'look', 'owner', 'you', 'projects', 'episodes', 'archive', 'skills', 'rules', 'week', 'busy', 'doing', 'sessions']);
+assert.deepEqual(Object.keys(snap), ['v', 'seen', 'look', 'owner', 'you', 'projects', 'episodes', 'archive', 'skills', 'rules', 'week', 'busy', 'doing', 'sessions', 'roles']);
 assert.deepEqual(snap.doing, { hearing: true, speaking: false, reflecting: false, recalling: false });
 assert.equal(snap.busy, true);
 assert.equal(clean({ ...snap, busy: 'yes' }), null);
@@ -47,6 +47,7 @@ assert.deepEqual(snap.skills, { drafts: 1, installed: 1 });
 assert.ok(snap.rules.learning > 0 && snap.rules.wishing === 0);
 assert.deepEqual(snap.sessions, [{ p: 0, state: 'working' }, { p: 1, state: 'idle' }, { p: null, state: 'idle' }]);
 assert.equal(snap.look.color, '#d97757');
+assert.deepEqual(snap.roles, []); // no role yet (Phase 6.3; scripts/test-roles.mjs has them)
 assert.equal(shape(readMind(live()), []).projects[0].name, ''); // nothing allowed: no names at all
 
 // ---------- the Worker's check: exactly the shape, or nothing ----------

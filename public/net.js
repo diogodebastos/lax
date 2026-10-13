@@ -15,6 +15,8 @@
     archive: { at: [-6, -19, 14], color: '#8a8378', label: 'archive' },
   };
   const PROJ = [[-22, 12, -12], [-24, -9, 9], [-8, 19, -18], [-18, 1, -24]];
+  // Its roles (what it has become from the work it does: research first), across from the projects.
+  const ROLE = [[27, 16, 12], [28, -14, -2], [8, 23, 16], [30, 2, 22]];
   const LINKS = [['core', 'hearing'], ['core', 'speech'], ['core', 'you'], ['core', 'memory'], ['core', 'learning'], ['memory', 'you'],
     ['memory', 'learning'], ['learning', 'skills'], ['memory', 'archive'], ['learning', 'you']];
   // Where each event goes, along the links: from one node to each of the others. An event that says where it went (to:
@@ -90,13 +92,15 @@
   // This week: times you talked to it (hearing), it answered aloud (speech), its mind changed (learning).
   const counts = (s) => ({ hearing: s.week?.heard || 0, speech: s.week?.spoke || 0, learning: s.week?.changes || 0 });
   function build(s) {
-    const now = JSON.stringify([s.you, s.episodes.total, s.archive, s.skills, s.projects.map((p) => p.notes), s.sessions, s.week, s.look?.color]); if (now === sig) return; sig = now;
+    const now = JSON.stringify([s.you, s.episodes.total, s.archive, s.skills, s.projects.map((p) => p.notes), s.sessions, s.week, s.look?.color, s.roles]); if (now === sig) return; sig = now;
     net.clear(); for (const k in nodes) delete nodes[k]; for (const k in lines) delete lines[k];
     const color = s.look?.color || '#D97757', n = {
       ...counts(s), you: s.you, memory: s.episodes.total, skills: s.skills.installed + s.skills.drafts, archive: s.archive };
     // Every orb's size and specks come from its own number: nothing is drawn bigger than what it holds.
     for (const [k, d] of Object.entries(NODES)) orb(k, d.at, d.color || color, sizeOf(n[k]), specks(n[k]));
     s.projects.slice(0, 4).forEach((p, i) => orb('p' + i, PROJ[i], Mind.shade('#6fd36f', [-0.1, -0.35, 0.2, -0.5][i]), 1.3 + Math.min(1.4, Math.log2(p.notes + 1) / 4), 0));
+    // A role, in Lax's own colour (it's what Lax is), sized by its work: a speck for each piece this week.
+    (s.roles || []).slice(0, 4).forEach((r, i) => orb('r' + i, ROLE[i], Mind.shade(color, 0.35), sizeOf(r.work * 4), Math.min(10, r.week)));
     // Sessions plugged in right now: a small cube beside its project (or near Lax), linked straight to Lax.
     (s.sessions || []).slice(0, 6).forEach((ss, i) => {
       const base = ss.p != null && PROJ[ss.p] ? PROJ[ss.p] : [-6, 16, 2], at = [base[0] + 5 + (i % 2) * 2, base[1] + 4 - (i % 3) * 2, base[2] + 6];
@@ -111,6 +115,7 @@
       if (a === 'core' || b === 'core') l.userData.core = { other: a === 'core' ? b : a, end: a === 'core' ? 0 : 1 }; };
     for (const [a, b] of LINKS) link(a, b);
     s.projects.slice(0, 4).forEach((p, i) => link('p' + i, 'memory'));
+    (s.roles || []).slice(0, 4).forEach((r, i) => { link('core', 'r' + i); link('r' + i, 'memory'); for (const p of r.p || []) link('r' + i, 'p' + p); });
     (s.sessions || []).slice(0, 6).forEach((ss, i) => { link('s' + i, 'core', true); if (ss.p != null && nodes['p' + ss.p]) link('s' + i, 'p' + ss.p); });
   }
 
@@ -254,6 +259,7 @@
       { ...place('skills'), text: 'skills', n: s.skills.installed + (s.skills.drafts ? `+${s.skills.drafts}` : ''), hot: hot.skills > t },
       { ...place('archive'), text: 'archive', n: s.archive, hot: hot.archive > t },
       ...s.projects.slice(0, 4).map((p, i) => ({ ...place('p' + i), text: p.name || '', n: p.notes, hot: hot['p' + i] > t })),
+      ...(s.roles || []).slice(0, 4).map((r, i) => ({ ...place('r' + i), text: r.name || 'role', n: r.work, hot: hot['r' + i] > t })),
       ...(sessions ? [{ ...place('s0', 8), text: 'sessions', n: working ? `${working}/${sessions}` : sessions, hot: hot.core > t }] : []),
     ];
     const k = JSON.stringify(list); if (k === lastLabels) return; lastLabels = k; Mind.labels(list);
@@ -267,7 +273,11 @@
         for (let i = 0; i < Math.min(8, e.n || 1); i++) pulse('s' + e.session, 'core', t0 + i * 180);
         return;
       }
-      const r = ROUTES[e.kind]; if (!r) return;
+      const role = 'r' + e.role;
+      // A role at work: a track starting goes from the core to it; what it learned, from it to memory; a finished
+      // piece, from it to its project.
+      const r = e.kind === 'track' ? ['core', role] : e.kind === 'practice' ? [role, 'memory'] : e.kind === 'work' ? [role, nodes['p' + e.project] ? 'p' + e.project : 'memory'] : ROUTES[e.kind];
+      if (!r || (e.role != null && !nodes[role])) return;
       let from = r[0], targets = [r[1]];
       if (e.to?.length) targets = e.to.map((p) => (p === 'project' ? 'p' + e.project : p)).filter((k) => nodes[k]);
       if (e.kind === 'reflect' && nodes['p' + e.project]) { from = 'p' + e.project; targets = ['memory']; }

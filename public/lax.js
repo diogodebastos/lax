@@ -888,6 +888,14 @@ function renderKnows() {
       + (s.status === 'installed' ? '<button data-do="forget">forget</button>'
         : '<button data-do="read">read it</button><button class="yes" data-do="install">install</button><button data-do="decline">no</button>')
       + '</div></div>').join('');
+  // Roles: what it has become (lib/roles.mjs). A draft waits for your yes, with its practice to read.
+  const roles = k?.roles || [];
+  $('#roles').innerHTML = !k ? '<div class="none">…</div>' : !roles.length ? '<div class="none">none yet: a kind of work it keeps doing for you becomes one</div>'
+    : roles.map((r) => `<div class="sk" data-role="${esc(r.name)}"><b>${esc(r.name)}</b><span class="st">${SKILL_STATE[r.status] ?? ''}</span>`
+      + `<p>${r.work} piece${r.work === 1 ? '' : 's'} of work${r.projects.length ? ' · ' + esc(r.projects.join(', ')) : ''}${r.last ? ' · last ' + esc(r.last) : ''}</p>`
+      + `<pre hidden>${esc(r.practice || '')}</pre><div class="knows-act"><button data-do="read">how it works</button>`
+      + (r.status === 'active' ? '<button data-do="forget">forget</button>' : '<button class="yes" data-do="take">take it on</button><button data-do="decline">no</button>')
+      + '</div></div>').join('');
   $('#episodes').innerHTML = !k ? '<li class="none">…</li>' : !k.episodes.list.length ? '<li class="none">none yet: kept after each work session</li>'
     : k.episodes.list.slice(0, showAll.episodes ? k.episodes.list.length : FEW).map((e) => `<li data-ep="${esc(e.file)}"><span><i>${esc((e.when || '').slice(0, 10))} ${esc(e.where)}</i> ${esc(e.title)}</span><button>forget</button></li>`).join('')
       + moreRow('episodes', k.episodes.list.length);
@@ -903,6 +911,16 @@ $('#skills').addEventListener('click', async (e) => {
   if (DEMO) return;
   const r = await api('/api/knows', { skill: name, do: what });
   if (r.ok && what === 'install') { sfx([659, 988]); setReact('happy', 1200); }
+  loadKnows();
+});
+$('#roles').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button'), row = e.target.closest('[data-role]'); if (!btn || !row) return;
+  const what = btn.dataset.do;
+  if (what === 'read') { const pre = row.querySelector('pre'); pre.hidden = !pre.hidden; btn.textContent = pre.hidden ? 'how it works' : 'hide'; return; }
+  if (what === 'forget' && !sure(btn)) return;
+  if (DEMO) return;
+  const r = await api('/api/knows', { role: row.dataset.role, do: what });
+  if (r.ok && what === 'take') { sfx([659, 988]); setReact('happy', 1200); }
   loadKnows();
 });
 lifeEl.addEventListener('click', (e) => { const m = e.target.closest('[data-more]'); if (!m) return;
