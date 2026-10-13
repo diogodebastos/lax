@@ -157,6 +157,13 @@ The pages Lax makes for you (reports, guides, artifacts) are written in its own 
 - **The `lax-brand` skill becomes "express yourself":** ask `self`, read `self.md`, build the page. It keeps only the mechanics (one HTML file, dark and light, phone width, "made by Lax" and the date), and no colour or face of its own.
 - Each page keeps the look Lax had the day it was made, so old reports are part of the evolution timelapse.
 
+### Phase 6.3: roles, what Lax becomes
+Lax is not only a companion: it does real work for you, and becomes good at kinds of work. Research is the first (2026-10-12: two reports for Noticed, four tracks in parallel, then a guide); a lawyer, an assistant, a doctor, whatever else you ask of it, can follow. Roles are not declared; they are what Lax has practised.
+- **A role is a practice in the mind:** `mind/roles/<role>.md` says how Lax does that work (for research: split the question, run tracks in parallel, verify, write, publish a page). Lax rewrites it after each piece of work, as it does `learning.md`; a workflow it repeats becomes the role's own skill.
+- **A role keeps its work:** reports, cases, plans, each with where and when, so "what did we find about Noticed?" goes through recall.
+- **Discovered from use:** a new role appears when Lax has done that kind of work for you a few times; the weekly review names it, and you confirm it on the phone.
+- **On the brain:** each role is a node, sized by its real work (reports for research). Pulses only for what happens: a track starting from the core to the role, a note saved from the role to memory, a finished report from the role to its project. Public as shape only: counts and times, never a title or a topic.
+
 ### Phase 7: Lax schedules [diogodebastos/lax#7](https://github.com/diogodebastos/lax/issues/7)
 Focused automation: natural-language scheduling for reports, backups and briefings, running unattended through the Mac.
 - "Every weekday at 8:30, brief me on open PRs" becomes a job you confirm before it's saved.
