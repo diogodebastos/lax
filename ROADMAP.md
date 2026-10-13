@@ -149,6 +149,14 @@ Lax's mind, live, on [the website](https://lax.diogodebastos.com/demo/mind): not
 
 **Built** (2026-10-10; `lib/mind-shape.mjs`, `lib/public-mind.mjs`, `demo/worker.mjs`, `public/mind.html`, `mind-view.js`, `net.js`, tests in `scripts/test-mind.mjs`). Three looks were tried first (a town, a pixel brain, a voxel brain); the network won. Proven: a voice message reached the live page as hearing, and the session's tool call right after as its pulse. To prove: a real reflection and recall on the page, hearing and speech lasting as long as they do on the phone.
 
+### Phase 6.2: how Lax sees itself
+The pages Lax makes for you (reports, guides, artifacts) are written in its own hand. Its look is not a brand guide kept somewhere else: it comes from who Lax is today, so a water Lax writes in blue, with the face it has now.
+- **Self, in the mind:** `mind/self.md` says how Lax sees itself and how it expresses itself: its voice (short, plain, warm, no emoji, `>` markers), its taste (pixel edges, hard shadows, a pixel font for headings and a readable one for long text). Lax writes it and rewrites it in its reflections, like `learning.md`.
+- **The body, as it is:** colours come from the current look (`look.color` from the species and stage), with the light edge, dark edge and backgrounds derived from it. The face is drawn by the phone's own renderer (`Mind.sprite`), never a copy, so it changes when Lax evolves.
+- **A `self` tool** for any Claude Code session: `{ species, stage, palette, face }`, with the face as SVG, plus `self.md`.
+- **The `lax-brand` skill becomes "express yourself":** ask `self`, read `self.md`, build the page. It keeps only the mechanics (one HTML file, dark and light, phone width, "made by Lax" and the date), and no colour or face of its own.
+- Each page keeps the look Lax had the day it was made, so old reports are part of the evolution timelapse.
+
 ### Phase 7: Lax schedules [diogodebastos/lax#7](https://github.com/diogodebastos/lax/issues/7)
 Focused automation: natural-language scheduling for reports, backups and briefings, running unattended through the Mac.
 - "Every weekday at 8:30, brief me on open PRs" becomes a job you confirm before it's saved.
