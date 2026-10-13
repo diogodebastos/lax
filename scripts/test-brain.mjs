@@ -130,6 +130,17 @@ check('mind history: "forget that" reads as forgot', describeMindDiff(hunk('-- L
 check('mind history: a new note reads as noted', describeMindDiff(hunk('+- 2026-10-06: Prefers tea.')) === 'noted: Prefers tea.');
 check('mind history: an edited note reads as changed', describeMindDiff(hunk('-- Likes coffee.\n+- Likes tea.')) === 'changed: Likes tea.');
 check('mind history: no change, no message', describeMindDiff('') === '');
+{ // "Forget that" reaches the learning record, also when the assistant committed the forget itself.
+  const { mindHead, forgotSince, commitMind } = await import('../lib/home.mjs');
+  const head = mindHead(), f = path.join(MIND, 'projects', 'forget-test.md');
+  const commit = (m) => execFileSync('git', ['-C', MIND, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qam', m]);
+  fs.writeFileSync(f, '- Old timer plan.\n- Likes tea.\n'); commitMind('noted: two things');
+  fs.writeFileSync(f, '- Likes tea.\n'); commit('forgot the old timer plan: it is scheduling, done');
+  fs.writeFileSync(f, ''); commitMind();
+  fs.rmSync(f); commitMind('forgot role: research');
+  check('forgets since a point: its own commit and ours, not a role\'s', JSON.stringify(forgotSince(head)) === JSON.stringify(['the old timer plan: it is scheduling, done', 'Likes tea.']));
+  check('forgets: none without a starting point', forgotSince('').length === 0);
+}
 
 // Phase 5b: across projects, and how it learns.
 check('learning.md knows where and when, connections, and its record', /## Across projects/.test(fs.readFileSync(path.join(MIND, 'learning.md'), 'utf8')));
