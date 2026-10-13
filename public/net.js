@@ -69,10 +69,13 @@
     canvas.addEventListener('dblclick', () => Object.assign(view, { yaw: -0.3, pitch: 0.3, zoom: 1, vy: 0, vp: 0 }));
   }
   const zoom = (f) => (view.zoom = Math.max(0.5, Math.min(2.5, view.zoom * f)));
-  function resize(w, h) {
+  // band: the rows [top, bottom] it is framed in, the rest of the window is extra room around it (the floor sits at its bottom).
+  let bandBottom = -30;
+  function resize(w, h, band = [0, h]) {
     renderer.setSize(w, h, false);
-    const halfH = 30, halfW = Math.max(halfH * w / h, 33); const hh = halfW * h / w;
-    Object.assign(cam, { left: -halfW, right: halfW, top: hh, bottom: -hh }); cam.updateProjectionMatrix();
+    const bh = Math.max(1, band[1] - band[0]), halfH = 30, halfW = Math.max(halfH * w / bh, 33), upp = 2 * halfW / w;
+    const c = ((band[0] + band[1]) / 2 - h / 2) * upp, hh = h / 2 * upp; bandBottom = c - (band[1] - h / 2) * upp;
+    Object.assign(cam, { left: -halfW, right: halfW, top: c + hh, bottom: c - hh }); cam.updateProjectionMatrix();
   }
 
   // A faculty: a faceted orb sized by how much it holds, and specks orbiting it, one more each time it doubles.
@@ -169,7 +172,7 @@
   const texel = () => Math.max(1, Math.round(0.5 / ((cam.right - cam.left) / Mind.current.W))) * ((cam.right - cam.left) / Mind.current.W);
   const seatY = () => 5 - 10 * texel() / 2;
   const pet = { x: -20, dir: 1, mode: 'idle', until: 0, tx: 0, hops: 0, chat: 0, seat: false, busy: 0, tp: null };
-  const floorY = () => cam.bottom + 3.5, roam = () => [cam.left + 5, cam.right - 5];
+  const floorY = () => bandBottom + 3.5, roam = () => [cam.left + 5, cam.right - 5];
   function gibberish(thinking) { // a little speech bubble of scribbles (or dots while it thinks)
     const cv = document.createElement('canvas'); cv.width = 15; cv.height = 10; const c = cv.getContext('2d');
     c.fillStyle = '#120c0a'; c.fillRect(0, 0, 15, 8); c.fillRect(2, 7, 3, 3);

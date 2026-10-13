@@ -63,8 +63,10 @@
       const c = $('#c'), v = Mind.current; v.init(c);
       const fit = () => { const box = $('#view'), aw = Math.max(200, box.clientWidth), ah = Math.max(150, box.clientHeight);
         const s = Math.max(2, Math.round(Math.min(aw, 960) / 240)), w = Math.floor(aw / s), h = Math.floor(ah / s);
-        v.W = w; v.H = h; v.resize(w, h);
-        c.style.width = w * s + 'px'; c.style.height = h * s + 'px'; $('#labels').style.fontSize = Math.min(20, 8 + s * 3) + 'px'; };
+        c.style.width = w * s + 'px'; c.style.height = h * s + 'px'; $('#labels').style.fontSize = Math.min(20, 8 + s * 3) + 'px';
+        // It draws behind the title and the links, but is framed in the band between them (in its own pixels).
+        const ct = c.getBoundingClientRect().top, top = ($('header').getBoundingClientRect().bottom + 12 - ct) / s, bottom = ($('.note').getBoundingClientRect().top - 12 - ct) / s;
+        v.W = w; v.H = h; v.resize(w, h, [Math.max(0, top), Math.min(h, bottom)]); };
       fit(); addEventListener('resize', fit);
       let last = performance.now();
       // Frames can come far apart (a tab coming back, a headless preview): catch up in steps of a frame, up to 2 s.
