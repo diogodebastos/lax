@@ -10,13 +10,14 @@ import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { ensureHome, commitMind, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice, addFreshAdvice, addEpisodesAdvice, addScheduleAdvice, addSelfAdvice } from './lib/home.mjs';
 import { ensureSelf, self } from './lib/self.mjs';
+import { createRoles, workLog } from './lib/roles.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS, VOCAB } from './lib/paths.mjs';
 import { readVocab, addHeard, addWord, allHeard, knownWords, dictatedNote, answerIn, teachCommand, typedOver } from './lib/vocab.mjs';
 import { HOST, TOKEN, authed, isLocal, phoneUrl, pairPage } from './lib/auth.mjs'; // first: it loads Lax's home and local config
 import { grantKey, repoRoot } from './lib/allow.mjs';
 import { MAX_LEVEL, STAGES, levelOf as levelOn, stageIdx, barFor as barOn } from './lib/levels.mjs';
 import { SPECIES, BRANCHES, BARS, BRICK, EGG_XP, RARE, LIMIT_PCT, signals, ratios, pick, branch, dayNight, dayKey, eggProgress, shouldHatch, formFor, nameFor, curveFor, replayEgg, aName, selfLine } from './lib/species.mjs';
-import { createBrain, ensureBrain, addAcross, addSkills, addEpisodesToLearning, brief, episodes, forgetEpisode, wipeKnowledge, PROJECTS } from './lib/brain.mjs';
+import { createBrain, ensureBrain, addAcross, addSkills, addEpisodesToLearning, addRoles, addRolesToRemembering, brief, episodes, forgetEpisode, wipeKnowledge, PROJECTS } from './lib/brain.mjs';
 import { createSkills } from './lib/skills.mjs';
 import { matchSession, TELL_NOTE } from './lib/tell.mjs';
 import { createLearn } from './lib/learn.mjs';
@@ -81,6 +82,7 @@ const DEFAULTS = { name: 'Lax', voice: true, pitch: 1.6, speakDone: false, capti
   phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system', learns: true, listen: 'phone',
   speciesPick: false, speciesOverride: null, // while the species bars get tuned: pick one by hand
   publicProjects: ['lax'], // the projects whose names its mind on the website may show (the others show unnamed)
+  publicRoles: ['research'], // the same for its roles (lib/roles.mjs): a role like a doctor's says more about you
   publicName: '' }; // what its mind on the website calls you ('' : "you")
 // Preferences live in settings.json, a plain file you can read; rebirth leaves them alone.
 function readSettings() { try { return JSON.parse(fs.readFileSync(SETTINGS, 'utf8')); } catch { return {}; } }
@@ -107,7 +109,7 @@ function updateSettings(b) {
 }
 // Knowledge is separate from the pet: a rebirth keeps what Lax knows unless you ask it to forget that too.
 function rebirth(knowledge = false) {
-  if (knowledge) { wipeKnowledge(); skills.wipe(); for (const k of ['brainUpTo', 'episodeMilestone']) db.prepare('DELETE FROM kv WHERE key=?').run(k); }
+  if (knowledge) { wipeKnowledge(); skills.wipe(); roles.wipe(); for (const k of ['brainUpTo', 'episodeMilestone']) db.prepare('DELETE FROM kv WHERE key=?').run(k); }
   db.exec('DELETE FROM events; DELETE FROM milestones;');
   pet = newPet(); voiceSessions = {}; laxTalk = {}; kvSet('pet', pet); kvSet('voiceSessions', voiceSessions); kvSet('laxTalk', laxTalk); kvSet('diary', []); laxFeed.length = 0;
   leadCache.at = 0; autoCache.at = 0;
@@ -516,6 +518,7 @@ function onHook(h) {
       if (!mine) narrate(h, project);
       feed(describeTool(n, h.tool_input), 'tool', project, sid, stepParts(n, h.tool_input, h)); logEvent(sid, project, 'tool', describeTool(n, h.tool_input), repo);
       publicMind?.tool(sid);
+      if (/^(Agent|Task)$/.test(n)) for (const r of rolesIn(project)) publicMind?.event('track', { role: r }); // a track of a role's work starting
       break;
     }
     case 'PostToolUse': {
@@ -698,10 +701,10 @@ if (voiceSessions[ASSISTANT] && !laxTalk.last) {
 }
 
 // ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
-ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addSkills(); addEpisodesToLearning(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice(); addEpisodesAdvice(); addScheduleAdvice(); ensureSelf(); addSelfAdvice();
+ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addSkills(); addEpisodesToLearning(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice(); addEpisodesAdvice(); addScheduleAdvice(); ensureSelf(); addSelfAdvice(); addRoles(); addRolesToRemembering();
 // ---------- its mind on the website (lib/public-mind.mjs): the shape of what it knows and does, never what's in it ----------
 publicMind = createPublicMind({ live: () => { const v = petView(); return { color: v.look?.color, stage: v.stage, sessions: sessionList(), heard: weekCount('heard'), spoke: weekCount('spoke'), busy: working(), owner: settings.publicName || '', doing: doing() }; },
-  allow: () => settings.publicProjects || [], log: (...a) => console.log('[mind]', ...a) });
+  allow: () => settings.publicProjects || [], allowRoles: () => settings.publicRoles || [], log: (...a) => console.log('[mind]', ...a) });
 // What it learned, forgot or changed in how it learns goes where its last commit says (lib/public-mind.mjs placesOf).
 const mindEvent = (kind, extra = {}) => { if (['learned', 'forget', 'rules'].includes(kind) && !extra.to) { const p = placesOf(lastCommitFiles()); extra = { ...extra, to: p.to, project: extra.project ?? p.project }; }
   publicMind.event(kind, extra); };
@@ -715,7 +718,7 @@ const working = () => sessionList().some((s) => s.status === 'working') || !!voi
 const brain = createBrain({ db, settings: () => settings, feed, mind: mindEvent, diary: (t) => diary(t), broadcast, gainXp: (n) => { gainXp(n); save(); pushState(); },
   sessionInfo: (sid) => sessions.get(sid), skip: laxOwn, claude: process.env.LAX_CLAUDE,
   wish: (w) => learn.gap({ ...w, project: 'mind', via: 'review' }), // a fix its weekly review says needs code
-  milestone: (t) => { milestone(t); pushState(); }, skill: (k) => skills.drafted(k), skills: () => skills.list(),
+  milestone: (t) => { milestone(t); pushState(); }, skill: (k) => skills.drafted(k), skills: () => skills.list(), role: (k) => roles.drafted(k), roles: () => roles.list(),
   log: (...a) => console.log('[brain]', ...a) });
 // The first run of long-term memory: today's notes split into the current picture and episodes (once, when it's calm).
 setTimeout(() => brain.migrate(), Number(process.env.LAX_MIGRATE_AFTER ?? 120) * 1000).unref();
@@ -741,10 +744,21 @@ const skills = createSkills({ settings: () => settings, feed, mind: mindEvent, d
   gainXp: (n) => { gainXp(n); save(); pushState(); }, milestone: (t) => { milestone(t); pushState(); }, record: (kind, text) => record(kind, text),
   say: (text, kind = 'reply') => broadcast('bubble', { id: 'skill' + Date.now(), kind, text, speak: true }),
   log: (...a) => console.log('[skills]', ...a) });
+// The roles that worked in a project (from their episodes): a subagent started there is a track of their work.
+let roleWhere = { at: 0, map: {} };
+function rolesIn(project) {
+  if (Date.now() - roleWhere.at > 60e3) { const map = {}; for (const w of workLog()) (map[w.where] ||= new Set()).add(w.role); roleWhere = { at: Date.now(), map }; }
+  return [...(roleWhere.map[project] || [])].filter((r) => roles.active().includes(r));
+}
+// ---------- what Lax becomes: roles, from the work it does, confirmed on your yes (lib/roles.mjs) ----------
+const roles = createRoles({ settings: () => settings, feed, mind: mindEvent, diary: (t) => diary(t), broadcast, pending, quiet,
+  gainXp: (n) => { gainXp(n); save(); pushState(); }, milestone: (t) => { milestone(t); pushState(); }, record: (kind, text) => record(kind, text),
+  say: (text, kind = 'reply') => broadcast('bubble', { id: 'role' + Date.now(), kind, text, speak: true }),
+  log: (...a) => console.log('[roles]', ...a) });
 // ---------- jobs you scheduled: confirmed on the phone, run unattended on the Mac (lib/schedule.mjs) ----------
 const schedule = createSchedule({ settings: () => settings, feed, diary: (t) => diary(t), broadcast, pending, workdir: DEFAULT_WORKDIR,
   say: (text, kind = 'reply') => broadcast('bubble', { id: 'sched' + Date.now(), kind, text, speak: true }),
-  brief: (project) => brief(project, settings.name), spoken: (t) => spoken(t), claude: process.env.LAX_CLAUDE,
+  brief: (project) => brief(project, settings.name, roles.active()), spoken: (t) => spoken(t), claude: process.env.LAX_CLAUDE,
   log: (...a) => console.log('[schedule]', ...a) });
 const tabLabel = (s) => `${s.project}·${s.where || 'cli'}`;
 // One line per session (and its latest step); the last few steps only for a session the message names, so the
@@ -889,6 +903,7 @@ function talk(text, voice = false, spelled = []) {
   // Answering a wish question, "any wishes?", "merge it" (lib/learn.mjs).
   if (learn.hears(text, { toLax: !pickChannel() })) return true;
   if (skills.hears(text)) return true; // answering "install this skill?"
+  if (roles.hears(text)) return true; // answering "take it on as a role?"
   // "Lax, that was annoying": friction, with what it was just doing, for tonight (lib/improve.mjs).
   if (!pickChannel() && ANNOYED.test(text.trim())) {
     const me = settings.name.toLowerCase(), before = laxFeed.slice(-4).map((f) => short(f.line, 80)).join(' / ');
@@ -1031,15 +1046,15 @@ http.createServer(async (req, res) => {
     });
     return;
   }
-  if (url.pathname === '/api/brief') return json(res, { text: brief(url.searchParams.get('project') || '', settings.name) });
-  if (url.pathname === '/api/self') return json(res, self(petView(), settings)); // the `self` tool: how Lax looks today (lib/self.mjs)
+  if (url.pathname === '/api/brief') return json(res, { text: brief(url.searchParams.get('project') || '', settings.name, roles.active()) });
+  if (url.pathname === '/api/self') return json(res, self(petView(), settings, roles.view())); // the `self` tool: how Lax looks today (lib/self.mjs)
   if (url.pathname === '/api/memory') return json(res, { pet: petView(), raw: pet, voiceProject: pickChannel() ? channels.get(pickChannel()).project : 'assistant',
     milestones: db.prepare('SELECT ts,text FROM milestones ORDER BY id DESC').all() });
   // What Lax knows (the life menu): counts of its notes, its skills, its newest episodes.
   if (url.pathname === '/api/knows' && req.method === 'GET') {
     let projects = 0; try { projects = fs.readdirSync(PROJECTS).filter((f) => f.endsWith('.md')).length; } catch {}
     let you = 0; try { you = (fs.readFileSync(path.join(MIND, 'CLAUDE.md'), 'utf8').split(/^## Notes\s*$/m)[1] || '').split('\n').filter((l) => /^\s*[-*] /.test(l)).length; } catch {}
-    return json(res, { notes: { projects, you }, skills: skills.view(), episodes: episodes(1000) });
+    return json(res, { notes: { projects, you }, skills: skills.view(), roles: roles.view(), episodes: episodes(1000) });
   }
   if (req.method !== 'POST') return json(res, { error: 'method' }, 405);
   const b = await body(req);
@@ -1058,9 +1073,14 @@ http.createServer(async (req, res) => {
     case '/api/settings': updateSettings(b); pushState(); return json(res, { ok: true, settings });
     case '/api/hatch': return json(res, { ok: true }); // older pages tapped to hatch; the egg hatches on its own now
     case '/api/rebirth': rebirth(!!b.knowledge); broadcast('reborn', {}); pushState(); return json(res, { ok: true });
-    case '/api/knows': { // from the life menu: forget an episode or a skill, install or decline a drafted one
+    case '/api/knows': { // from the life menu: forget an episode, a skill or a role; install or decline a drafted skill, take on a drafted role
       const me = settings.name.toLowerCase();
       if (b.episode) { const t = forgetEpisode(String(b.episode)); if (t) { record('forgot', `episode ${t}`); mindEvent('forget'); feed(`  forgot: ${short(t, 80)}`, 'diary', me); } return json(res, { ok: !!t }); }
+      if (b.role) { const r = String(b.role);
+        if (b.do === 'take') { const why = roles.take(r); return json(res, { ok: !why, why }); }
+        if (b.do === 'decline') return json(res, { ok: roles.decline(r) });
+        if (b.do === 'forget') return json(res, { ok: roles.forget(r) });
+        return json(res, { ok: false }, 400); }
       const name = String(b.skill || '');
       if (b.do === 'forget') return json(res, { ok: skills.forget(name) });
       if (b.do === 'install') { const why = skills.install(name); return json(res, { ok: !why, why }); }

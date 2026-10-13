@@ -35,8 +35,10 @@ if (file) {
 const sid = (prompt.match(/Session: ([^,\\s]+),/) || [])[1];
 const ep = 'episodes/2026-10/2026-10-09-demo-proj-' + sid + '.md';
 if (sid) { fs.mkdirSync(path.dirname(ep), { recursive: true });
-  fs.writeFileSync(ep, '# Jump with coyote time\\nwhen: 2026-10-09 10:00 to 10:30\\nwhere: demo-proj\\nkind: build\\noutcome: done\\ntags: player, jump\\nsession: ' + sid + '\\n\\nAdded a jump to player.gd.\\n'); }
-console.log(JSON.stringify({ result: 'Done.\\n' + JSON.stringify({ learned: ['demo-proj is a pixel-art game in Godot', 'prefers short answers'], episodes: sid ? [ep, 'episodes/nope.md', '../CLAUDE.md'] : [] }) }));
+  fs.writeFileSync(ep, '# Jump with coyote time\\nwhen: 2026-10-09 10:00 to 10:30\\nwhere: demo-proj\\nkind: build\\noutcome: done\\ntags: player, jump\\nsession: ' + sid + '\\nrole: gamedev\\nmade: player.gd\\n\\nAdded a jump to player.gd.\\n');
+  fs.mkdirSync('roles', { recursive: true }); fs.writeFileSync('roles/gamedev.md', '# Game dev\\nPlaytest every change.\\n'); }
+console.log(JSON.stringify({ result: 'Done.\\n' + JSON.stringify({ learned: ['demo-proj is a pixel-art game in Godot', 'prefers short answers'], episodes: sid ? [ep, 'episodes/nope.md', '../CLAUDE.md'] : [],
+  roles: sid ? [{ name: 'gamedev', why: 'three games built' }] : [] }) }));
 `, { mode: 0o755 });
 
 const CC = path.join(HOME, 'cc-projects'); // Claude Code's transcripts, for this test
@@ -86,6 +88,9 @@ check('…and are committed to its history', /learned from demo-proj/.test(log))
 const sent = fs.readFileSync(path.join(HOME, 'last-prompt.txt'), 'utf8');
 check('the reflection gets the project\'s README', /<README.md>[\s\S]*Godot 4/.test(sent));
 check('the reflection uses the stronger model (sonnet)', fs.readFileSync(path.join(HOME, 'last-model.txt'), 'utf8') === 'sonnet');
+check('the reflection knows its roles (Phase 6.3)', /Roles you have: none yet/.test(sent));
+check('…and a role it drafted waits for your yes', JSON.parse(fs.readFileSync(path.join(HOME, 'roles.json'), 'utf8')).roles.some((r) => r.name === 'gamedev' && r.status === 'new')
+  && phone.some((e) => e.ev === 'feed' && /role drafted: gamedev/.test(e.d.line)));
 check('learning.md (how it learns) lives in the mind', fs.existsSync(path.join(MIND, 'learning.md')));
 
 // Phase 6: what happened is kept as an episode, following remembering.md.
@@ -143,6 +148,7 @@ const learnedBefore = learnedBubbles().length;
 check('the weekly review can run now (local)', (await post('/api/brain/review', {})).ok === true);
 for (let i = 0; i < 40 && learnedBubbles().length === learnedBefore; i++) await sleep(150);
 const rev = fs.readFileSync(path.join(HOME, 'review-prompt.txt'), 'utf8');
+check('the weekly review rereads self.md, and knows its roles', /reread self\.md/.test(rev) && /Roles drafted, waiting for the user's yes: gamedev/.test(rev));
 check('the weekly review gets its learning record', /<record>[\s\S]*refused: rotate the tunnel token/.test(rev), rev.slice(-200));
 check('…may change how it drafts wishes, and says so', /proposals ask where it runs first/.test(learnedBubbles().pop()?.d.details || '') && /Ask where it runs/.test(fs.readFileSync(path.join(MIND, 'wishing.md'), 'utf8')));
 check('…and a fix that needs code becomes a wish', phone.some((e) => e.ev === 'feed' && /> wish: learn to check where a wish runs/.test(e.d.line)));

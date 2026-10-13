@@ -150,9 +150,9 @@
   #miles { list-style:none; color:var(--text2); font-size:15px; } #miles li::before { content:'★ '; color:var(--amber); }
   /* What Lax knows: skills (a draft waits for your yes) and episodes, each one forgettable (tap twice). */
   #life h3 small { color:var(--dim); font-size:13px; text-transform:none; margin-left:4px; }
-  #skills .sk { margin:3px 0 6px; color:var(--text2); font-size:15px; } #skills .sk b { color:var(--fg); font-weight:400; }
-  #skills .sk .st { color:var(--amber); margin-left:6px; } #skills .sk p { color:var(--dim); margin:1px 0 3px; }
-  #skills pre { white-space:pre-wrap; word-break:break-word; font:inherit; font-size:14px; color:var(--text2); background:var(--field); border:1px solid var(--line2); padding:4px 6px; max-height:180px; overflow:auto; margin:3px 0; }
+  :is(#skills, #roles) .sk { margin:3px 0 6px; color:var(--text2); font-size:15px; } :is(#skills, #roles) .sk b { color:var(--fg); font-weight:400; }
+  :is(#skills, #roles) .sk .st { color:var(--amber); margin-left:6px; } :is(#skills, #roles) .sk p { color:var(--dim); margin:1px 0 3px; }
+  :is(#skills, #roles) pre { white-space:pre-wrap; word-break:break-word; font:inherit; font-size:14px; color:var(--text2); background:var(--field); border:1px solid var(--line2); padding:4px 6px; max-height:180px; overflow:auto; margin:3px 0; }
   .knows-act { display:flex; gap:6px; } .knows-act button, #episodes button { font:inherit; font-size:14px; background:var(--field); color:var(--dim); border:1px solid var(--line2); padding:0 6px; cursor:pointer; }
   .knows-act button.yes { background:var(--coral); color:#000; border-color:var(--coral); }
   .knows-act button.sure, #episodes button.sure { background:#3a1512; color:#ffb4ad; border-color:#c9392f; }
@@ -161,7 +161,7 @@
   #episodes li span { overflow:hidden; } #episodes li i { font-style:normal; color:var(--dim); }
   #skills .none, #episodes .none { color:var(--dim); }
   #episodes li.more, #miles li.more { display:block; color:var(--dim); cursor:pointer; text-decoration:underline; } #miles li.more::before { content:''; }
-  body.big #skills .sk, body.big #episodes { font-size:18px; }
+  body.big #skills .sk, body.big #roles .sk, body.big #episodes { font-size:18px; }
   #rebirth { width:100%; font:inherit; margin-top:8px; padding:5px; background:#3a1512; color:#ffb4ad; border:2px solid #c9392f; cursor:pointer; position:relative; overflow:hidden; }
   #rebirth i { position:absolute; left:0; top:0; bottom:0; width:0; background:rgba(255,90,79,.35); }
 
@@ -301,6 +301,8 @@
     <h3>milestones</h3>
     <ul id="miles"></ul>
     <h2 class="group">what <span id="knowsName">LAX</span> knows <small id="knowsCount"></small></h2>
+    <h3>roles <small>what it has become from the work it does</small></h3>
+    <div id="roles"></div>
     <h3>skills <small>for every claude code session</small></h3>
     <div id="skills"></div>
     <h3>episodes <small>what happened, newest first</small></h3>
@@ -314,6 +316,6 @@
 <div id="wake"><div>tap to wake <span id="wakeName">Lax</span><small>(unlocks sound + mic)</small></div></div>
 <script src="heard.js?v=2"></script>
 <script src="body.js?v=1"></script>
-<script src="lax.js?v=43"></script>
+<script src="lax.js?v=44"></script>
 </body>
 </html>
