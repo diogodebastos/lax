@@ -9,13 +9,35 @@ A pixel companion for Claude Code that lives on an old phone (designed for the G
 
 No API credits. Voice runs `claude -p` with your normal Claude Code login. Speech recognition and the voice are the phone browser's built-in Web Speech features.
 
+No agent framework (no LangChain), no vector database, no API key. Claude Code already is the agent loop (tools, permissions, resume, MCP, skills, hooks), so every time Lax thinks it runs `claude -p` with a prompt, a folder, a time limit and a fence (`hooks/lax-hook.mjs` allows or denies each tool call, by which run it is).
+
 ## How it fits together
 
+```mermaid
+flowchart LR
+  subgraph mac["your Mac (localhost only)"]
+    cc["Claude Code<br/>your sessions"]
+    srv["server.mjs<br/>Node + SQLite"]
+    runs["claude -p runs<br/>talk, reflect, recall, jobs"]
+    mcp["MCP server lax<br/>inside each session"]
+    mind[("~/.lax/mind<br/>markdown + git")]
+    arch[("~/.lax/archive<br/>every transcript")]
+  end
+  phone["the phone<br/>web page + app"]
+
+  cc -- hooks --> srv
+  srv -- allow / deny --> cc
+  srv -- "feed (SSE)" --> phone
+  phone -- "voice, taps (Cloudflare Tunnel)" --> srv
+  srv -- spawns --> runs
+  srv -- "your words (channel)" --> mcp
+  runs -- "reads, writes" --> mind
+  mcp -- "recall: grep" --> mind
+  mcp -- "recall: grep" --> arch
+  mind -- "brief at SessionStart" --> cc
 ```
-Claude Code (Mac) ──hooks──▶ server.mjs (Mac, :7777) ──SSE──▶ phone browser (Lax's body)
-                     ◀─allow/deny─┘   │  SQLite life:   ~/.lax/life.db   │
-                                      └──── claude -p ◀── /api/talk ◀────┘ (voice)
-```
+
+The phone is only a screen, a mic and a speaker. What you say goes to a live session through the MCP channel, or to Lax's own conversation through a `claude -p` run.
 
 The repo is Lax's **body** (code only). **Lax itself** lives in `~/.lax` on your Mac (`LAX_HOME` moves it):
 
@@ -61,6 +83,22 @@ Talking from **Lax's own tab** (the first one, named after it) goes to Lax itsel
 
 These files are created on first use and never overwritten.
 
+### How it learns
+
+```mermaid
+flowchart LR
+  obs["observe<br/>hooks fill the journal"] --> quiet["quiet<br/>10 min idle, real work"]
+  quiet --> refl["reflect<br/>Sonnet, fenced, 20 a day max"]
+  refl --> write["write<br/>notes, episodes"]
+  write --> commit["commit<br/>git, in the mind"]
+  commit -- reads --> review["weekly review<br/>what went wrong"]
+  review -- "rewrites learning.md" --> refl
+```
+
+- A session counts as real work with 2+ prompts or 6+ tool calls (`LAX_REFLECT_IDLE`, `LAX_REFLECT_CAP`, `LAX_REFLECT_MODEL`).
+- The reflection reads the journal and follows `mind/learning.md`: it rewrites the project's notes, keeps episodes (`remembering.md`), and may draft a skill or a role for your yes.
+- The weekly review is the feedback loop: it reads what went wrong with what Lax learned and rewrites the instructions the next reflection follows, so how it learns improves too.
+
 ### Long-term memory
 
 The notes are the short, current picture. Behind them, Lax keeps the past and finds it again when asked:
@@ -68,6 +106,32 @@ The notes are the short, current picture. Behind them, Lax keeps the past and fi
 - **Episodes**: after a quiet session the reflection also writes what happened (`mind/episodes/YYYY-MM/…md`: when, where, kind, outcome, tags, the transcript, then the story). How it remembers is in `mind/remembering.md`, which Lax may rewrite in its weekly review.
 - **Recall**: "how did we fix…?" Lax searches episodes, then notes, then the archive (grep, no index) and answers with date and project. By voice it does this itself. Every Claude Code session gets a `recall` tool for it.
 - **Skills**: a workflow you repeat becomes a draft `SKILL.md` in its mind. Lax offers it on the phone with the whole text, and only your yes installs it as `~/.claude/skills/lax-<name>`. Guardrails in code: one file, no tool grants, nothing about its secrets or getting around permissions.
+
+### What reaches a session
+
+Only a page of what Lax knows is added to a new session. The rest stays on disk until a session asks.
+
+```mermaid
+flowchart TB
+  subgraph push["pushed: at the start of every session"]
+    pn["project notes<br/>this repo, 2.5k max"]
+    un["notes about you<br/>1k max"]
+    rp["role practice<br/>if it worked here, 1.8k max"]
+  end
+  pn & un & rp --> hook["SessionStart hook"]
+  hook -- additionalContext --> s["a Claude Code session"]
+  s -- "how did we fix…?" --> rec["recall tool<br/>grep, no index"]
+  subgraph pull["pulled: only when asked"]
+    ep[("episodes")]
+    nt[("notes")]
+    ar[("archive")]
+  end
+  rec -- 1st --> ep
+  rec -- 2nd --> nt
+  rec -- 3rd --> ar
+```
+
+Installed skills work the same way: Claude Code loads each one's one-line description, and the body only when it's used.
 
 ### Jobs and reminders
 
