@@ -23,7 +23,7 @@ android {
 // An offline copy of the Lax page, shown (asleep) when the Mac can't be reached.
 val laxAssets = layout.buildDirectory.dir("generated/laxAssets")
 val laxPage = tasks.register<Copy>("laxPage") {
-    from(rootProject.file("../public")) { include("index.html", "lax.js", "heard.js") }
+    from(rootProject.file("../public")) { include("index.html", "lax.js", "heard.js", "body.js") }
     into(laxAssets)
     filter { it.replace(Regex("lax\\.js\\?v=\\d+"), "lax.js") }
 }

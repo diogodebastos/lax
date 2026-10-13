@@ -129,6 +129,16 @@ const SCHEDULE = {
   },
 };
 
+// How Lax looks today (lib/self.mjs, Phase 6.2): for every session making a page in Lax's own hand.
+const SELF = {
+  name: 'self',
+  description: 'How Lax looks today, for a page made in its own hand (report, guide, summary, artifact): its species, stage and ' +
+    'level, its palette (its colour and, for a dark and a light page, bg, card, fg, dim, accent, hi, edge, good, bad) also as ' +
+    'ready CSS custom properties, its body drawn as it is now (SVG, put it in the header as is: never redraw or recolour it), ' +
+    'the date, and self.md: how Lax sees and expresses itself (voice and taste), to follow. Lax changes as it grows, so ask each time.',
+  inputSchema: { type: 'object', properties: {} },
+};
+
 // Only Lax's own assistant may pass your words into a live session (sessions can't tell each other).
 const TELL = {
   name: 'tell',
@@ -146,7 +156,7 @@ const TELL = {
 };
 
 mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: VOICE_MODE ? [GAP, MISHEARD, SCHEDULE, TELL] : !CHANNEL_MODE ? (RECALL_MODE ? [RECALL] : []) : [GAP, MISHEARD, RECALL, SCHEDULE, {
+  tools: VOICE_MODE ? [GAP, MISHEARD, SCHEDULE, TELL, SELF] : !CHANNEL_MODE ? (RECALL_MODE ? [RECALL, SELF] : []) : [GAP, MISHEARD, RECALL, SCHEDULE, SELF, {
     name: 'reply',
     description: 'Reply to the user through Lax (shown in a speech bubble on their phone and read aloud).',
     inputSchema: {
@@ -198,6 +208,11 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       body: JSON.stringify({ query: String(req.params.arguments?.query || ''), cwd: process.cwd() }), signal: AbortSignal.timeout(5 * 60e3) })
       .then((x) => x.json()).catch((e) => ({ ok: false, answer: `Lax is not reachable (${e.message}).` }));
     return { content: [{ type: 'text', text: r.answer || 'Nothing came back.' }], isError: !r.ok };
+  }
+  if (req.params.name === 'self' && !OWN_RUN) {
+    const r = await fetch(`${LAX}/api/self`, { headers: { 'x-lax-token': TOKEN }, signal: AbortSignal.timeout(5000) })
+      .then((x) => x.json()).catch((e) => ({ error: `Lax is not reachable (${e.message}).` }));
+    return { content: [{ type: 'text', text: r.error || JSON.stringify(r) }], isError: !!r.error };
   }
   if (req.params.name === 'share') {
     const { done, pick, ...r } = await shareAndTell(req.params.arguments || {});

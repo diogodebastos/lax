@@ -14,9 +14,10 @@ const show = (f) => execFileSync('git', ['show', `${ref}:public/${f}`], { cwd: R
 const dist = path.join(ROOT, 'demo', 'dist');
 fs.rmSync(dist, { recursive: true, force: true }); fs.mkdirSync(path.join(dist, 'demo'), { recursive: true });
 fs.writeFileSync(path.join(dist, 'demo.html'), show('demo.html')); // served at /demo
-fs.writeFileSync(path.join(dist, 'demo', 'app.html'), show('index.html').replace('src="lax.js', 'src="/demo/lax.js').replace('src="heard.js', 'src="/demo/heard.js')); // /demo/app
+fs.writeFileSync(path.join(dist, 'demo', 'app.html'), show('index.html').replace('src="lax.js', 'src="/demo/lax.js').replace('src="heard.js', 'src="/demo/heard.js').replace('src="body.js', 'src="/demo/body.js')); // /demo/app
 fs.writeFileSync(path.join(dist, 'demo', 'lax.js'), show('lax.js'));
 fs.writeFileSync(path.join(dist, 'demo', 'heard.js'), show('heard.js'));
+fs.writeFileSync(path.join(dist, 'demo', 'body.js'), show('body.js'));
 // Lax's mind, live (/demo/mind): the page and what it loads, and the Worker that keeps it (from demo/ and lib/).
 fs.writeFileSync(path.join(dist, 'demo', 'mind.html'), show('mind.html'));
 for (const f of ['mind-view.js', 'net.js', 'favicon.svg']) fs.writeFileSync(path.join(dist, 'demo', f), show(f));

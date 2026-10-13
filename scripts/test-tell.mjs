@@ -32,7 +32,7 @@ delete ENV.LAX_DATA; delete ENV.LAX_VOICE;
 const server = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server.mjs')], { env: ENV, stdio: 'ignore' });
 process.on('exit', () => { server.kill(); fs.rmSync(DATA, { recursive: true, force: true }); });
 for (let i = 0; i < 50 && !fs.existsSync(path.join(DATA, 'secrets', 'token')); i++) await sleep(100);
-await sleep(300);
+for (let i = 0; i < 50; i++) { try { await fetch(LAX + '/'); break; } catch { await sleep(100); } } // then until it answers
 
 const connect = async (env, cwd, onNote) => {
   const c = new Client({ name: 'fake-claude-code', version: '0' }, { capabilities: {} });
