@@ -15,12 +15,15 @@
   * { box-sizing:border-box; margin:0; }
   html, body { height:100%; }
   body { background:var(--bg); color:var(--fg); font-family:'VT323',ui-monospace,monospace; display:flex; flex-direction:column; align-items:center;
-    padding:18px 16px 16px; gap:12px; overflow:hidden; }
+    justify-content:space-between; padding:18px 16px 16px; overflow:hidden; }
+  /* The title and the links float over the network, which fills the whole window behind them. */
+  header, .note { position:relative; z-index:1; pointer-events:none; text-shadow:0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000; }
+  .note a { pointer-events:auto; }
   header { text-align:center; }
   h1 { color:var(--coral); font-weight:400; font-size:34px; line-height:1; }
   .sub { color:var(--dim); font-size:19px; margin-top:4px; max-width:560px; }
-  /* The view takes whatever the window has left, like the other demo pages: no scrolling. */
-  #view { position:relative; flex:1; min-height:0; width:100%; display:flex; align-items:center; justify-content:center; }
+  /* The view takes the whole window, like the other demo pages: no scrolling. */
+  #view { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
   #stage { position:relative; }
   canvas { display:block; image-rendering:pixelated; image-rendering:crisp-edges; }
   #labels { position:absolute; inset:0; pointer-events:none; }
