@@ -32,6 +32,7 @@ import { FRESH, FRESH_HOURS, FRESH_TOKENS, freshDue, contextSize, recap } from '
 import { claudeAlive } from './lib/claude-pid.mjs';
 import { createArchive } from './lib/archive.mjs';
 import { recall } from './lib/recall.mjs';
+import * as whisper from './lib/whisper.mjs';
 import { createPublicMind, placesOf, lastCommitFiles, filesIn } from './lib/public-mind.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
@@ -362,7 +363,7 @@ function sessionList() {
   return [...sessions.entries()].filter(([id, s]) => (s.pid || s.ts > cutoff) && !laxOwn(id)).map(([id, s]) => ({ id, ...s }));
 }
 const stateMsg = () => ({ pet: petView(), sessions: sessionList(), voiceBusy: !!voiceRun, thinking: !!channelWait, settings,
-  channels: channelList(), voiceTarget, usage, vocab: vocabNow() });
+  channels: channelList(), voiceTarget, usage, vocab: vocabNow(), whisper: whisper.running() });
 // What the phone listens for and fixes (lib/vocab.mjs): the names your words may contain, and misheard → meant.
 function vocabNow() {
   const v = readVocab(VOCAB);
@@ -1133,6 +1134,13 @@ http.createServer(async (req, res) => {
       voiceTarget = b.target === 'auto' || channels.has(b.target) ? b.target : 'background'; pushState();
       return json(res, { ok: true, voiceTarget });
     case '/api/action': return json(res, { ok: quickAction(String(b.cid || ''), voiceAction(b.action)) });
+    case '/api/hear': { // what the phone recorded while you talked, written down by Whisper (null: the phone's own words go)
+      const pcm = Buffer.from(String(b.audio || ''), 'base64').subarray(0, 16000 * 2 * 120); // two minutes at most
+      if (voiceAction(String(b.phone || ''))) return json(res, { ok: false, text: null }); // "clear", "compact": the phone got it, and it's quicker
+      const t0 = Date.now(), text = await whisper.transcribe(pcm, { lang: b.lang, words: vocabNow().words });
+      console.log(`[whisper] ${whisper.seconds(pcm).toFixed(1)}s (${whisper.seconds(whisper.trimSilence(pcm)).toFixed(1)}s heard) in ${Date.now() - t0}ms: ${text === null ? '(none)' : JSON.stringify(text.slice(0, 120))} | phone: ${JSON.stringify(String(b.phone || '').slice(0, 120))}`);
+      return json(res, { ok: text !== null, text });
+    }
     case '/api/talk':
       if (typeof b.target === 'string') { const t = b.target === 'auto' || channels.has(b.target) ? b.target : 'background'; if (t !== voiceTarget) { voiceTarget = t; pushState(); } } // the phone's open tab
       return json(res, { ok: talk(String(b.text || '').slice(0, 2000), !!b.voice, Array.isArray(b.spelled) ? b.spelled.map(String) : []) });
@@ -1141,6 +1149,13 @@ http.createServer(async (req, res) => {
 }).listen(PORT, HOST, () => {
   console.log(`Lax is awake on ${HOST}:${PORT}.\n  Mac:   http://localhost:${PORT}/?t=${TOKEN}\n  Phone: ${phoneUrl(PORT)}\n  Pair:  http://localhost:${PORT}/pair  (QR code)`);
 });
+// Whisper on the Mac (lib/whisper.mjs), the port after Lax's. Not in tests (a throwaway LAX_HOME) unless asked.
+if (process.env.LAX_WHISPER === '1' || (process.env.LAX_WHISPER !== '0' && !process.env.LAX_HOME && !process.env.LAX_DATA)) {
+  if (whisper.start({ port: PORT + 1, onLog: (m) => { console.log(`[whisper] ${m}`); pushState(); } })) console.log('[whisper] starting');
+  else console.log('[whisper] not set up: node scripts/whisper.mjs');
+  process.on('exit', () => whisper.stop());
+  for (const sig of ['SIGTERM', 'SIGINT']) process.once(sig, () => process.exit(0)); // launchd's restart: take whisper down too
+}
 
 // Species (lib/species.mjs): a Lax from before them hatches again, and an egg checks whether its third day is over.
 rehatchOld();
