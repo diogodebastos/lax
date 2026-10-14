@@ -194,7 +194,7 @@ function renderHud() {
   // Tabs: Lax's own (its name: just your talk with Lax, outside any session), then one per session. The open tab filters the terminal; a live one (claude-lax) also hears your voice.
   const shown = sessions.slice(0, 8), labels = tabLabels(shown);
   if (view !== 'all' && !shown.some((s) => s.id === view)) setView('all');
-  $('#chips').innerHTML = `<span class="all${view === 'all' ? ' sel' : ''}" data-view="all">${esc(settings.name.toLowerCase())}</span>` + shown.map((s, i) => {
+  $('#chips').innerHTML = `<span class="all${view === 'all' ? ' sel' : ''}" data-view="all">${esc(settings.name)}</span>` + shown.map((s, i) => {
     const ch = channels.find((c) => c.sessionPid && c.sessionPid === s.pid), open = s.id === view;
     const badge = open ? '' : bubbles.some((b) => b.session === s.id && needsYou(b)) ? ' ask' : unseen.has(s.id) ? ' new' : '';
     return `<span class="${s.status}${ch ? ' live' : ''}${open ? (ch ? ' sel' : ' front') : ''}${badge}" data-view="${esc(s.id)}" data-cid="${ch ? ch.cid : ''}" data-label="${esc(labels[i])}">${esc(labels[i])}</span>`;
@@ -202,7 +202,7 @@ function renderHud() {
   $('#lvl').textContent = pet.egg ? 'egg' : `Lv${pet.level}`; // an egg's bar: how close it is to hatching
   $('#xp i').style.width = (pet.egg ? pet.egg.pct : Math.round(100 * (pet.xp - pet.prevXp) / Math.max(1, pet.nextXp - pet.prevXp))) + '%';
   // Cover screen: the open tab's name in place of the menu (settings live in the open app).
-  const vi = shown.findIndex((s) => s.id === view); $('#tab').textContent = vi < 0 ? settings.name.toLowerCase() : labels[vi];
+  const vi = shown.findIndex((s) => s.id === view); $('#tab').textContent = vi < 0 ? settings.name : labels[vi];
   renderStatus();
   $('#dots').innerHTML = shown.map((s) => `<b class="${s.status}${s.id === view ? ' on' : ''}" data-view="${esc(s.id)}" title="${esc(s.project)}"></b>`).join('');
 }
@@ -217,8 +217,11 @@ const visible = (d) => !tabbed() || d.dataset.s === '*' || d.dataset.s === (view
 // their buttons or speak (so you can't approve one session's request while talking in another): a needs-you one shows
 // a small "<tab> needs you" notice that takes you there, anything else only marks the tab.
 const unseen = new Set(); // tabs with something new you haven't opened yet
+const unheard = new Map(); // session -> the last thing it said aloud while you were on another tab: said when you open it
+let goingTab = false; // goTab says it together with the tab's name
 const needsYou = (b) => b.kind === 'permission' || b.kind === 'question';
-const elsewhere = (b) => tabbed() && b.session && b.session !== view && sessions.slice(0, 8).some((s) => s.id === b.session);
+// An answer to what you just said is never elsewhere: you're waiting for it, whichever tab is open.
+const elsewhere = (b) => tabbed() && !b.answer && b.session && b.session !== view && sessions.slice(0, 8).some((s) => s.id === b.session);
 function setView(v) {
   view = v; try { localStorage.lax_view = v; } catch {}
   unseen.delete(v);
@@ -439,7 +442,7 @@ function showBubble(b) {
   if (!b.sticky) b.expires = performance.now() + (b.kind === 'reply' ? 15000 : 9000);
   renderBubble();
   if (elsewhere(b)) { // another tab's: a short buzz if it needs you, otherwise just a mark on its tab
-    if (needsYou(b)) { sfx([660]); buzz([60]); } else unseen.add(b.session);
+    if (needsYou(b)) { sfx([660]); buzz([60]); } else { unseen.add(b.session); if (b.speak) unheard.set(b.session, b.say || b.text); }
     return renderHud();
   }
   if (b.kind === 'permission' || b.kind === 'question') { sfx([660, 880, 660]); buzz([80, 60, 80]); }
@@ -470,7 +473,7 @@ function renderBubble() {
   }
   if (!b) { elB.className = ''; elB.dataset.key = ''; return; }
   elB.className = 'show ' + b.kind; elB.dataset.id = b.id;
-  if (b.kind !== 'question') elB.querySelector('.tag').textContent = (b.kind === 'reply' ? settings.name.toLowerCase() : TAGS[b.kind]) || '';
+  if (b.kind !== 'question') elB.querySelector('.tag').textContent = (b.kind === 'reply' ? settings.name.toLowerCase() : b.to ? `${TAGS[b.kind]} · to ${b.to}` : TAGS[b.kind]) || '';
   elB.querySelector('.actions').style.display = b.actions ? 'flex' : 'none';
   elB.querySelector('.more').style.display = b.details ? '' : 'none';
   const det = elB.querySelector('.det'); det.textContent = b.details || ''; det.style.display = b.details && b.showDetails ? 'block' : 'none';
@@ -643,7 +646,7 @@ const raw = () => [said, heard].filter(Boolean).join(' ').trim();
 const words = () => LaxHeard.hear(raw(), vocab).text; // what you said, spelled names joined and misheard ones fixed
 function showHeard(outside = false) {
   hint.textContent = talkMode === 'hold' ? (outside ? 'let go to cancel' : 'let go to send · slide off to cancel') : 'tap me to cancel';
-  showBubble({ id: 'listen', kind: 'listening', text: words() || '…', fixed: LaxHeard.hear(raw(), vocab).fixed });
+  showBubble({ id: 'listen', kind: 'listening', text: words() || '…', fixed: LaxHeard.hear(raw(), vocab).fixed, to: talkingTo() });
 }
 // Lax listens in its own language (Life menu), not the phone's: a phone in pt-PT hearing English mishears a lot.
 const listenLang = () => (settings.listen && settings.listen !== 'phone' ? settings.listen : navigator.language || 'en-US');
@@ -742,11 +745,25 @@ function typeInstead() {
   const text = prompt(h ? 'Your answer:' : 'Talk to Lax:');
   if (text?.trim()) (h ? h(text.trim()) : send(text.trim())); else if (h) renderBubble();
 }
+// The open tab is who you're talking to (open phone or cover screen): a live session's tab is that session, Lax's own
+// tab is Lax. Sent with every message, so a route left over from before (a reload, a session tapped yesterday) can't
+// take your words elsewhere.
+function tabTarget() {
+  if (view === 'all') return 'background';
+  const s = sessions.find((x) => x.id === view), ch = s && channels.find((c) => c.sessionPid && c.sessionPid === s.pid);
+  return ch ? ch.cid : 'background';
+}
+// A session's tab you're talking to, by its label (null when it's Lax): shown while you talk, so a tab you didn't
+// mean to be on is seen before you send.
+function talkingTo() {
+  if (tabTarget() === 'background') return null;
+  return $('#chips').querySelector(`[data-view="${CSS.escape(view)}"]`)?.dataset.label || null;
+}
 // heard: set when it was dictated (LaxHeard.hear: the words Lax fixed, the names you spelled); typed text is sent as is.
 function send(text, heard) {
   showBubble({ id: 'you' + Date.now(), kind: 'you', text: '“' + text + '”', fixed: heard?.fixed });
   if (DEMO) { voiceBusy = true; setTimeout(() => { voiceBusy = false; showBubble({ id: 'r' + Date.now(), kind: 'reply', text: 'Demo mode — I heard you!', speak: true }); }, 1800); return; }
-  api('/api/talk', { text, voice: !!heard, spelled: heard?.spelled }).then((r) => { if (!r.ok) showBubble({ id: 'busy', kind: 'error', text: 'I\'m busy, try again in a sec.' }); })
+  api('/api/talk', { text, voice: !!heard, spelled: heard?.spelled, target: tabTarget() }).then((r) => { if (!r.ok) showBubble({ id: 'busy', kind: 'error', text: 'I\'m busy, try again in a sec.' }); })
     .catch(() => showBubble({ id: 'net', kind: 'error', text: 'Couldn\'t reach your Mac.' }));
 }
 const topEl = $('#top');
@@ -1011,10 +1028,17 @@ $('#sTheme').addEventListener('click', (e) => e.target.dataset.v && saveSettings
   btn.addEventListener('pointerup', cancel); btn.addEventListener('pointerleave', cancel); }
 applyLook(); fit();
 
-$('#sRoute').addEventListener('click', (e) => { const v = e.target.dataset.v; if (v) setTarget(v); });
+// Picking where talking goes in Lax's life opens that tab: the open tab is where your words go.
+$('#sRoute').addEventListener('click', (e) => {
+  const v = e.target.dataset.v; if (!v) return;
+  const chip = $('#chips').querySelector(v === 'background' ? '[data-view="all"]' : `[data-cid="${CSS.escape(v)}"]`);
+  if (chip) chip.click(); else setTarget(v);
+});
 $('#chips').addEventListener('click', (e) => {
   const chip = e.target.closest('span'); if (!chip) return;
+  const missed = unheard.get(chip.dataset.view); unheard.delete(chip.dataset.view);
   setView(chip.dataset.view); sfx([660, 880]); hop(0.8);
+  if (missed && !goingTab) speak(missed);
   if (chip.dataset.cid) return setTarget(chip.dataset.cid);
   // "all" (and sessions that can't hear) → talking goes to Lax itself, the assistant.
   if (voiceTarget !== 'background') setTarget('background'); else renderHud();
@@ -1032,8 +1056,9 @@ $('#dots').addEventListener('click', (e) => {
   const chip = $('#chips').querySelector(`[data-view="${CSS.escape(sq.dataset.view)}"]`); if (chip) goTab(chip);
 });
 function goTab(next) {
-  next.click();
+  const missed = unheard.get(next.dataset.view);
+  goingTab = true; try { next.click(); } finally { goingTab = false; }
   const who = next.dataset.view === 'all' ? settings.name : next.dataset.label.split('·')[0].replace(/-/g, ' ');
   if (next.dataset.view !== 'all' && !next.dataset.cid) showBubble({ id: 'notlive', kind: 'reply', text: `${next.dataset.label} can't hear me. I'll answer.` }); // fits the strip
-  speak(next.dataset.view === 'all' || next.dataset.cid ? who : `${who}. It can't hear me, so I'll answer.`);
+  speak((next.dataset.view === 'all' || next.dataset.cid ? who : `${who}. It can't hear me, so I'll answer.`) + (missed ? `. ${missed}` : ''));
 }

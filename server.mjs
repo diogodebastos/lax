@@ -326,6 +326,22 @@ function pruneSessions() {
   for (const [id, s] of sessions) if (s.pid ? !alive.has(s.pid) : s.ts < Date.now() - SESSION_QUIET) { sessions.delete(id); gone++; }
   if (gone) { save(); pushState(); }
 }
+// Claude Code keeps a file per running session (~/.claude/sessions/<pid>.json). A start missed while the server was
+// down or stuck would hide that terminal's tab until it next did something: on start, take the ones still running.
+function findSessions() {
+  const dir = path.join(os.homedir(), '.claude', 'sessions'), found = [];
+  let files = []; try { files = fs.readdirSync(dir).filter((f) => /^\d+\.json$/.test(f)); } catch { return; }
+  for (const f of files) {
+    try {
+      const j = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+      if (j.kind === 'interactive' && j.sessionId && j.cwd && !sessions.has(j.sessionId) && !j.cwd.startsWith(HOME)) found.push(j);
+    } catch {}
+  }
+  const alive = claudeAlive(found.map((j) => j.pid));
+  for (const j of found) if (alive.has(j.pid))
+    sessions.set(j.sessionId, { project: proj(j.cwd), status: 'idle', ts: j.updatedAt || Date.now(), pid: j.pid, cwd: j.cwd, where: j.entrypoint === 'claude-desktop' ? 'mac' : 'cli' });
+  save();
+}
 const pending = new Map(); // ask id -> {resolve, bubble}
 let publicMind = null; // its mind on the website (lib/public-mind.mjs), set up below
 // When you talked to it and when it answered aloud, this week (its mind on the website sizes hearing and speech by them).
@@ -639,7 +655,7 @@ function channelEvent(b) {
     if (channelWait?.cid === b.cid) { clearTimeout(channelWait.timer); channelWait = null; }
     const text = String(b.text || '');
     feed(`↩ ${clip(text)}`, 'done', c.project, channelSession(c)); logEvent(channelSession(c) || '', c.project, 'reply', short(text, 1000));
-    broadcast('bubble', { id: 'ch' + Date.now(), kind: 'reply', session: channelSession(c), text: short(text.replace(/```[\s\S]*?```/g, ' '), 400), say: spoken(text), speak: true });
+    broadcast('bubble', { id: 'ch' + Date.now(), kind: 'reply', answer: true, session: channelSession(c), text: short(text.replace(/```[\s\S]*?```/g, ' '), 400), say: spoken(text), speak: true });
   } else if (b.type === 'share') {
     feed(String(b.line || '').slice(0, 200), 'tool', c.project, channelSession(c));
     if (b.ready) askShare(b.cid, String(b.ready.what || 'it'), String(b.ready.who || 'them'));
@@ -1117,7 +1133,9 @@ http.createServer(async (req, res) => {
       voiceTarget = b.target === 'auto' || channels.has(b.target) ? b.target : 'background'; pushState();
       return json(res, { ok: true, voiceTarget });
     case '/api/action': return json(res, { ok: quickAction(String(b.cid || ''), voiceAction(b.action)) });
-    case '/api/talk': return json(res, { ok: talk(String(b.text || '').slice(0, 2000), !!b.voice, Array.isArray(b.spelled) ? b.spelled.map(String) : []) });
+    case '/api/talk':
+      if (typeof b.target === 'string') { const t = b.target === 'auto' || channels.has(b.target) ? b.target : 'background'; if (t !== voiceTarget) { voiceTarget = t; pushState(); } } // the phone's open tab
+      return json(res, { ok: talk(String(b.text || '').slice(0, 2000), !!b.voice, Array.isArray(b.spelled) ? b.spelled.map(String) : []) });
     default: return json(res, { error: 'not found' }, 404);
   }
 }).listen(PORT, HOST, () => {
@@ -1127,4 +1145,4 @@ http.createServer(async (req, res) => {
 // Species (lib/species.mjs): a Lax from before them hatches again, and an egg checks whether its third day is over.
 rehatchOld();
 setInterval(checkHatch, 10 * 6e4);
-pruneSessions(); setInterval(pruneSessions, 30e3); // closed terminals (even without a SessionEnd) lose their tab
+findSessions(); pruneSessions(); setInterval(pruneSessions, 30e3); // closed terminals (even without a SessionEnd) lose their tab
