@@ -61,6 +61,7 @@ const C = { bg: '#000', shadow: '#2a2521', ink: '#000', out: '#120c0a', body: '#
 // ---------- world state ----------
 // What speech gets wrong (lib/vocab.mjs, from the Mac): the names you use, and misheard → meant (fixed by heard.js).
 let vocab = { words: [], heard: {} };
+let whisperOn = false, hearing = null; // Whisper on the Mac is up (lib/whisper.mjs); while it writes down what you said: how to drop it
 let settings = { name: 'Lax', color: '#D97757', voice: true, pitch: 1.6, speakDone: false, captions: false, phoneApprovals: true, askTimeout: 30, theme: 'system' };
 const shade = (hex, amt) => { const n = parseInt(hex.slice(1), 16), t = amt < 0 ? 0 : 255, a = Math.abs(amt);
   return '#' + [16, 8, 0].map((sh) => Math.round(((n >> sh) & 255) * (1 - a) + t * a).toString(16).padStart(2, '0')).join(''); };
@@ -632,10 +633,11 @@ const micError = (code) => (MIC_ERRORS[code] || 'Mic error: ' + code).replace('N
 updateHint();
 (async () => { let mic = 'unknown'; try { mic = (await navigator.permissions.query({ name: 'microphone' })).state; } catch {}
   diag('load', { v: VERSION, native: !!NATIVE, ua: navigator.userAgent, secure: isSecureContext, sr: !!SR, brave: isBrave, mediaDevices: !!navigator.mediaDevices, mic, w: innerWidth, h: innerHeight, dpr: devicePixelRatio }); })();
-function startListening() { if (listening) cancelListening(); else beginListening('tap'); } // tap: talk / cancel
+function startListening() { if (listening || hearing) cancelListening(); else beginListening('tap'); } // tap: talk / cancel
 function beginListening(m) {
   if (macAsleep) { hop(0.5); showBubble({ id: 'asleep', kind: 'reply', text: 'Zzz… I\'m asleep right now. I\'ll wake up on my own.' }); return; }
   if (voiceBusy && !answerHook) { showBubble({ id: 'busy', kind: 'reply', text: 'Still working on the last one…' }); return; }
+  if (hearing) return;
   if (voiceBroken) return typeInstead();
   said = ''; heard = ''; releasing = false; talkMode = m; listening = true; sfx([440]);
   if (m === 'hold') buzz([30]);
@@ -701,11 +703,34 @@ const QUESTION_PT = new RegExp(`^(?:(?:o qu[eê]|quem|qual|quais|quant[oa]s?|com
 const punctuate = (t) => !t || /[.!?…]$/.test(t) || !(QUESTION.test(t) || QUESTION_PT.test(t)) ? t : t + '?';
 function finishListening() { // send what was heard
   if (!listening) return;
+  const audio = NATIVE?.takeAudio ? NATIVE.takeAudio() : ''; // what the app recorded meanwhile, for Whisper
   const text = punctuate(words()), heard = LaxHeard.hear(raw(), vocab), h = answerHook; answerHook = null;
   stopListening(false);
-  if (text) { sfx([330]); h ? h(text) : send(text, heard); } else if (h) renderBubble();
+  if (!text) { if (h) renderBubble(); return; }
+  sfx([330]);
+  const go = (t, hd) => (h ? h(t) : send(t, hd));
+  if (!audio || !whisperOn || DEMO) return go(text, heard);
+  // Whisper on the Mac writes it down again, better on names and Portuguese; the phone's words show meanwhile,
+  // and go as they are if it fails or takes too long.
+  // Tap Lax or the bubble (or swipe it) meanwhile to drop it. When Whisper's words differ, they show for a moment first.
+  let timer = 0, sent = false;
+  const end = () => { clearTimeout(timer); hearing = null; clearBubble('listen'); hint.textContent = IDLE_HINT; };
+  const show = (t, fixed, note) => { showBubble({ id: 'listen', kind: 'listening', text: t, fixed }); hint.textContent = note; };
+  hearing = () => { if (sent) return; sent = true; end(); sfx([300, 200]); if (h) renderBubble(); };
+  const fire = (t, hd) => { if (sent) return; sent = true; end(); go(t, hd); };
+  const done = (w) => {
+    if (sent || timer === -1) return; clearTimeout(timer); timer = -1;
+    if (!w) return fire(text, heard);
+    const hw = LaxHeard.hear(w, vocab), t = punctuate(hw.text) || text; diag('whisper', { phone: text.slice(0, 160), whisper: t.slice(0, 160) });
+    if (LaxHeard.norm(t) === LaxHeard.norm(text)) return fire(t, hw);
+    show(t, hw.fixed, 'tap me to cancel'); timer = setTimeout(() => fire(t, hw), 1500);
+  };
+  show(text, heard.fixed, 'writing it down… tap me to cancel');
+  timer = setTimeout(() => done(null), 10000);
+  api('/api/hear', { audio, lang: listenLang(), phone: text }).then((r) => done(r.ok && r.text)).catch(() => done(null));
 }
 function cancelListening() {
+  if (hearing) return hearing();
   if (!listening) return;
   const h = answerHook; answerHook = null;
   stopListening(true); sfx([300, 200]); if (h) renderBubble();
@@ -815,7 +840,7 @@ wakeEl.addEventListener('click', async () => {
 });
 
 // ---------- live link ----------
-function applyState(s) { pet = s.pet; if (s.pet.hatched === false) shell = true; else if (shell && !hatchAt) hatch(); sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; usage = s.usage || null; if (s.vocab) vocab = s.vocab; updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
+function applyState(s) { pet = s.pet; if (s.pet.hatched === false) shell = true; else if (shell && !hatchAt) hatch(); sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; usage = s.usage || null; if (s.vocab) vocab = s.vocab; whisperOn = !!s.whisper; updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
 // Remember how Lax looks, so the app's offline page can show the same Lax asleep.
 const remember = () => { try { NATIVE?.remember(JSON.stringify({ pet, settings })); } catch {} };
 function setAsleep(v) { if (macAsleep === v) return; macAsleep = v; updateHint(); }

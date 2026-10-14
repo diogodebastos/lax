@@ -3,10 +3,17 @@ package com.diogodebastos.lax
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.ParcelFileDescriptor
+import android.system.Os
+import android.system.OsConstants
+import android.util.Base64
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -76,7 +83,71 @@ class LaxBridge(private val act: MainActivity, private val web: WebView) {
             return@post
         }
         if (!SpeechRecognizer.isRecognitionAvailable(act)) { js("laxOnSpeechError", "'service-not-allowed'"); return@post }
+        if (Build.VERSION.SDK_INT >= 33 && !pipeBroken) startMic() // first stretch: start recording (it lasts until takeAudio or cancel)
         start(preferOffline = true)
+    }
+
+    // ---------- recording, for Whisper on the Mac ----------
+    // The app records you itself and hands the recognizer the same audio through a pipe (Android 13+), so the phone's
+    // words still show live while the whole message is kept for Whisper (lib/whisper.mjs). 16 kHz mono 16-bit.
+    private val rate = 16000
+    private var mic: AudioRecord? = null
+    private val pcm = java.io.ByteArrayOutputStream()
+    private var micThread: Thread? = null
+    /** The pipe's ends for the current stretch: the recognizer reads one, the mic thread writes the other (never blocking). */
+    @Volatile private var feedOut: ParcelFileDescriptor? = null
+    private var feedIn: ParcelFileDescriptor? = null
+    /** The recognizer here won't take a pipe: listen the old way (no Whisper) until the app starts again. */
+    private var pipeBroken = false
+
+    private fun startMic() {
+        if (mic != null) return
+        val r = try {
+            AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
+                maxOf(AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), rate))
+        } catch (e: Exception) { Log.i("LaxBridge", "no recorder: $e"); return }
+        if (r.state != AudioRecord.STATE_INITIALIZED) { r.release(); return }
+        synchronized(pcm) { pcm.reset() }
+        mic = r; r.startRecording()
+        micThread = Thread {
+            val buf = ByteArray(rate / 5) // 100 ms
+            while (mic === r) {
+                val n = r.read(buf, 0, buf.size)
+                if (n < 0) break
+                if (n == 0) continue
+                synchronized(pcm) { if (pcm.size() < rate * 2 * 120) pcm.write(buf, 0, n) } // two minutes at most
+                // The recognizer is between stretches or slow: it misses this bit, the recording doesn't.
+                feedOut?.let { try { Os.write(it.fileDescriptor, buf, 0, n) } catch (_: Exception) {} }
+            }
+        }.apply { start() }
+    }
+
+    private fun stopMic(): ByteArray {
+        val r = mic ?: return ByteArray(0)
+        mic = null
+        try { r.stop() } catch (_: Exception) {}
+        micThread?.join(500); micThread = null
+        r.release(); closeFeed()
+        return synchronized(pcm) { pcm.toByteArray().also { pcm.reset() } }
+    }
+
+    /** A fresh pipe for the next stretch; the recognizer gets the reading end. */
+    private fun newFeed(): ParcelFileDescriptor {
+        closeFeed()
+        val (read, write) = ParcelFileDescriptor.createPipe()
+        Os.fcntlInt(write.fileDescriptor, OsConstants.F_SETFL, OsConstants.O_NONBLOCK)
+        feedIn = read; feedOut = write
+        return read
+    }
+    private fun closeFeed() {
+        feedOut?.let { feedOut = null; try { it.close() } catch (_: Exception) {} }
+        feedIn?.let { feedIn = null; try { it.close() } catch (_: Exception) {} }
+    }
+
+    /** What was recorded since you started talking (base64 PCM, "" if nothing), and recording stops. */
+    @JavascriptInterface fun takeAudio(): String {
+        val b = stopMic()
+        return if (b.size < rate) "" else Base64.encodeToString(b, Base64.NO_WRAP) // under half a second: nothing worth it
     }
 
     /** Bumped per listening session; callbacks from an earlier one are ignored. */
@@ -87,8 +158,9 @@ class LaxBridge(private val act: MainActivity, private val web: WebView) {
         // (error 11) into the session that had just started, so every other tap failed at once.
         val r = recognizer ?: SpeechRecognizer.createSpeechRecognizer(act).also { recognizer = it }
         r.cancel()
+        val piped = mic != null
         r.apply {
-            setRecognitionListener(Listener(++session, preferOffline))
+            setRecognitionListener(Listener(++session, preferOffline, piped))
             startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
@@ -100,6 +172,12 @@ class LaxBridge(private val act: MainActivity, private val web: WebView) {
                 // Punctuation (a question gets its "?"), where the recognizer can do it; the page adds a "?" otherwise.
                 if (android.os.Build.VERSION.SDK_INT >= 33)
                     putExtra(RecognizerIntent.EXTRA_ENABLE_FORMATTING, RecognizerIntent.FORMATTING_OPTIMIZE_QUALITY)
+                if (piped && Build.VERSION.SDK_INT >= 33) {
+                    putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE, newFeed())
+                    putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_CHANNEL_COUNT, 1)
+                    putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_ENCODING, AudioFormat.ENCODING_PCM_16BIT)
+                    putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_SAMPLING_RATE, rate)
+                }
             })
         }
     }
@@ -110,22 +188,32 @@ class LaxBridge(private val act: MainActivity, private val web: WebView) {
     /** Drop it: nothing is sent. */
     @JavascriptInterface fun cancelListening() = main.post {
         session++ // whatever the old session still reports is ignored
-        recognizer?.cancel()
+        recognizer?.cancel(); stopMic()
         js("laxOnSpeechError", "'aborted'")
     }
 
-    private inner class Listener(private val id: Int, private val preferOffline: Boolean) : RecognitionListener {
+    private inner class Listener(private val id: Int, private val preferOffline: Boolean, private val piped: Boolean) : RecognitionListener {
         private val current get() = id == session
+        private var words = false
         private fun guesses(b: Bundle?) = b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.filter { it.isNotBlank() } ?: emptyList()
         private fun send(g: List<String>, final: Boolean) = js("laxOnSpeech", JSONObject.quote(g[0]), final.toString(), JSONArray(g).toString())
-        override fun onPartialResults(b: Bundle?) { val g = guesses(b); if (current && g.isNotEmpty()) send(g, false) }
+        override fun onPartialResults(b: Bundle?) { val g = guesses(b); if (current && g.isNotEmpty()) { words = true; send(g, false) } }
         override fun onResults(b: Bundle?) {
             if (!current) return
+            if (piped) closeFeed()
             val g = guesses(b)
             if (g.isEmpty()) js("laxOnSpeechError", "'no-speech'") else send(g, true)
         }
         override fun onError(error: Int) {
             if (!current) return
+            if (piped) closeFeed()
+            // Fed through a pipe, it failed before any words (not just silence): this recognizer won't take one.
+            // Listen the old way from now on; Whisper gets nothing and the phone's words go as before.
+            if (piped && !words && error in listOf(SpeechRecognizer.ERROR_AUDIO, SpeechRecognizer.ERROR_CLIENT, SpeechRecognizer.ERROR_SERVER, 14 /* ERROR_CANNOT_CHECK_SUPPORT */)) {
+                Log.i("LaxBridge", "speech error $error with a pipe: listening the old way")
+                pipeBroken = true
+                main.post { stopMic(); start(preferOffline) }; return
+            }
             // The speech service dropped its connection (it restarts itself): start over once with a fresh recognizer.
             if (error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED && !retried) {
                 retried = true
