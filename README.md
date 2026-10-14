@@ -11,7 +11,7 @@ A pixel companion for Claude Code that lives on an old phone (designed for the G
 - **Voice:** hold the top half to talk. What you say goes to Claude Code, and Lax reads the answer aloud.
 - **Evolves:** it starts as an egg and hatches into a species read from how you work (several sessions at once, many tools an hour, long sessions, long back and forth, many repos, or none of these: a brown fox). Each species has its own forms through the stages (sprout → blob → cube → brick → legend); traits come from the last 7 days of work. It's all rules, with no model calls (`lib/species.mjs`).
 
-No API credits. Voice runs `claude -p` with your normal Claude Code login. Speech recognition and the voice are the phone browser's built-in Web Speech features.
+No API credits. Voice runs `claude -p` with your normal Claude Code login. The phone's own recognizer shows your words live and Whisper on the Mac writes them down (see [Hearing](#hearing-whisper-on-the-mac)); the voice is the phone browser's built-in Web Speech.
 
 No agent framework (no LangChain), no vector database, no API key. Claude Code already is the agent loop (tools, permissions, resume, MCP, skills, hooks), so every time Lax thinks it runs `claude -p` with a prompt, a folder, a time limit and a fence (`hooks/lax-hook.mjs` allows or denies each tool call, by which run it is).
 
@@ -81,6 +81,7 @@ One URL. The layout follows the screen, and `?layout=wide|tall|big` forces one:
 
 Talking from **Lax's own tab** (the first one, named after it) goes to Lax itself: an assistant you can ask anything. It runs Claude Code in its mind, `~/.lax/mind`:
 - `CLAUDE.md` holds who Lax is, **its body** (this repo: what each part does, and how it may change it: on a `lax/<slug>` branch in a worktree, tests, then you merge), and **Notes** it keeps about you. It adds notes on its own, you can edit them, and it reads them to you when you ask what it remembers. Every change is committed to the mind's own git history.
+- `diogo/` (named after you) holds hard facts about your life that are too long for a note, like pay and contracts, one file per topic; the notes point to them.
 - `.claude/settings.json`: it reads your repos (`LAX_WORKDIR`, default `~/REPOS`) and its body freely; editing outside its mind needs your approval on the phone; its secrets and `life.db` are denied (and Lax's hook refuses them too).
 - Each message also carries a short summary of your Claude Code sessions (one line each, more for a session you name), so "what's my cli session doing?" works.
 - The conversation starts fresh after 8 quiet hours (`LAX_FRESH_HOURS`), once it reaches 150k tokens (`LAX_FRESH_TOKENS`), or when you say "start fresh". Every message re-sends the whole conversation, so an endless one gets expensive. The first message of a new one carries the last few turns of the old one; what should last goes in the notes.
@@ -210,6 +211,14 @@ On power, turn on System Settings → Battery → Options → *Prevent automatic
 1. Open `http://localhost:7777/pair` on the Mac and scan the QR code with the phone. Open it in **Chrome**; Brave has no speech recognition.
 2. Log in once with the email PIN. Tap "wake", then tap Lax to talk.
 3. Cover screen and background notifications: see the Android app (phase 2) and the cover-screen setup (phase 3) issues.
+
+### Hearing: Whisper on the Mac
+
+The app records you itself and feeds the same audio to Android's recognizer (Android 13+), so your words still show live and it still decides when you're done. Then the recording goes to the Mac (`/api/hear`) and Whisper (whisper.cpp, the `small` model) writes it down, with your names as its prompt; the vocabulary's fixes apply on top. It's better on names and Portuguese: "come eat and push" becomes "commit and push".
+
+- When Whisper's words differ, they show for 1.5 s; tap or swipe to keep the phone's. Quick actions skip it.
+- The phone's words go as they are if Whisper isn't up, fails or takes over 10 s.
+- Free, and nothing leaves the Mac. `npm run whisper` builds it into `~/.lax-tools` (no Homebrew), then restart Lax. It runs next to Lax on port 7778, kept loaded (~600 MB, 1.5-2.5 s for a short message on an Intel Mac). `LAX_WHISPER_BIN` / `LAX_WHISPER_MODEL` point elsewhere.
 
 ## Talk into your running session (channel)
 
