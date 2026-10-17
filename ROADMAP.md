@@ -211,6 +211,12 @@ The best possible Lax, built to be shared. Phase 9 makes the repo presentable; t
 - `npx lax`: zero to talking in under 5 minutes, on any Android phone or browser, with the Flip 3 as the hero.
 - Hand-drawn sprites and chiptune sound, promoted from *Later*.
 - Write-ups: how Lax uses every Claude Code extension point; Lax on Cloudflare; an agent that rewrites itself for one person. Then Show HN, r/ClaudeAI and the clips.
+- **The LinkedIn post:** the launch's main moment, so it has to be a good one. For Diogo's network: Cloudflare people, the Claude Code crowd, tech people deep into AI.
+  - **The video:** Diogo talks to Lax on the closed phone's cover screen, then opens the phone and the same conversation carries on.
+  - **The images:** the live brain; the architecture (phone → tunnel → Mac → `claude -p`); the loops (gap → wish → branch → merge, friction → nightly fix → morning yes); the evolution (egg → first form → a Lv50 form).
+  - **The points**, in whatever order works best: inspired by Hermes, OpenClaw and Perplexity, but it evolves; it notices in conversation what it can't do yet, then builds it; overnight it fixes its own friction with nobody watching (a light RSI) and asks in the morning; the mind is local, it runs on the Claude subscription with no API costs, reached through a Cloudflare tunnel; it's an agent personal enough that it becomes someone else's for someone else.
+  - **The proof of "personal":** someone asks for a 3D Lax instead of a 2D one, and Lax makes the model and changes the app to match, inspired by Jolly, Meta's mascot for its Muse assistant. Built on its own branch, never `main`, when Diogo says so: [diogodebastos/lax#28](https://github.com/diogodebastos/lax/issues/28).
+- **A blog post written by and as Lax**, in its own voice, on the same points as the post, with room for the how. Lives on the Lax site and on diogodebastos.com/blog.
 
 ### Phase 11: Cloudflare-native relay [diogodebastos/lax#10](https://github.com/diogodebastos/lax/issues/10)
 The Mac stays the brain; Cloudflare becomes the always-on link and Lax's public face.
