@@ -115,5 +115,34 @@ from = await talk('merge it');
 await until(() => said(from, /Merging Shorter answers/));
 check('"merge it" → merged into main as "Lax improves"', /Lax improves: Shorter answers/.test(sh(BODY, 'log', '-1', '--format=%s')));
 
+// A night whose run fails (the Mac slept mid-run and woke offline, 2026-10-15) doesn't count: its friction is kept and
+// it tries again later that night, at most 3 times, and not while offline.
+{
+  const { createImprove, NIGHT_HOUR } = await import('../lib/improve.mjs');
+  const FLAKY = path.join(HOME, 'flaky-claude.mjs'), RUNS = path.join(HOME, 'flaky-runs');
+  write(FLAKY, `#!${process.execPath}
+import fs from 'node:fs'; const n = (fs.existsSync(${JSON.stringify(RUNS)}) ? fs.readFileSync(${JSON.stringify(RUNS)}, 'utf8').length : 0) + 1;
+fs.writeFileSync(${JSON.stringify(RUNS)}, 'x'.repeat(n));
+if (n === 1) { console.error('getaddrinfo ENOTFOUND api.anthropic.com'); process.exit(1); }
+console.log(JSON.stringify({ result: 'Looked.\\n' + JSON.stringify({ fix: { none: 'it fell back to the terminal, nothing lost' } }) }));
+`, 0o755);
+  const night = new Date(); night.setHours(NIGHT_HOUR, 5, 0, 0);
+  let t = night.getTime(), up = false; const feed = [], logs = [];
+  fs.writeFileSync(path.join(HOME, 'friction.json'), JSON.stringify({ items: [{ ts: t - 3600e3, kind: 'unanswered', text: 'a question' }], lastNight: 0 }));
+  const imp = createImprove({ settings: () => ({ name: 'Lax', learns: true }), feed: (l) => feed.push(l), learn: { wishes: () => [] },
+    body: BODY, claude: FLAKY, log: (...a) => logs.push(a.join(' ')), now: () => t, online: async () => up });
+  const runs = () => (fs.existsSync(RUNS) ? fs.readFileSync(RUNS, 'utf8').length : 0);
+  await imp.night();
+  check('offline at night → no run, and the night is still to do', runs() === 0 && /offline/.test(logs.at(-1)), logs.at(-1));
+  up = true; await imp.night();
+  check('the run fails → logged as try 1 of 3, its friction kept', runs() === 1 && /try 1 of 3/.test(logs.at(-1)), logs.at(-1));
+  t += 10 * 60e3; await imp.night();
+  check('…not tried again 10 minutes later', runs() === 1);
+  t += 25 * 60e3; await imp.night();
+  check('…tried again half an hour on, with the same friction → this time it answers', runs() === 2 && feed.some((l) => /looked at 1 friction, nothing to fix/.test(l)), feed.at(-1));
+  t += 60 * 60e3; await imp.night();
+  check('…and then the night is done', runs() === 2);
+}
+
 console.log(failed ? `\n${failed} check(s) failed` : '\nall good');
 process.exit(failed ? 1 : 0);
