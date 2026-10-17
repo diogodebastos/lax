@@ -529,9 +529,15 @@ function answerQuestion(b, answer) {
 }
 setInterval(renderBubble, 1000);
 // Reading a long bubble: scrolling it keeps it up a while longer, so it doesn't vanish mid-sentence.
+// While Whisper's words wait to go, touching or scrolling holds them (hearing.read), so reading isn't a race.
+const READ_MS = 3000;
+let touching = false;
 elB.querySelector('.text').addEventListener('scroll', () => {
   const b = bubbles.find((x) => x.id === elB.dataset.id); if (b?.expires) b.expires = Math.max(b.expires, performance.now() + 9000);
+  hearing?.read?.(touching);
 }, { passive: true });
+elB.addEventListener('pointerdown', () => { touching = true; hearing?.read?.(true); });
+for (const ev of ['pointerup', 'pointercancel']) elB.addEventListener(ev, () => { touching = false; hearing?.read?.(false); });
 elB.addEventListener('pointerdown', (e) => e.stopPropagation());
 // Swipe a bubble sideways to dismiss it (like tapping). Bubbles that need an answer (✓/✗, questions) snap back.
 let swiped = false;
@@ -676,7 +682,11 @@ function listenStretch() {
 // keeps hearing "speech" that never turns into words, and would wait forever (each stretch times out and starts over).
 function armQuiet() { if (talkMode !== 'tap' || !words()) return; clearTimeout(quietTimer); quietTimer = setTimeout(finishListening, QUIET_MS); }
 function speechBegan() { armQuiet(); } // talking again: a fresh countdown, so new words have time to arrive
-function partial(text) { if (!listening || text === heard) return; heard = text; showHeard(); armQuiet(); }
+function partial(text) {
+  if (!listening || text === heard) return;
+  if (LaxHeard.restarted(heard, text)) said = [said, heard].join(' ').trim(); // the recognizer started over: keep what came before
+  heard = text; showHeard(); armQuiet();
+}
 function stretchEnded(text) {
   if (!listening) return;
   heard = ''; if (text?.trim()) said = [said, text.trim()].join(' ').trim();
@@ -713,17 +723,24 @@ function finishListening() { // send what was heard
   // Whisper on the Mac writes it down again, better on names and Portuguese; the phone's words show meanwhile,
   // and go as they are if it fails or takes too long.
   // Tap Lax or the bubble (or swipe it) meanwhile to drop it. When Whisper's words differ, they show for a moment first.
-  let timer = 0, sent = false;
+  // Touching or scrolling the bubble to read it holds the countdown; it starts again a few seconds after you stop.
+  let timer = 0, sent = false, whispered = false, then = null; // then: what goes once the countdown runs out
+  let looked = false; // you touched the bubble: even the same words wait for you
   const end = () => { clearTimeout(timer); hearing = null; clearBubble('listen'); hint.textContent = IDLE_HINT; };
   const show = (t, fixed, note) => { showBubble({ id: 'listen', kind: 'listening', text: t, fixed }); hint.textContent = note; };
+  const wait = (fn, ms) => { then = fn; clearTimeout(timer); if (!touching) timer = setTimeout(fn, ms); };
   hearing = () => { if (sent) return; sent = true; end(); sfx([300, 200]); if (h) renderBubble(); };
+  // Still writing it down: Whisper's own wait runs on. Once its words are in, they wait for you to stop reading.
+  hearing.read = (still) => { looked = true; if (!whispered) return; clearTimeout(timer); if (!still) timer = setTimeout(then, READ_MS); };
   const fire = (t, hd) => { if (sent) return; sent = true; end(); go(t, hd); };
   const done = (w) => {
-    if (sent || timer === -1) return; clearTimeout(timer); timer = -1;
-    if (!w) return fire(text, heard);
-    const hw = LaxHeard.hear(w, vocab), t = punctuate(hw.text) || text; diag('whisper', { phone: text.slice(0, 160), whisper: t.slice(0, 160) });
-    if (LaxHeard.norm(t) === LaxHeard.norm(text)) return fire(t, hw);
-    show(t, hw.fixed, 'tap me to cancel'); timer = setTimeout(() => fire(t, hw), 1500);
+    if (sent || whispered) return; whispered = true;
+    const hw = w ? LaxHeard.hear(w, vocab) : heard, t = w ? punctuate(hw.text) || text : text;
+    if (w) diag('whisper', { phone: text.slice(0, 160), whisper: t.slice(0, 160) });
+    const same = LaxHeard.norm(t) === LaxHeard.norm(text);
+    if (same && !looked) return fire(t, hw);
+    if (!same) show(t, hw.fixed, 'tap me to cancel');
+    wait(() => fire(t, hw), 1500);
   };
   show(text, heard.fixed, 'writing it down… tap me to cancel');
   timer = setTimeout(() => done(null), 10000);
