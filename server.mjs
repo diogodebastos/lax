@@ -12,6 +12,7 @@ import { ensureHome, commitMind, mindHead, forgotSince, syncMindName, syncMindSe
 import { ensureSelf, self } from './lib/self.mjs';
 import { createRoles, workLog } from './lib/roles.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS, VOCAB } from './lib/paths.mjs';
+import { APP_NAME, DEFAULT_COMPANION_NAME } from './lib/names.mjs';
 import { readVocab, addHeard, addWord, allHeard, knownWords, dictatedNote, answerIn, teachCommand, typedOver } from './lib/vocab.mjs';
 import { HOST, TOKEN, authed, isLocal, phoneUrl, pairPage } from './lib/auth.mjs'; // first: it loads Lax's home and local config
 import { grantKey, repoRoot } from './lib/allow.mjs';
@@ -65,7 +66,7 @@ const logEvent = (session, project, kind, text, repo = null) =>
 const milestone = (text) => db.prepare('INSERT INTO milestones(ts,text) VALUES(?,?)').run(Date.now(), text);
 
 const newPet = () => ({
-  name: 'Lax', born: Date.now(), xp: 0, tools: {}, langs: {}, sessions: 0, turns: 0,
+  name: DEFAULT_COMPANION_NAME, born: Date.now(), xp: 0, tools: {}, langs: {}, sessions: 0, turns: 0,
   errors: 0, approvals: 0, denials: 0, voice: 0, streak: 0, lastDay: null, lastSeen: Date.now(),
   hatched: false, eggXp: 0, eggDays: [], // an egg until 1000 XP or 3 worked days (lib/species.mjs); then it hatches into its species
   species: null, days: {}, limitDays: [],
@@ -74,12 +75,12 @@ let pet = kvGet('pet', null) || newPet();
 let voiceSessions = kvGet('voiceSessions', {}); // cwd -> claude session id
 // Lax's own conversation: when you last talked, how full it is, and the one before it (lib/talk.mjs).
 let laxTalk = kvGet('laxTalk', {}); // { last, tokens, prev }
-if (!kvGet('pet', null)) { milestone('Lax was born'); }
+if (!kvGet('pet', null)) { milestone(`${DEFAULT_COMPANION_NAME} was born`); }
 // Phase 3.7 moved Lax to a new level curve (it went from brick back to sprout): note it once.
-if (!kvGet('newPath', false)) { if (kvGet('pet', null)) milestone(`${readSettings().name || 'Lax'} started over on a new path`); kvSet('newPath', true); }
+if (!kvGet('newPath', false)) { if (kvGet('pet', null)) milestone(`${readSettings().name || DEFAULT_COMPANION_NAME} started over on a new path`); kvSet('newPath', true); }
 
 // Life menu settings — live on the Mac, edited from the phone.
-const DEFAULTS = { name: 'Lax', voice: true, pitch: 1.6, speakDone: false, captions: false,
+const DEFAULTS = { name: DEFAULT_COMPANION_NAME, voice: true, pitch: 1.6, speakDone: false, captions: false,
   phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system', learns: true, listen: 'phone',
   speciesPick: false, speciesOverride: null, // while the species bars get tuned: pick one by hand
   publicProjects: ['lax'], // the projects whose names its mind on the website may show (the others show unnamed)
@@ -1147,7 +1148,7 @@ http.createServer(async (req, res) => {
     default: return json(res, { error: 'not found' }, 404);
   }
 }).listen(PORT, HOST, () => {
-  console.log(`Lax is awake on ${HOST}:${PORT}.\n  Mac:   http://localhost:${PORT}/?t=${TOKEN}\n  Phone: ${phoneUrl(PORT)}\n  Pair:  http://localhost:${PORT}/pair  (QR code)`);
+  console.log(`${APP_NAME}: ${settings.name || DEFAULT_COMPANION_NAME} is awake on ${HOST}:${PORT}.\n  Mac:   http://localhost:${PORT}/?t=${TOKEN}\n  Phone: ${phoneUrl(PORT)}\n  Pair:  http://localhost:${PORT}/pair  (QR code)`);
 });
 // Whisper on the Mac (lib/whisper.mjs), the port after Lax's. Not in tests (a throwaway LAX_HOME) unless asked.
 if (process.env.LAX_WHISPER === '1' || (process.env.LAX_WHISPER !== '0' && !process.env.LAX_HOME && !process.env.LAX_DATA)) {

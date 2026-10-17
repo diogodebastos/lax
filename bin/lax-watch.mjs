@@ -9,12 +9,13 @@
 // Read-only: it never answers anything. Requests that need you show up so you know to look at the phone.
 import fs from 'node:fs';
 import { readToken, SETTINGS } from '../lib/paths.mjs';
+import { DEFAULT_COMPANION_NAME } from '../lib/names.mjs';
 
 const argv = process.argv.slice(2);
 const only = argv.find((a, i) => !a.startsWith('-') && argv[i - 1] !== '--lines')?.toLowerCase();
 const backlog = argv.includes('--no-history') ? 0 : 40;
 const PORT = Number(process.env.LAX_PORT || 7777);
-const name = (() => { try { return JSON.parse(fs.readFileSync(SETTINGS, 'utf8')).name || 'Lax'; } catch { return 'Lax'; } })().toLowerCase();
+const name = (() => { try { return JSON.parse(fs.readFileSync(SETTINGS, 'utf8')).name || DEFAULT_COMPANION_NAME; } catch { return DEFAULT_COMPANION_NAME; } })().toLowerCase();
 const token = readToken();
 if (!token) { console.log('Lax has never run here: start it first (npm start in the lax repo).'); process.exit(1); }
 

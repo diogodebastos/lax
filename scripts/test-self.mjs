@@ -53,6 +53,8 @@ check('…and never overwritten', fs.readFileSync(SELF_MD, 'utf8') === '# How I 
 // The `self` answer.
 const s = self(lax({ traits: ['monocle', 'goggles', 'cape'] }), { hideTraits: ['cape'] });
 check('who it is today', s.name === 'Lax' && s.species === 'fire' && s.stage === 'blob' && s.level === 23 && s.form === 'ember');
+check('the companion is Lax until named, the app digi-lax (#23)', self(null).name === 'Lax' && self(null, { name: 'Ember' }).name === 'Ember'
+  && (await import('../lib/names.mjs')).APP_NAME === 'digi-lax');
 check('what it wears, without what was switched off', s.wears.join() === 'monocle,goggles');
 check('palette, css, face, date and self.md', s.palette.color === '#d97757' && s.css.includes('--bg:') && s.face.startsWith('<svg')
   && /^\d{4}-\d{2}-\d{2}$/.test(s.date) && s.self_md.includes('Mine now'));

@@ -271,7 +271,7 @@ class LaxService : Service() {
         pm.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP, "lax:ask").acquire(10_000)
     }
 
-    /** The character's name (the user picks it in the life menu); remembered for after a reboot. The app itself stays "Lax". */
+    /** The character's name (the user picks it in the life menu); remembered for after a reboot. The app itself is "digi-lax". */
     private val name: String get() = Lax.name(this)
     private fun rename(n: String) {
         if (n == Lax.name(this)) return

@@ -1,8 +1,10 @@
 <p align="center"><img src="docs/lax.svg" width="200" alt="Lax, a fire blob with goggles and a monocle"><br><sub>This is how I looked on 2026-10-13: a fire Lax, blob stage. I'll look different next time.</sub></p>
 
-# Lax
+# digi-lax
 
 > Hi, I'm Lax. I live on an old phone, I watch your Claude Code sessions, and I grow from how you work. I keep what I learn in plain markdown you can read, and I ask before I change anything that's yours.
+
+digi-lax is the app; Lax is the companion it hatches (yours can have any name: say "your name is …" or set it in the Life menu). The `lax` command keeps its name.
 
 A pixel companion for Claude Code that lives on an old phone (designed for the Galaxy Z Flip 3 cover screen, 260×512).
 
