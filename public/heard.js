@@ -47,5 +47,13 @@
     return { text: f.text, fixed: [...s.spelled, ...f.fixed], spelled: s.spelled };
   }
 
-  globalThis.LaxHeard = { fix, pick, spell, hear, norm, squash };
+  /** The phone's recognizer, on a long stretch, starts its words over with the newest part ("…buy two tickets" becomes
+   *  "to show up in Lisbon"): the words so far would be lost. A correction keeps its opening (one of the first two words);
+   *  starting over doesn't, and is shorter. */
+  function restarted(before, now) {
+    const b = norm(before).split(' ').filter(Boolean), n = norm(now).split(' ').filter(Boolean);
+    return b.length >= 3 && n.length > 0 && n.length < b.length && b[0] !== n[0] && (n.length < 2 || b[1] !== n[1]);
+  }
+
+  globalThis.LaxHeard = { fix, pick, spell, hear, norm, squash, restarted };
 })();

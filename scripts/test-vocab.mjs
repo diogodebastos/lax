@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fix, pick, spell, hear, readVocab, addHeard, addWord, allHeard, knownWords, teachCommand, typedOver, dictatedNote, answerIn, SEED } from '../lib/vocab.mjs';
+import { fix, pick, spell, hear, restarted, readVocab, addHeard, addWord, allHeard, knownWords, teachCommand, typedOver, dictatedNote, answerIn, SEED } from '../lib/vocab.mjs';
 import { voiceAction } from '../lib/actions.mjs';
 
 let failed = 0;
@@ -77,6 +77,12 @@ check('a different message is not a fix', !typedOver('open physic eye', 'what ti
 check('a rephrase is not a fix', !typedOver('open physic eye', 'open the fisicai project in a new tab'));
 check('the same words are not a fix', !typedOver('open fisicai', 'Open fisicai.'));
 check('words that don\'t sound alike are not a fix', !typedOver('run the tests', 'run the deploy'));
+
+// A long stretch: the recognizer starts over with the newest part, and what came before must be kept.
+check('the recognizer starting over is seen', restarted('I need you to check it out so we can buy two tickets', 'to show up'));
+check('a correction is not starting over', !restarted('close the door now', 'clothes the door'));
+check('more words is not starting over', !restarted('open the', 'open the project'));
+check('a short start is not judged', !restarted('open it', 'run'));
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nall vocab checks passed');
 process.exit(failed ? 1 : 0);
