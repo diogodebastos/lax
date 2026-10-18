@@ -38,7 +38,12 @@ Each person's Lax is born fresh: it knows nothing about them yet, and that's how
    (about 1 GB, no Homebrew). Google's Android SDK licenses come with it: tell them, and on a yes run
    `node scripts/setup.mjs android --accept-licenses`. Then, with the phone plugged in (USB debugging on),
    `npm run android -- --pair` builds it from this clone and pairs it.
-8. **pair**: opens the pairing page. With the relay, they scan the QR with the phone and open it in Chrome (or the Android
+8. **domain** (optional, advanced; only if they ask or have a domain on Cloudflare): a tunnel to `lax.<their domain>`
+   behind Cloudflare Access (an email PIN in the browser), next to the relay. It needs Zero Trust turned on in the
+   dashboard (free: pick a team name) and an API token: `node scripts/setup.mjs domain link` prints a link that pre-fills
+   it. They create it, copy it, and you run `node scripts/setup.mjs domain <host> <email> --token-from-clipboard`: the
+   token goes from the clipboard to `~/.lax/secrets` without you seeing it. Never ask them to paste it to you.
+9. **pair**: opens the pairing page. With the relay, they scan the QR with the phone and open it in Chrome (or the Android
    app, built from this clone with `npm run android`). Without it, Lax is right there on the Mac: the page links to it.
 
 ## At the end

@@ -2,7 +2,7 @@
 // clone that sets Lax up with you, step by step (scripts/setup.md is what it's told). The steps are here, each one safe
 // to run again:
 //   node scripts/setup.mjs status         what's done, what's left (--json for the conversation)
-//   node scripts/setup.mjs <step>         deps, workdir [<folder>], hooks, channel, service, whisper, relay, android, pair
+//   node scripts/setup.mjs <step>         deps, workdir [<folder>], hooks, channel, service, whisper, relay, android, domain, pair
 //   node scripts/setup.mjs --all          every step but whisper, in order, without the conversation
 //   node scripts/setup.mjs doctor [--fix] npm run doctor: is it all working? (--fix: secrets' permissions)
 import fs from 'node:fs';
@@ -106,6 +106,7 @@ const STEPS = {
   },
   whisper() { node('whisper.mjs'); if (restart()) say('whisper: Lax restarted to use it'); },
   android(...a) { node('android-tools.mjs', ...a); }, // --accept-licenses: Google's SDK licenses, once you've said yes
+  domain(...a) { node('domain.mjs', ...a); }, // link | <host> <email> [--token-from-clipboard]: your own domain, behind Access
   async relay() {
     // Logged in to Cloudflare (a browser window, once), the Worker deployed on workers.dev, its key on both ends.
     let who = ''; try { who = wrangler(['whoami']); } catch (e) { who = String(e.stdout || ''); }

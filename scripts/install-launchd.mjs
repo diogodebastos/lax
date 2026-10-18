@@ -13,7 +13,7 @@ const remove = process.argv.includes('--remove');
 // Prefer the stable Homebrew symlink so `brew upgrade node` doesn't break the agent.
 const which = (...cands) => cands.find((c) => fs.existsSync(c));
 const NODE = which('/usr/local/bin/node', '/opt/homebrew/bin/node') || process.execPath;
-const CLOUDFLARED = which('/usr/local/bin/cloudflared', '/opt/homebrew/bin/cloudflared');
+const CLOUDFLARED = which(path.join(process.env.LAX_TOOLS || path.join(os.homedir(), '.lax-tools'), 'cloudflared'), '/usr/local/bin/cloudflared', '/opt/homebrew/bin/cloudflared'); // scripts/domain.mjs, else Homebrew's
 const PATH_ENV = [path.join(os.homedir(), '.local', 'bin'), '/usr/local/bin', '/opt/homebrew/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(':');
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');

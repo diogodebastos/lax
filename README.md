@@ -199,7 +199,14 @@ npx wrangler@4 secret put RELAY_KEY --config relay/wrangler.jsonc < ~/.lax/secre
 
 If you have a domain on Cloudflare, the phone can also reach Lax through a tunnel on it (here `https://lax.example.com`), behind Cloudflare Access (an email-PIN login in the browser, a service token for the app). Lax's token is a second lock. It can run next to the relay.
 
-The quick way: make a short-lived API token (Access apps/policies, service tokens, orgs/IdPs; Cloudflare Tunnel; Zone DNS edit) into `~/.lax/secrets/cf-setup-token`, then `LAX_HOSTNAME=lax.example.com LAX_OWNER_EMAIL=you@example.com node scripts/cf-setup.mjs` sets up all of the below. By hand:
+The quick way (Zero Trust turned on in the dashboard first, free):
+
+```bash
+node scripts/setup.mjs domain link                                            # a link that pre-fills the API token
+node scripts/setup.mjs domain lax.example.com you@example.com --token-from-clipboard
+```
+
+Create the token from the link and copy it; the second command takes it from the clipboard (and clears it), installs `cloudflared` into `~/.lax-tools` (no Homebrew), sets up the tunnel, Access, DNS and the tunnel's background service, checks that Lax answers there, and deletes the token file (delete the token in the dashboard too). By hand:
 
 ```bash
 brew install cloudflared
