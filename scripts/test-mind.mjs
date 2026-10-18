@@ -34,11 +34,12 @@ const snap = shape(readMind(live()), ['lax']);
 assert.deepEqual(leaks(snap), []);
 assert.equal(snap.owner, 'alex');
 assert.equal(shape(readMind({ ...live(), owner: 'Alex <me@x.com>' }), []).owner, ''); // only a plain name
-assert.deepEqual(Object.keys(snap), ['v', 'seen', 'look', 'owner', 'you', 'projects', 'episodes', 'archive', 'skills', 'rules', 'week', 'busy', 'doing', 'sessions', 'roles', 'wishes']);
+assert.deepEqual(Object.keys(snap), ['v', 'seen', 'look', 'owner', 'you', 'projects', 'episodes', 'archive', 'skills', 'rules', 'week', 'busy', 'doing', 'sessions', 'roles', 'wishes', 'total']);
 assert.deepEqual(snap.doing, { hearing: true, speaking: false, reflecting: false, recalling: false });
 assert.equal(snap.busy, true);
 assert.equal(clean({ ...snap, busy: 'yes' }), null);
-assert.deepEqual(snap.week, { heard: 5, spoke: 4, changes: 2, dreams: 0 }); // this week: talked to, answered aloud, its mind changed (commits)
+assert.deepEqual(Object.keys(snap.week), ['heard', 'spoke', 'changes', 'dreams', 'you', 'archive', 'skills', 'wishes']);
+assert.deepEqual([snap.week.heard, snap.week.spoke, snap.week.changes, snap.week.dreams], [5, 4, 2, 0]); // this week: talked to, answered aloud, its mind changed (commits)
 assert.equal(snap.you, 2);
 assert.deepEqual(snap.projects, [{ name: 'lax', notes: 3 }, { name: '', notes: 1 }]); // the hidden one: there, unnamed
 assert.deepEqual(snap.episodes, { total: 2, week: 1 });
@@ -59,6 +60,8 @@ assert.equal(clean({ ...snap, you: 'nine' }), null); // a wrong type
 assert.equal(clean({ ...snap, week: { ...snap.week, words: 'hi' } }), null);
 { const { wishes: _w, ...old } = snap; const { dreams: _d, ...week } = snap.week; // kept before wishes and dreams
   const c = clean({ ...old, week }); assert.equal(c?.wishes, 0); assert.equal(c?.week.dreams, 0); }
+{ const { total: _t, ...old } = snap; const week = { heard: 1, spoke: 2, changes: 3 }; // kept before totals and the week's new counts
+  const c = clean({ ...old, week }); assert.deepEqual(c?.total, { heard: 0, spoke: 0, changes: 0, dreams: 0 }); assert.equal(c?.week.you, 0); }
 assert.equal(clean({ ...snap, look: { color: 'red', stage: 'blob' } }), null);
 assert.equal(clean({ ...snap, sessions: [{ p: 0, state: 'working', cwd: '/x' }] }), null);
 assert.equal(clean(null), null); assert.equal(clean({}), null);

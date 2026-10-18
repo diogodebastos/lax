@@ -8,7 +8,7 @@
   const NODES = {
     hearing: { at: [-12, 10, 10], color: '#7fd3ff', label: 'hearing' },
     speech: { at: [12, 10, -10], color: '#ffd25a', label: 'speech' },
-    you: { at: [-16, -3, -8], label: 'you' },
+    you: { at: [-17, -7, -8], label: 'you' },
     memory: { at: [0, -12, 5], color: '#c9a86a', label: 'long-term memory' },
     learning: { at: [15, -5, 9], color: '#6fd36f', label: 'learning' },
     skills: { at: [20, 3, -14], color: '#b58ad9', label: 'skills' },
@@ -92,22 +92,25 @@
     const bits = []; for (let i = 0; i < specks; i++) { const b = new T.Mesh(new T.BoxGeometry(0.7, 0.7, 0.7), toon(color)); g.add(b); bits.push({ b, a: i / specks * Math.PI * 2, r: size + 1.6 + (i % 3) * 0.7, tilt: (i % 2 ? 0.6 : -0.4) }); }
     nodes[key] = { g, core, bits, color: new T.Color(color), size };
   }
+  // Satellites: this week (one more each time it doubles). The orb's size and its number: all time.
   const specks = (n) => Math.min(10, Math.ceil(Math.log2((n || 0) + 1)));
   const sizeOf = (n) => 1.2 + Math.min(2.8, Math.log2((n || 0) + 1) / 3); // 1.2 for nothing yet, 4 at about 300
-  // This week: times you talked to it (hearing), it answered aloud (speech), its mind changed (learning).
-  const counts = (s) => ({ hearing: s.week?.heard || 0, speech: s.week?.spoke || 0, learning: s.week?.changes || 0 });
+  // All time: what each orb holds (its size and number).
+  const totals = (s) => ({ hearing: s.total?.heard || 0, speech: s.total?.spoke || 0, learning: s.total?.changes || 0, dreams: s.total?.dreams || 0,
+    you: s.you, memory: s.episodes.total, skills: s.skills.installed + s.skills.drafts, archive: s.archive, wishes: s.wishes || 0 });
+  // This week: its satellites.
+  const weekly = (s) => { const w = s.week || {}; return { hearing: w.heard, speech: w.spoke, learning: w.changes, dreams: w.dreams, you: w.you,
+    memory: s.episodes.week, skills: w.skills, archive: w.archive, wishes: w.wishes }; };
   function build(s) {
-    const now = JSON.stringify([s.you, s.episodes.total, s.archive, s.skills, s.projects.map((p) => p.notes), s.sessions, s.week, s.look?.color, s.roles, s.wishes]); if (now === sig) return; sig = now;
+    const now = JSON.stringify([s.you, s.episodes.total, s.archive, s.skills, s.projects.map((p) => p.notes), s.sessions, s.week, s.look?.color, s.roles, s.wishes, s.total]); if (now === sig) return; sig = now;
     net.clear(); for (const k in nodes) delete nodes[k]; for (const k in lines) delete lines[k];
-    const color = s.look?.color || '#D97757', n = {
-      ...counts(s), you: s.you, memory: s.episodes.total, skills: s.skills.installed + s.skills.drafts, archive: s.archive,
-      dreams: s.week?.dreams || 0, wishes: s.wishes || 0 };
-    // Every orb's size and specks come from its own number: nothing is drawn bigger than what it holds.
-    for (const [k, d] of Object.entries(NODES)) orb(k, d.at, d.color || color, sizeOf(n[k]), specks(n[k]));
+    const color = s.look?.color || '#D97757', n = totals(s), w = weekly(s);
+    // Every orb's size comes from what it holds, its satellites from this week: nothing is drawn bigger than it is.
+    for (const [k, d] of Object.entries(NODES)) orb(k, d.at, d.color || color, sizeOf(n[k]), specks(w[k]));
     orb('projects', HUB, '#6fd36f', sizeOf(s.projects.length * 8), 0);
     s.projects.slice(0, 4).forEach((p, i) => orb('p' + i, PROJ[i], Mind.shade('#6fd36f', [-0.1, -0.35, 0.2, -0.5][i]), 0.8 + Math.min(0.8, Math.log2(p.notes + 1) / 6), 0));
     // A role, in Lax's own colour (it's what Lax is), sized by its work: a speck for each piece this week.
-    (s.roles || []).slice(0, 4).forEach((r, i) => orb('r' + i, ROLE[i], Mind.shade(color, 0.35), sizeOf(r.work * 4), Math.min(10, r.week)));
+    (s.roles || []).slice(0, 4).forEach((r, i) => orb('r' + i, ROLE[i], Mind.shade(color, 0.35), sizeOf(r.work * 4), specks(r.week)));
     // Sessions plugged in right now: a small cube beside its project (or near Lax), linked straight to Lax.
     (s.sessions || []).slice(0, 6).forEach((ss, i) => {
       const base = ss.p != null && PROJ[ss.p] ? PROJ[ss.p] : [-6, 16, 2], at = [base[0] + 5 + (i % 2) * 2, base[1] + 4 - (i % 3) * 2, base[2] + 6];
@@ -259,13 +262,10 @@
       const v = n.g.getWorldPosition(new T.Vector3()).project(cam);
       return { x: Math.round((v.x + 1) / 2 * Mind.current.W), y: Math.round((1 - v.y) / 2 * Mind.current.H) + (dy ?? Math.round(n.size * 2) + 6) }; };
     const sessions = (s.sessions || []).length, working = (s.sessions || []).filter((x) => x.state === 'working').length;
+    const n = totals(s);
     const list = [
-      { ...place('hearing'), text: 'hearing', n: counts(s).hearing, hot: hot.hearing > t }, { ...place('speech'), text: 'speech', n: counts(s).speech, hot: hot.speech > t },
-      { ...place('you'), text: s.owner || 'you', n: s.you, hot: hot.you > t }, { ...place('memory'), text: 'long-term memory', n: s.episodes.total, hot: hot.memory > t },
-      { ...place('learning'), text: 'learning', n: counts(s).learning, hot: hot.learning > t },
-      { ...place('skills'), text: 'skills', n: s.skills.installed + (s.skills.drafts ? `+${s.skills.drafts}` : ''), hot: hot.skills > t },
-      { ...place('archive'), text: 'archive', n: s.archive, hot: hot.archive > t },
-      { ...place('dreams'), text: 'dreams', n: s.week?.dreams || 0, hot: hot.dreams > t }, { ...place('wishes'), text: 'wishes', n: s.wishes || 0, hot: hot.wishes > t },
+      ...['hearing', 'speech', 'you', 'memory', 'learning', 'skills', 'archive', 'dreams', 'wishes'].map((k) => ({ ...place(k), text: k === 'you' ? s.owner || 'you' : NODES[k].label,
+        n: k === 'skills' ? s.skills.installed + (s.skills.drafts ? `+${s.skills.drafts}` : '') : n[k], hot: hot[k] > t })),
       { ...place('projects'), text: 'projects', n: s.projects.length, hot: hot.projects > t },
       ...(s.roles || []).slice(0, 4).map((r, i) => ({ ...place('r' + i), text: r.name || 'role', n: r.work, hot: hot['r' + i] > t })),
       ...(sessions ? [{ ...place('s0', 8), text: 'sessions', n: working ? `${working}/${sessions}` : sessions, hot: hot.core > t }] : []),

@@ -350,7 +350,10 @@ let publicMind = null; // its mind on the website (lib/public-mind.mjs), set up 
 // Its own rolling log, not the journal: the journal's rows shape its species.
 const WEEK = 7 * 864e5;
 function heardSpoke(k) { if (!publicMind) return; const w = kvGet('mindWeek', { heard: [], spoke: [] }), now = Date.now();
-  w[k] = [...(w[k] || []).filter((t) => now - t < WEEK), now]; kvSet('mindWeek', w); publicMind.event(k === 'heard' ? 'hear' : 'speak'); }
+  w[k] = [...(w[k] || []).filter((t) => now - t < WEEK), now]; kvSet('mindWeek', w);
+  const all = mindEver(); all[k] = (all[k] || 0) + 1; kvSet('mindEver', all); publicMind.event(k === 'heard' ? 'hear' : 'speak'); }
+// All time (the page sizes hearing and speech by it). Counted since 2026-10-18, starting from that week's own log: older isn't kept.
+function mindEver() { let all = kvGet('mindEver', null); if (!all) { all = { heard: weekCount('heard'), spoke: weekCount('spoke') }; kvSet('mindEver', all); } return all; }
 const weekCount = (k) => (kvGet('mindWeek', {})[k] || []).filter((t) => Date.now() - t < WEEK).length;
 // A reflection or the weekly review, on its own: its dreams on the website.
 function dreamed() { const w = kvGet('mindWeek', { heard: [], spoke: [] }), now = Date.now(); w.dreamed = [...(w.dreamed || []).filter((t) => now - t < WEEK), now]; kvSet('mindWeek', w); }
@@ -723,7 +726,7 @@ if (voiceSessions[ASSISTANT] && !laxTalk.last) {
 // ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
 ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addSkills(); addEpisodesToLearning(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice(); addEpisodesAdvice(); addScheduleAdvice(); ensureSelf(); addSelfAdvice(); addRoles(); addRolesToRemembering();
 // ---------- its mind on the website (lib/public-mind.mjs): the shape of what it knows and does, never what's in it ----------
-publicMind = createPublicMind({ live: () => { const v = petView(); return { color: v.look?.color, stage: v.stage, sessions: sessionList(), heard: weekCount('heard'), spoke: weekCount('spoke'), dreams: weekCount('dreamed'), busy: working(), owner: settings.publicName || '', doing: doing() }; },
+publicMind = createPublicMind({ live: () => { const v = petView(); return { color: v.look?.color, stage: v.stage, sessions: sessionList(), heard: weekCount('heard'), spoke: weekCount('spoke'), dreams: weekCount('dreamed'), heardEver: mindEver().heard, spokeEver: mindEver().spoke, busy: working(), owner: settings.publicName || '', doing: doing() }; },
   allow: () => settings.publicProjects || [], allowRoles: () => settings.publicRoles || [], log: (...a) => console.log('[mind]', ...a) });
 // What it learned, forgot or changed in how it learns goes where its last commit says (lib/public-mind.mjs placesOf).
 const mindEvent = (kind, extra = {}) => { if (kind === 'reflect' || kind === 'review') dreamed();
