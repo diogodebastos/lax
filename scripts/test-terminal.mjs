@@ -1,6 +1,6 @@
 // lib/terminal.mjs: the AppleScript each terminal app gets, and the "open on mac" phrase.
 import assert from 'node:assert/strict';
-import { terminalScript, ON_MAC } from '../lib/terminal.mjs';
+import { terminalScript, ON_MAC, closeTarget } from '../lib/terminal.mjs';
 
 const cwd = "/Users/me/it's here", cmd = `exec claude --resume abc --add-dir '/Users/me/REPOS'`;
 const g = terminalScript('Ghostty', cwd, cmd);
@@ -12,4 +12,13 @@ assert.equal(terminalScript('Hyper', cwd, cmd), null);
 
 for (const t of ['Open on the Mac.', 'continue on mac', 'open this on my Mac', 'Open it on the Mac please', 'move it to the mac']) assert.ok(ON_MAC.test(t), t);
 for (const t of ['open the readme on the mac', 'open a terminal', 'what is on the mac', 'mac']) assert.ok(!ON_MAC.test(t), t);
+
+// "Close the fisicai session": which one, by project (its folder) or tab name; two alike, ask; no name, a message.
+const list = [{ id: 'a', project: 'fisicai', where: 'cli' }, { id: 'b', project: 'edge-cava', where: 'cli' }, { id: 'c', project: 'reports', where: 'cli' }, { id: 'd', project: 'reports', where: 'mac' }];
+for (const t of ['close the fisicai session', 'Close fisicai.', 'end fisicai cli', 'quit the fisicai tab', 'fecha a sessão do fisicai']) assert.equal(closeTarget(t, list)?.session?.id, 'a', t);
+assert.equal(closeTarget('close edge cava', list)?.session?.id, 'b');
+assert.deepEqual(closeTarget('close the reports session', list), { many: ['reports·cli', 'reports·mac'] });
+assert.deepEqual(closeTarget('close the zorblat session', list), { none: ['fisicai·cli', 'edge-cava·cli', 'reports·cli', 'reports·mac'] });
+for (const t of ['close', 'close the session', 'close it', 'close the readme', 'exit plan mode', 'end of the day', 'open fisicai']) assert.equal(closeTarget(t, list), null, t);
+assert.deepEqual(closeTarget('close the lax session', []), { none: [] }); // Lax's own conversation is never in the list
 console.log('terminal: ok');
