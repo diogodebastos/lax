@@ -200,6 +200,18 @@ ingress:
 
 `/pair` only answers requests from the Mac itself. Anything that arrives through the tunnel gets a 403.
 
+## Reaching Lax through the relay (no domain)
+
+The other way in: a Worker on your own free Cloudflare account (`relay/`, at `lax-relay.<account>.workers.dev`). The Mac holds one WebSocket out to it and the phone talks to the Worker over HTTPS, so nothing on the Mac listens beyond `127.0.0.1` and no domain is needed. For now it's a pipe: every request is replayed against Lax on the Mac and streamed back, so the page, the app and the token work as through the tunnel. With the Mac asleep, the phone gets "Mac asleep" (503). Wrong tokens are limited per address (20 in 10 minutes). Nothing is kept on Cloudflare.
+
+```bash
+npx wrangler@4 deploy --config relay/wrangler.jsonc             # prints its workers.dev URL
+openssl rand -hex 24 > ~/.lax/secrets/relay-key && chmod 600 ~/.lax/secrets/relay-key
+npx wrangler@4 secret put RELAY_KEY --config relay/wrangler.jsonc < ~/.lax/secrets/relay-key
+```
+
+Then in `~/.lax/secrets/env.json`: `"LAX_RELAY_URL": "https://lax-relay.<account>.workers.dev"`, and the same as `LAX_PUBLIC_URL` to pair the phone through it. Restart Lax; `[relay] linked` in the log. Test: `npm run test-relay` (the Worker under `wrangler dev`, locally).
+
 ## Always on (launchd)
 
 ```bash

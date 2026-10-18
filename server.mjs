@@ -11,7 +11,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { ensureHome, commitMind, mindHead, forgotSince, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice, addFreshAdvice, addEpisodesAdvice, addScheduleAdvice, addSelfAdvice } from './lib/home.mjs';
 import { ensureSelf, self } from './lib/self.mjs';
 import { createRoles, workLog } from './lib/roles.mjs';
-import { HOME, MIND, DB, OLD_DB, SETTINGS, VOCAB } from './lib/paths.mjs';
+import { HOME, MIND, DB, OLD_DB, SETTINGS, VOCAB, secret } from './lib/paths.mjs';
 import { APP_NAME, DEFAULT_COMPANION_NAME } from './lib/names.mjs';
 import { readVocab, addHeard, addWord, allHeard, knownWords, dictatedNote, answerIn, teachCommand, typedOver } from './lib/vocab.mjs';
 import { HOST, TOKEN, authed, isLocal, phoneUrl, pairPage } from './lib/auth.mjs'; // first: it loads Lax's home and local config
@@ -35,6 +35,7 @@ import { createArchive } from './lib/archive.mjs';
 import { recall } from './lib/recall.mjs';
 import * as whisper from './lib/whisper.mjs';
 import { createPublicMind, placesOf, lastCommitFiles, filesIn } from './lib/public-mind.mjs';
+import { startRelay } from './lib/relay.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const PORT = Number(process.env.LAX_PORT || 7777);
@@ -1196,6 +1197,9 @@ http.createServer(async (req, res) => {
 }).listen(PORT, HOST, () => {
   console.log(`${APP_NAME}: ${settings.name || DEFAULT_COMPANION_NAME} is awake on ${HOST}:${PORT}.\n  Mac:   http://localhost:${PORT}/?t=${TOKEN}\n  Phone: ${phoneUrl(PORT)}\n  Pair:  http://localhost:${PORT}/pair  (QR code)`);
 });
+// The relay (lib/relay.mjs, Phase 11): the phone reaches Lax through the person's own Worker. With LAX_RELAY_URL and its key.
+{ let key = process.env.LAX_RELAY_KEY; try { key ||= fs.readFileSync(secret('relay-key'), 'utf8').trim(); } catch {}
+  if (process.env.LAX_RELAY_URL && key) startRelay({ url: process.env.LAX_RELAY_URL, key, port: PORT, log: (m) => console.log(`[${m.replace(': ', '] ')}`) }); }
 // Whisper on the Mac (lib/whisper.mjs), the port after Lax's. Not in tests (a throwaway LAX_HOME) unless asked.
 if (process.env.LAX_WHISPER === '1' || (process.env.LAX_WHISPER !== '0' && !process.env.LAX_HOME && !process.env.LAX_DATA)) {
   if (whisper.start({ port: PORT + 1, onLog: (m) => { console.log(`[whisper] ${m}`); pushState(); } })) console.log('[whisper] starting');
