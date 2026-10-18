@@ -6,6 +6,7 @@
 // fence (hooks/lax-hook.mjs: never auth, tokens or the guardrails, so those conflicts are yours); the tests must pass.
 // Then main moves to it, Lax restarts, and if it doesn't come back healthy, main goes back (scripts/after-merge.mjs).
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline/promises';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -84,6 +85,10 @@ if (git('diff', '--name-only', prev, 'HEAD', '--', 'package.json', 'package-lock
   say('New packages: npm install…');
   if (spawnSync('npm', ['install'], { cwd: BODY, stdio: 'inherit' }).status !== 0) { git('reset', '-q', '--keep', prev); stop('npm install failed, so main is back where it was.'); }
 }
+// Hook timeouts live in ~/.claude/settings.json, not in the code: installed again, so they follow the update.
+let cc = ''; try { cc = fs.readFileSync(path.join(os.homedir(), '.claude', 'settings.json'), 'utf8'); } catch {}
+if (cc.includes('lax-hook.mjs') && fs.existsSync(path.join(BODY, 'scripts', 'install-hooks.mjs')))
+  spawnSync(process.execPath, [path.join(BODY, 'scripts', 'install-hooks.mjs')], { stdio: 'ignore' });
 if (!restart) process.exit(0);
 say('Restarting Lax…');
 ensureDirs();

@@ -7,6 +7,7 @@ import { claudePid } from '../lib/claude-pid.mjs';
 import { MIND, SECRETS, DB, ARCHIVE, readToken } from '../lib/paths.mjs';
 import { bashKind } from '../lib/allow.mjs';
 import { offLimits } from '../lib/guard.mjs';
+import { ASK_MS } from './timeouts.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const URL_BASE = process.env.LAX_URL || 'http://127.0.0.1:7777';
@@ -100,7 +101,7 @@ if (process.env.LAX_JOB) {
     if (secret) decide('deny', 'Lax\'s secrets and database are never touched.');
     else if (ok) decide('allow', 'This scheduled job may.');
     else {
-      const { decision, why } = await post('/api/ask', { ...input, lax_voice: true, lax_job: process.env.LAX_JOB }, 11 * 60e3).catch(() => ({}));
+      const { decision, why } = await post('/api/ask', { ...input, lax_voice: true, lax_job: process.env.LAX_JOB }, ASK_MS).catch(() => ({}));
       decide(decision === 'allow' ? 'allow' : 'deny', decision === 'allow' ? 'Approved from Lax.' : decision === 'deny' ? 'The user said no on the phone.'
         : `Not allowed for this job${why ? ` and couldn't ask the user: ${why}` : ', and the user didn\'t answer on the phone'}. Do without it, and say so.`);
     }
@@ -124,7 +125,7 @@ try {
   // Interactive sessions: offer the permission prompt on the phone first.
   if (ev === 'PermissionRequest') {
     // Which session is this? If it has a live lax channel, the channel relays tool approvals instead.
-    const { decision, answers } = await post('/api/ask', { ...input, lax_session_pid: claudePid() }, 600000);
+    const { decision, answers } = await post('/api/ask', { ...input, lax_session_pid: claudePid() }, ASK_MS);
     // A question answered on the phone: allow the tool with the answers filled in, as the terminal UI would.
     if (decision === 'answer') {
       console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest',
@@ -159,7 +160,7 @@ try {
   } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && input.tool_name === 'Bash' && bashKind(cmd, input.cwd)) {
     decide('allow', bashKind(cmd, input.cwd) === 'read' ? 'Only looking (read-only command).' : 'A local step you can undo.');
   } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && !SAFE.test(input.tool_name)) {
-    const { decision, why } = await post('/api/ask', { ...input, lax_voice: true }, 120000);
+    const { decision, why } = await post('/api/ask', { ...input, lax_voice: true }, ASK_MS);
     console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse',
       permissionDecision: decision === 'allow' ? 'allow' : 'deny',
       permissionDecisionReason: decision === 'allow' ? 'Approved from Lax.'

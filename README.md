@@ -289,11 +289,12 @@ Talking to Lax itself (its own tab, not a live session) runs headless: no termin
 
 ## Behaviour notes
 
-- **Permission prompts** go to the phone first, but only while a Lax page is connected. If you don't answer within `LAX_ASK_TIMEOUT` seconds (default 30), the normal terminal prompt takes over.
+- **Permission prompts** go to the phone first, but only while a Lax page is connected. If you don't answer in time, the normal terminal prompt takes over. "In time" is the Life menu's **wait before terminal** (15 s, 30 s, 1 min or 2 min, kept in `settings.json`); a question you have to read gets 4 times as long. `LAX_ASK_TIMEOUT` only sets where that starts, for a Lax with no setting yet; once you pick one in the Life menu, that's what counts.
+- **How long the rest waits for you:** Lax's own assistant waits as long as a terminal session would, then takes silence as a no; a scheduled job waits up to 10 minutes. Each hook outlasts the wait it's in, so a bubble never outlives what asked it (`hooks/timeouts.mjs`; `npm run doctor` says when the installed timeouts are old, and `npm run update` reinstalls them).
 - **Voice runs** use their own Claude session per project (resumed each time). The project is the one where Claude Code was active most recently. Read-only tools run freely. Anything else (edits, Bash) needs ✓ on the phone, and silence counts as a no.
 - When the server is down, the hook exits in milliseconds, so Claude Code is never slowed down.
 
-Env (or `~/.lax/secrets/env.json`): `LAX_PORT` (7777), `LAX_HOST` (127.0.0.1), `LAX_PUBLIC_URL` (the way in the phone pairs through), `LAX_RELAY_URL`, `LAX_ASK_TIMEOUT` (30), `LAX_WORKDIR` (your projects and the fallback voice project; default the folder Lax was cloned into), `LAX_DEMO_ROUTE` (a public demo, off by default).
+Env (or `~/.lax/secrets/env.json`): `LAX_PORT` (7777), `LAX_HOST` (127.0.0.1), `LAX_PUBLIC_URL` (the way in the phone pairs through), `LAX_RELAY_URL`, `LAX_ASK_TIMEOUT` (30: the starting "wait before terminal", until you pick one in the Life menu), `LAX_WORKDIR` (your projects and the fallback voice project; default the folder Lax was cloned into), `LAX_DEMO_ROUTE` (a public demo, off by default).
 
 ## Development
 

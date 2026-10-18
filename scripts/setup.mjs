@@ -12,6 +12,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { HOME, MIND, SECRETS, secret, readEnv, readToken, ensureDirs } from '../lib/paths.mjs';
 import { BIN as WHISPER, MODEL as WHISPER_MODEL } from '../lib/whisper.mjs';
 import { SDK, jdkHome } from './android-tools.mjs';
+import { EVENTS } from '../hooks/timeouts.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const PORT = Number(process.env.LAX_PORT || 7777), LAX = `http://127.0.0.1:${PORT}`;
@@ -39,6 +40,16 @@ async function healthy(wait = 20e3) {
 const restart = () => { try { sh('launchctl', ['kickstart', '-k', `gui/${process.getuid()}/${SERVICE}`]); return true; } catch { return false; } };
 
 // ---------- what's done ----------
+// Lax's hooks in ~/.claude/settings.json: this clone's, on every event, with today's timeouts (hooks/timeouts.mjs).
+function hooksState(text) {
+  let hooks = {}; try { hooks = JSON.parse(text).hooks || {}; } catch {}
+  const mine = path.join(ROOT, 'hooks', 'lax-hook.mjs'), found = (ev) => (hooks[ev] || []).flatMap((g) => g.hooks || []).find((h) => String(h.command).includes(mine));
+  const missing = Object.keys(EVENTS).filter((ev) => !found(ev)), old = Object.keys(EVENTS).filter((ev) => found(ev) && found(ev).timeout !== EVENTS[ev]);
+  return missing.length === Object.keys(EVENTS).length ? { ok: false, detail: 'Claude Code tells Lax what every session does' }
+    : missing.length || old.length ? { ok: false, detail: `installed, but ${missing.length ? `missing ${missing.join(', ')}` : `with old timeouts (${old.join(', ')})`}: npm run install-hooks` }
+    : { ok: true, detail: 'Claude Code tells Lax what every session does' };
+}
+
 const nodeOk = () => { const [a, b] = process.versions.node.split('.').map(Number); return a > 22 || (a === 22 && b >= 13); };
 const claudeVersion = () => { try { return sh('claude', ['--version']).trim(); } catch { return ''; } };
 async function status() {
@@ -49,7 +60,7 @@ async function status() {
     claude: { ok: !!claudeVersion(), detail: claudeVersion() || 'not found', need: 'Claude Code, logged in' },
     deps: { ok: fs.existsSync(path.join(ROOT, 'node_modules', 'node-pty')), detail: 'npm install' },
     workdir: { ok: !!env.LAX_WORKDIR, detail: env.LAX_WORKDIR || `not chosen (would be ${path.dirname(ROOT)})` },
-    hooks: { ok: settings.includes(path.join(ROOT, 'hooks', 'lax-hook.mjs')), detail: 'Claude Code tells Lax what every session does' },
+    hooks: hooksState(settings),
     channel: { ok: read(path.join(os.homedir(), '.local', 'bin', 'lax')).includes(ROOT), detail: '`lax`, `/lax`, and the channel that lets you talk into a session' },
     service: { ok: read(path.join(AGENTS, `${SERVICE}.plist`)).includes(ROOT) && await healthy(1500), detail: 'Lax runs in the background, from login' },
     home: { ok: fs.existsSync(path.join(MIND, 'CLAUDE.md')), detail: HOME },

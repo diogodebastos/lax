@@ -36,6 +36,7 @@ import { recall } from './lib/recall.mjs';
 import * as whisper from './lib/whisper.mjs';
 import { createPublicMind, placesOf, lastCommitFiles, filesIn } from './lib/public-mind.mjs';
 import { startRelay } from './lib/relay.mjs';
+import { MAX_WAIT_S } from './hooks/timeouts.mjs';
 import { createBudget, LEVELS } from './lib/budget.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
@@ -621,7 +622,7 @@ function ask(h) {
         ...(grant?.startsWith('edit:') && { details: `A yes also lets it edit the rest of ${path.basename(grant.slice(5))} until it finishes this answer.` }) };
     // Questions are worth waiting longer for: they need reading.
     const timer = setTimeout(() => { // nobody answered on the phone: friction (lib/improve.mjs)
-      improve.note('unanswered', `${project} asked ${bubble.gist || bubble.text}: no answer on the phone in time`); finish('none'); }, (job ? 600 : Math.min(600, settings.askTimeout * (questions ? 4 : 1))) * 1000);
+      improve.note('unanswered', `${project} asked ${bubble.gist || bubble.text}: no answer on the phone in time`); finish('none'); }, (job ? MAX_WAIT_S : Math.min(MAX_WAIT_S, settings.askTimeout * (questions ? 4 : 1))) * 1000); // hooks/timeouts.mjs
     function finish(decision, answers) {
       clearTimeout(timer); pending.delete(id); broadcast('clear', { id });
       const ss = sessions.get(h.session_id); if (ss?.status === 'waiting') { ss.status = 'working'; pushState(); }
