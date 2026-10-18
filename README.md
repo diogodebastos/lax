@@ -64,6 +64,8 @@ The phone stores nothing except the access token. Coming from an older Lax with 
 ```bash
 npm run setup          # sets Lax up with you, in a Claude Code conversation (node scripts/setup.mjs status: where it stands)
 npm run update         # the project's new changes, keeping what this Lax changed in itself (merged on a branch, tested, then main)
+npm run doctor         # is it all working: setup, secrets' permissions (-- --fix), and each way in, end to end
+npm run rotate-token   # a new token: old links get 401, pair the phone again
 npm start              # prints the Mac + phone URLs (with token)
 npm run install-hooks  # wire Claude Code → Lax (backup: ~/.claude/settings.json.bak-lax)
 npm run remove-hooks   # undo

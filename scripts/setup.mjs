@@ -4,11 +4,12 @@
 //   node scripts/setup.mjs status         what's done, what's left (--json for the conversation)
 //   node scripts/setup.mjs <step>         deps, workdir [<folder>], hooks, channel, service, whisper, relay, pair
 //   node scripts/setup.mjs --all          every step but whisper, in order, without the conversation
+//   node scripts/setup.mjs doctor [--fix] npm run doctor: is it all working? (--fix: secrets' permissions)
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { HOME, MIND, secret, readEnv, readToken, ensureDirs } from '../lib/paths.mjs';
+import { HOME, MIND, SECRETS, secret, readEnv, readToken, ensureDirs } from '../lib/paths.mjs';
 import { BIN as WHISPER, MODEL as WHISPER_MODEL } from '../lib/whisper.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -55,6 +56,36 @@ async function status() {
     relay: { ok: !!relayUrl && !!read(secret('relay-key')), detail: relayUrl || 'the phone reaches Lax through your own Worker (a free Cloudflare account)' },
     phone: { ok: !!env.LAX_PUBLIC_URL, detail: env.LAX_PUBLIC_URL ? `pairs through ${env.LAX_PUBLIC_URL}` : 'on this Mac only, at localhost' },
   };
+}
+
+// ---------- npm run doctor: what's set up, and does it work ----------
+async function doctor(fix) {
+  const s = await status(), env = readEnv(), token = readToken(), checks = [];
+  const add = (name, ok, detail, needed = true) => checks.push({ name, ok, detail, needed });
+  for (const k of ['node', 'claude', 'deps', 'hooks', 'service', 'home']) add(k, s[k].ok, s[k].detail);
+  add('channel', s.channel.ok, s.channel.detail, false);
+  add('mind', fs.existsSync(path.join(MIND, '.git')), `${MIND}, with its history`);
+  // Secrets: the folder 0700, every file 0600 (lib/paths.mjs). --fix tightens them.
+  const loose = [];
+  if (fs.existsSync(SECRETS)) {
+    if ((fs.statSync(SECRETS).mode & 0o777) !== 0o700) loose.push(SECRETS);
+    for (const f of fs.readdirSync(SECRETS)) { const p = path.join(SECRETS, f); if (fs.statSync(p).isFile() && fs.statSync(p).mode & 0o077) loose.push(p); }
+  }
+  if (fix) for (const p of loose) fs.chmodSync(p, p === SECRETS ? 0o700 : 0o600);
+  add('secrets', fix || !loose.length, loose.length ? `${fix ? 'tightened' : 'readable by others (npm run doctor -- --fix)'}: ${loose.map((p) => path.basename(p)).join(', ')}` : 'only yours (0700, files 0600)');
+  // The ways in, end to end: the page answers with the token.
+  const reach = async (url, headers = {}) => { try { return (await fetch(`${url}/?t=${token}`, { headers, signal: AbortSignal.timeout(10000) })).status; } catch (e) { return e.cause?.code || e.message; } };
+  if (env.LAX_RELAY_URL) { const r = await reach(env.LAX_RELAY_URL); add('relay', r === 200, r === 200 ? env.LAX_RELAY_URL : r === 503 ? 'deployed, but the Mac is not linked (is Lax running? see its log)' : `${env.LAX_RELAY_URL}: ${r}`); }
+  if (env.LAX_PUBLIC_URL && env.LAX_PUBLIC_URL !== env.LAX_RELAY_URL) {
+    const r = await reach(env.LAX_PUBLIC_URL, env.CF_ACCESS_CLIENT_ID ? { 'CF-Access-Client-Id': env.CF_ACCESS_CLIENT_ID, 'CF-Access-Client-Secret': env.CF_ACCESS_CLIENT_SECRET } : {});
+    add('tunnel', r === 200, r === 200 ? env.LAX_PUBLIC_URL : `${env.LAX_PUBLIC_URL}: ${r}`);
+  }
+  if (!env.LAX_PUBLIC_URL) add('phone', false, 'no way in from a phone yet (node scripts/setup.mjs relay)', false);
+  if (s.whisper.ok) { let ok = false; try { ok = (await (await fetch(`http://127.0.0.1:${PORT + 1}/health`, { signal: AbortSignal.timeout(3000) })).json()).status === 'ok'; } catch {} add('whisper', ok, ok ? 'hearing on the Mac' : 'set up, but not answering (it starts with Lax)', false); }
+  for (const c of checks) say(`${c.ok ? '✓' : c.needed ? '✗' : '·'} ${c.name.padEnd(8)} ${c.detail}`);
+  const bad = checks.filter((c) => c.needed && !c.ok);
+  say(bad.length ? `\n${bad.length} thing${bad.length > 1 ? 's' : ''} to fix.` : '\nAll good.');
+  return bad.length ? 1 : 0;
 }
 
 // ---------- the steps ----------
@@ -113,6 +144,8 @@ if (cmd === 'status') {
   const s = await status();
   if (rest.includes('--json')) say(JSON.stringify(s, null, 2));
   else for (const [k, v] of Object.entries(s)) say(`${v.ok ? '✓' : '·'} ${k.padEnd(8)} ${v.detail}`);
+} else if (cmd === 'doctor') {
+  process.exit(await doctor(rest.includes('--fix')));
 } else if (cmd === '--all') {
   for (const k of ['deps', 'workdir', 'hooks', 'channel', 'service', 'relay', 'pair']) await STEPS[k]();
 } else if (STEPS[cmd]) {

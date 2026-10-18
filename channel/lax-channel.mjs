@@ -16,8 +16,9 @@ import { share, finishShare, pickOption } from '../lib/share.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const LAX = process.env.LAX_URL || 'http://127.0.0.1:7777';
-const TOKEN = readToken();
-if (!TOKEN) { process.stderr.write('[lax-channel] no Lax token yet (start Lax first)\n'); process.exit(0); }
+// Read again on every call: after `npm run rotate-token` a running session carries on with the new one.
+const TOKEN0 = readToken(), TOKEN = () => readToken() || TOKEN0;
+if (!TOKEN0) { process.stderr.write('[lax-channel] no Lax token yet (start Lax first)\n'); process.exit(0); }
 const CID = crypto.randomBytes(5).toString('hex');
 const SESSION_PID = claudePid();
 // Registered at user level, so this server starts in every session. Only sessions launched with the lax channel
@@ -34,7 +35,7 @@ const RECALL_MODE = !OWN_RUN && !VOICE_MODE;
 const log = (...a) => process.stderr.write(`[lax-channel] ${a.join(' ')}\n`); // stdout belongs to MCP
 
 const post = (body) => fetch(`${LAX}/api/channel/event`, {
-  method: 'POST', headers: { 'content-type': 'application/json', 'x-lax-token': TOKEN },
+  method: 'POST', headers: { 'content-type': 'application/json', 'x-lax-token': TOKEN() },
   body: JSON.stringify({ cid: CID, ...body }), signal: AbortSignal.timeout(5000),
 }).then((r) => r.json()).catch((e) => { log('post failed:', e.message); return { ok: false }; });
 
@@ -204,13 +205,13 @@ async function shareAndTell(args) {
 
 mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
   if (req.params.name === 'recall' && RECALL_MODE) {
-    const r = await fetch(`${LAX}/api/recall`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-lax-token': TOKEN },
+    const r = await fetch(`${LAX}/api/recall`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-lax-token': TOKEN() },
       body: JSON.stringify({ query: String(req.params.arguments?.query || ''), cwd: process.cwd() }), signal: AbortSignal.timeout(5 * 60e3) })
       .then((x) => x.json()).catch((e) => ({ ok: false, answer: `Lax is not reachable (${e.message}).` }));
     return { content: [{ type: 'text', text: r.answer || 'Nothing came back.' }], isError: !r.ok };
   }
   if (req.params.name === 'self' && !OWN_RUN) {
-    const r = await fetch(`${LAX}/api/self`, { headers: { 'x-lax-token': TOKEN }, signal: AbortSignal.timeout(5000) })
+    const r = await fetch(`${LAX}/api/self`, { headers: { 'x-lax-token': TOKEN() }, signal: AbortSignal.timeout(5000) })
       .then((x) => x.json()).catch((e) => ({ error: `Lax is not reachable (${e.message}).` }));
     return { content: [{ type: 'text', text: r.error || JSON.stringify(r) }], isError: !!r.error };
   }
@@ -257,7 +258,7 @@ async function listen() {
     try {
       const qs = new URLSearchParams({ cid: CID, pid: String(process.pid), session_pid: String(SESSION_PID || ''), cwd: process.cwd(),
         pty: process.env.LAX_PTY || '' }); // the `lax` wrapper's socket, for quick actions by voice
-      const res = await fetch(`${LAX}/api/channel/stream?${qs}`, { headers: { 'x-lax-token': TOKEN } });
+      const res = await fetch(`${LAX}/api/channel/stream?${qs}`, { headers: { 'x-lax-token': TOKEN() } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       log('linked to Lax as', CID, 'session pid', SESSION_PID);
       delay = 1000;

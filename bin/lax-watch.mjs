@@ -110,7 +110,7 @@ function ask(b) {
 
 let said = false;
 async function watch() {
-  const res = await fetch(`http://127.0.0.1:${PORT}/api/stream?backlog=${backlog}`, { headers: { 'x-lax-token': token } });
+  const res = await fetch(`http://127.0.0.1:${PORT}/api/stream?backlog=${backlog}`, { headers: { 'x-lax-token': readToken() || token } }); // read again: a rotated token, after Lax restarts
   if (!res.ok) throw new Error(`Lax said ${res.status}`);
   if (!said || backlog) console.log(C.dim(`watching ${only || 'everything'} (ctrl-c to stop)`));
   said = true;
