@@ -22,8 +22,9 @@ Each person's Lax is born fresh: it knows nothing about them yet, and that's how
    Lax's status line, only if they have none of their own).
 3. **channel**: installs `lax` (Claude Code with Lax's channel, so they can talk into a running session from the phone)
    and the `/lax` skill. Be honest before asking: channels are a research preview, so `lax` starts Claude Code with
-   `--dangerously-load-development-channels server:lax`, and Claude Code shows a warning about it the first time. It's
-   their call; Lax works without it (it just can't talk into a live session). Run it only on a yes.
+   `--dangerously-load-development-channels server:lax`, and Claude Code shows a warning about it. The first time they
+   start `lax`, they answer it themselves; only after that does Lax answer it for them (kept in `~/.lax/consent.json`).
+   It's their call; Lax works without it (it just can't talk into a live session). Run it only on a yes.
 4. **service**: Lax runs in the background from login (a launchd agent), and restarts if it crashes. It listens only on
    this Mac. This is when `~/.lax` is created and their Lax is born.
 5. **relay**: to reach Lax from their phone, anywhere. It needs a free Cloudflare account (no domain): a browser window

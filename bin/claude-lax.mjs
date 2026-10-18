@@ -12,7 +12,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { HOME } from '../lib/paths.mjs';
+import { HOME, CONSENT } from '../lib/paths.mjs';
 import { ACTIONS, screenMode } from '../lib/actions.mjs';
 
 // `lax watch`: follow what Lax sees, in this terminal (bin/lax-watch.mjs). Nothing else starts.
@@ -48,14 +48,26 @@ if (!pty || !process.stdin.isTTY || !process.stdout.isTTY) {
     for (let i = Math.max(0, b.length - 200); i < b.length; i++) out.push(b.getLine(i)?.translateToString(true) ?? '');
     return out.join('\n').replace(/\n+$/, '');
   };
-  // The --dangerously-load-development-channels warning at start: answer "1. I am using this for local development"
-  // (already selected) for you. Only once, only in the first 30s, only when the warning and that option are on screen.
-  let devAsked = false;
+  // The --dangerously-load-development-channels warning at start. The first time, it's yours to answer: Claude Code's own
+  // words, on your screen. Once you've said "1. I am using this for local development" yourself (the warning went and
+  // Claude Code carried on), that's kept in ~/.lax/consent.json, and from then on Lax answers it for you: only in the
+  // first 30s, only when the warning and that option are on screen. Delete the file to be asked again.
+  const consented = () => { try { return !!JSON.parse(fs.readFileSync(CONSENT, 'utf8')).devChannels; } catch { return false; } };
+  const WARNING = 'Loading development channels';
+  let devAsked = false, devSeen = false, exited = false;
+  const visible = () => { const b = vt.buffer.active, out = []; for (let i = b.viewportY; i < b.viewportY + vt.rows; i++) out.push(b.getLine(i)?.translateToString(true) ?? ''); return out.join('\n'); };
   function skipDevWarning() { // runs once the screen copy has taken in new output
-    if (devAsked || process.uptime() > 30) return;
-    const s = screen();
-    if (s.includes('Loading development channels') && /1\.\s*I am using this for local development/.test(s)) {
-      devAsked = true; setTimeout(() => term.write('\r'), 100);
+    if (devAsked || process.uptime() > 300) return;
+    const s = visible(), shown = s.includes(WARNING) && /1\.\s*I am using this for local development/.test(s);
+    if (shown && consented() && process.uptime() <= 30) { devAsked = true; setTimeout(() => term.write('\r'), 100); return; }
+    if (shown) devSeen = true;
+    else if (devSeen && !s.includes(WARNING)) { // you answered it: kept only if Claude Code is still going (not "Exit")
+      devAsked = true;
+      setTimeout(() => {
+        if (exited) return;
+        let c = {}; try { c = JSON.parse(fs.readFileSync(CONSENT, 'utf8')); } catch {}
+        try { fs.writeFileSync(CONSENT, JSON.stringify({ ...c, devChannels: { at: new Date().toISOString(), how: 'answered in lax' } }, null, 2) + '\n'); } catch {}
+      }, 3000);
     }
   }
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -94,6 +106,7 @@ if (!pty || !process.stdin.isTTY || !process.stdout.isTTY) {
 
   const cleanup = () => { try { server.close(); fs.rmSync(SOCK, { force: true }); } catch {} };
   term.onExit(({ exitCode, signal }) => {
+    exited = true;
     cleanup(); try { process.stdin.setRawMode(false); } catch {}
     process.exit(signal ? 128 + signal : exitCode);
   });
