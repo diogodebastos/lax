@@ -49,17 +49,17 @@ check('egg: days off do not count', shouldHatch({ eggXp: 10, eggDays: ['a', 'b']
 
 // Lines.
 const line = (sp) => [0, 1, 2, 3, 4].map((st) => formFor(sp, st).form);
-check('grass line', line({ id: 'grass' }), ['seed', 'seed', 'bud', 'bloom', 'bloom']);
-check('fire line', line({ id: 'fire' }), ['ember', 'ember', 'blaze', 'wings', 'wings']);
-check('water line', line({ id: 'water' }), ['shell0', 'shell0', 'shell1', 'cannons', 'cannons']);
-check('electric line', line({ id: 'electric' }), ['pichu', 'pichu', 'spark', 'bolt', 'bolt']);
-check('fox line, no branch yet', line({ id: 'fox' }), ['kit', 'kit', 'ruff', 'ruff', 'ruff']);
-check('fox to moon at 50', line({ id: 'fox', branch: 'moon' }), ['kit', 'kit', 'ruff', 'rings', 'rings']);
+check('grass line', line({ id: 'grass' }), ['sprig', 'sprig', 'sapling', 'canopy', 'canopy']);
+check('fire line', line({ id: 'fire' }), ['wick', 'wick', 'torch', 'phoenix', 'phoenix']);
+check('water line', line({ id: 'water' }), ['drop', 'drop', 'ripple', 'spout', 'spout']);
+check('electric line', line({ id: 'electric' }), ['plug', 'plug', 'prongs', 'coil', 'coil']);
+check('fox line, no branch yet', line({ id: 'fox' }), ['kit', 'kit', 'brush', 'brush', 'brush']);
+check('fox to moon at 50', line({ id: 'fox', branch: 'moon' }), ['kit', 'kit', 'brush', 'crescent', 'crescent']);
 check('moon colour from 50', [formFor({ id: 'fox', branch: 'moon' }, 2).color, formFor({ id: 'fox', branch: 'moon' }, 3).color], [SPECIES.fox.color, BRANCHES.moon.color]);
-check('pink copies in pink', [formFor({ id: 'pink', copy: 'fire' }, 2).form, formFor({ id: 'pink', copy: 'fire' }, 2).color], ['blaze', SPECIES.pink.color]);
+check('pink copies in pink', [formFor({ id: 'pink', copy: 'fire' }, 2).form, formFor({ id: 'pink', copy: 'fire' }, 2).color], ['torch', SPECIES.pink.color]);
 check('pink with nothing to copy is plain', formFor({ id: 'pink' }, 1).form, null);
-check('the rare one copies until 50, then its true form', line({ id: 'pink', copy: 'water', rare: true }), ['shell0', 'shell0', 'shell1', 'float', 'float']);
-check('the crown clears the bloom', formFor({ id: 'grass' }, 4).lift, 9);
+check('the rare one copies until 50, then its true form', line({ id: 'pink', copy: 'water', rare: true }), ['drop', 'drop', 'ripple', 'float', 'float']);
+check('the crown clears the tree', formFor({ id: 'grass' }, 4).lift, 13);
 check('names: the fox goes by its branch from 50', [nameFor({ id: 'fox', branch: 'coin' }, 2), nameFor({ id: 'fox', branch: 'coin' }, 3)], ['brown fox', 'coin cat']);
 check('names: the rare one is just pink', nameFor({ id: 'pink', rare: true }, 4), 'pink');
 check('a name for the bubble', [aName('fox'), aName('electric'), aName('grass')], ['a brown fox', 'an electric one', 'a grass one']);
@@ -94,10 +94,10 @@ check('the phone draws every form', [...forms].filter((f) => !ui.includes(`f ===
 // What Lax's mind is told it is (selfLine).
 check('an egg knows it is an egg, and what leads', selfLine({ hatched: false, egg: { pct: 62, lead: 'water' } }).split('.')[0],
   'an egg, 62% of the way to hatching; the water speckles lead so far');
-check('a hatched one knows its species, form and level', selfLine({ hatched: true, species: { id: 'fire', name: 'fire' }, look: { form: 'ember' }, level: 7, stage: 'sprout', picked: true }).split('. ')[0],
-  'a fire Lax (ember form), level 7, sprout stage; your species was picked by hand in the Life menu');
-check('the fox by its branch name', selfLine({ hatched: true, species: { id: 'fox', name: 'moon' }, look: { form: 'rings' }, level: 52, stage: 'brick' }).split('. ')[0],
-  'a moon Lax (rings form), level 52, brick stage');
+check('a hatched one knows its species, form and level', selfLine({ hatched: true, species: { id: 'fire', name: 'fire' }, look: { form: 'wick' }, level: 7, stage: 'sprout', picked: true }).split('. ')[0],
+  'a fire Lax (wick form), level 7, sprout stage; your species was picked by hand in the Life menu');
+check('the fox by its branch name', selfLine({ hatched: true, species: { id: 'fox', name: 'moon' }, look: { form: 'crescent' }, level: 52, stage: 'brick' }).split('. ')[0],
+  'a moon Lax (crescent form), level 52, brick stage');
 check('no species: just a colour', selfLine({ hatched: true, species: { id: 'plain', name: 'plain' }, look: {}, level: 3, stage: 'sprout' }).split('. ')[0],
   'a Lax with no species, just a colour, level 3, sprout stage');
 

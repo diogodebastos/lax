@@ -18,81 +18,66 @@
     const blk = (rects, c) => { for (const [x, y, w, h] of rects) px(x - 1, y - 1, w + 2, h + 2, C.out); for (const [x, y, w, h] of rects) px(x, y, w, h, c); };
     // Mirror a rect to the other side of the body.
     const mirror = (x0, w, rects) => rects.map(([x, y, rw, rh]) => [2 * x0 + w - x - rw, y, rw, rh]);
-    // Behind the body: wings and tails.
+    // Each line is a nod, not a copy: a seedling that becomes a tree, a candle that becomes a firebird, a drop that
+    // becomes a whale's spout, a plug that arcs, a fox, and the fox's sun, moon and lucky cat.
+    const LEAF = '#3f9a52', LEAF_HI = '#7fd08a', WATER = '#bfe3ff', FOAM = '#e6f1fb', METAL = '#c9ccd2', CORD = '#4b5158';
+    const flame = (x, y, wd, ht, m, t) => { if (m === 'sleep') { blk([[x + 1, y + ht - 2, wd - 2, 2]], C.red); return; } // embers when asleep
+      const f = Math.round(t / 110) % 2; blk([[x, y + 2 - f, wd, ht - 2 + f], [x + 1, y - f, wd - 2, 2]], C.gold); px(x + 1, y + ht - 2, wd - 2, 2, C.red); };
+    const tail = (x0, B, big, tip) => { const sw = Math.round(Math.sin(t / 300)); // a bushy tail, white at the tip
+      blk([[x0 - 3, B - 6, 3, 3], [x0 - 5 - big, B - 10 - big, 3 + big, 5 + big]], C.body); px(x0 - 5 - big + sw, B - 10 - big, 3 + big, 2, tip); };
+    // Behind the body: wings, tails, rays, a cord.
     function formBack(f, x0, y0, w, h, m, t) {
-      const R = x0 + w, B = y0 + h;
-      // On the way there: the ember tail, the turtle's shell and tail, the young bolt, the kit's tail.
-      if (f === 'ember' || f === 'blaze') { const big = f === 'blaze' ? 1 : 0, f2 = Math.round(t / 110) % 2;
-        blk([[R, B - 3, 3 + big, 2], [R + 2 + big, B - 6 - big, 2, 4 + big]], C.body);
-        if (m !== 'sleep') { blk([[R + 1 + big, B - 9 - big * 2 - f2, 4, 3 + big + f2]], C.gold); px(R + 2 + big, B - 7 - big * 2, 2, 1 + big, C.red); } }
-      if (f === 'shell0' || f === 'shell1') { const sh = [[x0 - 2, y0 + 3, 1, h - 5]]; blk([...sh, ...mirror(x0, w, sh)], '#a7774a');
-        if (f === 'shell0') blk([[R, B - 4, 3, 2], [R + 2, B - 7, 2, 4], [R, B - 8, 3, 2]], C.body);
-        else blk([[R, B - 5, 3, 3], [R + 2, B - 9, 3, 5], [R + 4, B - 11, 3, 4]], '#e6f1fb'); }
-      if (f === 'spark') { blk([[R + 1, B - 7, 2, 4], [R + 1, B - 8, 4, 2], [R + 3, B - 12, 2, 5]], C.body); blk([[R - 1, B - 4, 3, 2]], '#8a5a2b'); }
-      if (f === 'kit') { const sw = Math.round(Math.sin(t / 300)); blk([[x0 - 3, B - 6, 3, 2], [x0 - 5 + sw, B - 9, 3, 4]], C.body); px(x0 - 5 + sw, B - 9, 3, 1, '#f3e6c8'); }
-      if (f === 'wings') { // the fire lizard's last form: teal wings with an orange rim, and its tail flame
-        const fl = Math.sin(t / (m === 'working' ? 90 : 220)) > 0 ? 1 : 0;
-        const wing = [[x0 - 3, y0 + 2, 3, 6], [x0 - 5, y0, 2, 7], [x0 - 7, y0 - 2 + fl, 2, 7], [x0 - 9, y0 - 4 + fl, 2, 7], [x0 - 11, y0 - 6 + fl * 2, 2, 6], [x0 - 12, y0 - 8 + fl * 2, 2, 3]];
-        for (const side of [wing, mirror(x0, w, wing)]) { blk(side, '#2c8a8f'); for (const [x, y, rw] of side) px(x, y, rw, 1, C.body); }
-        blk([[R, B - 3, 5, 2], [R + 4, B - 6, 2, 4]], C.body);
-        if (m !== 'sleep') { const f2 = Math.round(t / 110) % 2; blk([[R + 3, B - 10 - f2, 4, 4 + f2]], C.gold); px(R + 4, B - 8, 2, 2, C.red); }
-      }
-      if (f === 'cannons') { const shell = [[x0 - 2, y0 + 3, 2, h - 5]]; blk([...shell, ...mirror(x0, w, shell)], '#a7774a'); }
-      if (f === 'bolt') { // lightning-bolt tail, brown at the base
-        blk([[R + 2, B - 9, 2, 5], [R + 2, B - 10, 5, 2], [R + 5, B - 16, 2, 7], [R + 5, B - 17, 6, 2]], C.body);
-        blk([[R, B - 5, 3, 2]], '#8a5a2b');
-      }
-      if (f === 'ruff') { const sw = Math.round(Math.sin(t / 300)); blk([[x0 - 4, B - 7, 4, 3], [x0 - 7, B - 11, 5, 5]], C.body); blk([[x0 - 8 + sw, B - 14, 4, 4]], '#f3e6c8'); }
-      if (f === 'gem') { const sw = Math.round(Math.sin(t / 350)); blk([[R, B - 6, 4, 2], [R + 3, B - 9, 2, 4], [R + 1 + sw, B - 13, 2, 4], [R + 5 + sw, B - 14, 2, 5]], C.body); }
-      if (f === 'rings') { blk([[x0 - 4, B - 7, 4, 3], [x0 - 7, B - 11, 5, 5], [x0 - 8, B - 15, 4, 5]], C.body); px(x0 - 7, B - 9, 5, 1, ringGlow(m, t)); }
-      if (f === 'coin') blk([[R, B - 5, 3, 2], [R + 2, B - 10, 2, 6], [R, B - 11, 3, 2]], C.body), px(R, B - 11, 2, 2, '#7a5a3a');
-      if (f === 'float') { const sw = Math.round(Math.sin(t / 260)); blk([[R, B - 2, 3, 1], [R + 3, B - 3, 3, 1], [R + 6, B - 8, 1, 5], [R + 4 + sw, B - 9, 3, 1]], C.body); blk([[R + 3 + sw, B - 12, 3, 3]], C.body); }
+      const R = x0 + w, B = y0 + h, cxm = x0 + Math.floor(w / 2);
+      if (f === 'kit') tail(x0, B, 0, '#f3e6c8');
+      if (f === 'brush' || f === 'rays' || f === 'crescent') tail(x0, B, 1, f === 'crescent' ? '#c9cff0' : '#f3e6c8');
+      if (f === 'rays') { const on = Math.sin(t / 600) > 0 ? 1 : 0; // the sun behind its head
+        blk([[cxm, y0 - 7 - on, 1, 3], [x0 - 2, y0 - 4, 2, 2], [R, y0 - 4, 2, 2], [x0 - 4 - on, y0 + 1, 3, 1], [R + 1 + on, y0 + 1, 3, 1]], C.gold); }
+      if (f === 'phoenix') { const fl = Math.sin(t / (m === 'working' ? 90 : 220)) > 0 ? 1 : 0; // wings of flame
+        const wing = [[x0 - 3, y0 + 3, 3, 4], [x0 - 5, y0 + 1 - fl, 2, 5], [x0 - 7, y0 - 1 - fl, 2, 5], [x0 - 9, y0 - 3 - fl, 2, 4]];
+        for (const side of [wing, mirror(x0, w, wing)]) { blk(side, C.gold); for (const [x, y, rw] of side) px(x, y, rw, 1, C.red); } }
+      if (f === 'ripple' || f === 'spout') { const sw = Math.round(Math.sin(t / 400)); blk([[R, B - 5, 3, 3], [R + 2, B - 8 - sw, 3, 4], [R + 1, B - 10 - sw, 3, 2]], FOAM); } // a wave
+      if (f === 'plug' || f === 'prongs' || f === 'coil') { // the cord, and its plug
+        px(R, B - 4, 3, 1, CORD); px(R + 2, B - 7, 1, 3, CORD); px(R + 2, B - 8, 3, 1, CORD); blk([[R + 5, B - 9, 3, 3]], METAL); px(R + 8, B - 9, 1, 1, METAL); px(R + 8, B - 7, 1, 1, METAL); }
+      if (f === 'float') { const fl = Math.sin(t / 160) > 0 ? 1 : 0; const wing = [[x0 - 3, y0 + 3 - fl, 3, 2], [x0 - 5, y0 + 1 - fl, 3, 2]]; blk([...wing, ...mirror(x0, w, wing)], '#fff4fa'); }
     }
-    // The moon fox's rings: they glow brighter in the dark (asleep).
-    const ringGlow = (m, t) => (m === 'sleep' || Math.sin(t / 500) > 0.6 ? '#fff0a0' : '#f6d23c');
-    // On the body, under the face: ears, flowers, cannons, ruffs.
+    // On the body: ears, what grows on its head, a collar.
     function formFront(f, x0, y0, w, h, m, t) {
       const B = y0 + h, ears = (rects, inner, tip) => { blk([...rects, ...mirror(x0, w, rects)], C.body);
         if (inner) for (const r of [inner, ...mirror(x0, w, [inner])]) px(...r, tip || shade(C.body, -0.35)); };
-      const cxm = x0 + Math.floor(w / 2);
-      if (f === 'seed') { blk([[x0 + 2, y0 - 3, w - 4, 3], [x0 + 3, y0 - 5, w - 6, 2]], '#3f9a52'); px(x0 + 4, y0 - 4, 2, 1, '#7fd08a'); } // a bulb on its back
-      if (f === 'bud') { const leaf = [[x0 - 3, y0 - 2, 6, 2], [x0 - 5, y0 - 1, 2, 1]]; blk([...leaf, ...mirror(x0, w, leaf)], '#2f7a43'); blk([[cxm - 2, y0 - 3, 5, 2]], '#2f7a43');
-        blk([[cxm - 2, y0 - 7, 5, 4], [cxm - 1, y0 - 9, 3, 2]], '#ef7f9f'); px(cxm - 1, y0 - 6, 1, 2, '#fff2f5'); } // the bud before the bloom
-      if (f === 'blaze') blk([[x0 + w - 5, y0 - 2, 2, 2], [x0 + w - 4, y0 - 4, 2, 2]], C.body); // a horn
-      if (f === 'shell1') { const e = [[x0 - 2, y0 + 1, 3, 2], [x0 - 4, y0 - 1, 3, 3], [x0 - 5, y0 - 3, 2, 2]]; blk([...e, ...mirror(x0, w, e)], '#e6f1fb'); } // fluffy ears
-      if (f === 'pichu') ears([[x0 + 1, y0 - 2, 3, 2], [x0, y0 - 5, 4, 3]], [x0, y0 - 5, 4, 1], '#1a1410');
-      if (f === 'spark') ears([[x0 + 2, y0 - 3, 3, 3], [x0 + 1, y0 - 6, 2, 3]], [x0 + 1, y0 - 6, 2, 2], '#4a3020');
+      const cxm = x0 + Math.floor(w / 2), sw = Math.round(Math.sin(t / 500));
+      if (f === 'sprig') { px(cxm, y0 - 3, 1, 3, LEAF); blk([[cxm - 3 + sw, y0 - 5, 3, 2], [cxm + 1 + sw, y0 - 6, 3, 2]], LEAF); px(cxm + 2 + sw, y0 - 6, 1, 1, LEAF_HI); }
+      if (f === 'sapling') { px(cxm, y0 - 7, 1, 7, '#8a5a3c');
+        blk([[cxm - 4 + sw, y0 - 5, 4, 2], [cxm + 1 + sw, y0 - 8, 4, 2], [cxm - 3 + sw, y0 - 10, 3, 2]], LEAF); px(cxm + 2 + sw, y0 - 8, 2, 1, LEAF_HI); }
+      if (f === 'canopy') { blk([[cxm - 1, y0 - 4, 3, 4]], '#8a5a3c'); // a little tree, in bloom
+        blk([[cxm - 6 + sw, y0 - 9, 13, 5], [cxm - 4 + sw, y0 - 11, 9, 2], [cxm - 2 + sw, y0 - 12, 5, 1]], LEAF);
+        px(cxm - 4 + sw, y0 - 10, 4, 1, LEAF_HI); for (const [x, y] of [[-4, -7], [3, -9], [0, -6], [5, -6]]) px(cxm + x + sw, y0 + y, 1, 1, '#ef7f9f'); }
+      if (f === 'wick') flame(cxm - 1, y0 - 5, 3, 5, m, t);
+      if (f === 'torch' || f === 'phoenix') { flame(cxm - 2, y0 - 7, 5, 7, m, t); if (m === 'working' && Math.random() < 0.2) spark(cxm, y0 - 8, C.gold, 0.6, 16); }
+      if (f === 'drop' || f === 'ripple') { blk([[cxm - 1, y0 - 3, 3, 2], [cxm, y0 - 5, 1, 2]], WATER); px(cxm - 1, y0 - 3, 1, 1, '#ffffff'); }
+      if (f === 'spout') { const k = Math.round(Math.sin(t / 250)); // a whale's spout
+        blk([[cxm, y0 - 5, 1, 5], [cxm - 1, y0 - 7, 3, 2], [cxm - 3, y0 - 9 + k, 2, 2], [cxm + 2, y0 - 9 + k, 2, 2], [cxm - 5, y0 - 8 + k, 2, 2], [cxm + 4, y0 - 8 + k, 2, 2]], WATER);
+        px(cxm - 3, y0 - 9 + k, 1, 1, '#ffffff'); px(cxm - 5, y0 - 5 + k, 1, 1, WATER); px(cxm + 5, y0 - 5 + k, 1, 1, WATER);
+        if (m === 'happy' && Math.random() < 0.3) { spark(cxm - 4, y0 - 8, C.glass, 0.6, 24); spark(cxm + 4, y0 - 8, C.glass, 0.6, 24); } }
+      if (f === 'plug' || f === 'prongs' || f === 'coil') { const tall = f === 'plug' ? 2 : f === 'prongs' ? 3 : 4; // prongs on its head
+        blk([[cxm - 3, y0 - tall, 2, tall], [cxm + 2, y0 - tall, 2, tall]], METAL);
+        if (f === 'coil' && m !== 'sleep' && Math.sin(t / 90) > -0.2) { const z = Math.round(t / 80) % 2; // the arc between them
+          px(cxm - 1, y0 - tall - 1 + z, 1, 1, '#fff8c0'); px(cxm, y0 - tall - z, 1, 1, '#ffffff'); px(cxm + 1, y0 - tall - 1 + z, 1, 1, '#fff8c0'); }
+        if (f !== 'plug' && (m === 'happy' || m === 'working') && Math.random() < 0.12) spark(cxm + (Math.random() < .5 ? -2 : 3), y0 - tall, C.gold, 0.7, 14); }
       if (f === 'kit') ears([[x0, y0 - 3, 4, 3], [x0 + 1, y0 - 5, 2, 2]], [x0 + 1, y0 - 4, 1, 3], '#5b3a22');
-      if (f === 'bloom') { // the seed's last form: a big flower on its back
-        const sw = Math.round(Math.sin(t / 500));
-        const leaf = [[x0 - 5, y0 - 3, 8, 3], [x0 - 8, y0 - 2, 3, 2]]; blk([...leaf, ...mirror(x0, w, leaf)], '#2f7a43'); blk([[x0 + w / 2 - 1, y0 - 3, 3, 3]], '#8a5a3c');
-        const cx = x0 + Math.floor(w / 2) + sw; blk([[cx - 6, y0 - 6, 13, 3], [cx - 4, y0 - 8, 9, 2]], '#ef7f9f');
-        for (const [x, y] of [[cx - 4, y0 - 5], [cx + 4, y0 - 5], [cx, y0 - 7]]) px(x, y, 1, 1, '#fff2f5');
-      }
-      if (f === 'cannons') { const can = [[x0 + 1, y0 - 2, 3, 3], [x0 - 1, y0 - 5, 3, 3]]; blk([...can, ...mirror(x0, w, can)], '#a7b0ba');
-        for (const [x, y] of [[x0 - 1, y0 - 5], ...mirror(x0, w, [[x0 - 1, y0 - 5, 3, 1]])]) px(x, y, 3, 1, '#4b5158');
-        px(x0 + 3, B - 4, w - 6, 2, '#f1e2b0');
-        if (m === 'happy' && Math.random() < 0.3) { spark(x0, y0 - 6, C.glass, 0.6, 24); spark(x0 + w, y0 - 6, C.glass, 0.6, 24); } }
-      if (f === 'bolt') ears([[x0 + 2, y0 - 3, 3, 3], [x0 + 1, y0 - 7, 2, 4]], [x0 + 1, y0 - 7, 2, 2], '#4a3020');
-      if (f === 'ruff') { ears([[x0, y0 - 3, 5, 3], [x0 + 1, y0 - 6, 3, 3], [x0 + 1, y0 - 8, 2, 2]], [x0 + 2, y0 - 5, 1, 4], '#5b3a22');
-        blk([[x0 - 2, B - 5, w + 4, 3], [x0 - 1, B - 6, 3, 1], [x0 + w - 2, B - 6, 3, 1]], '#f3e6c8'); }
-      if (f === 'gem') ears([[x0 + 1, y0 - 4, 3, 4], [x0 + 1, y0 - 7, 2, 3]], [x0 + 2, y0 - 4, 1, 3], '#e9b8f0');
-      if (f === 'rings') { ears([[x0 + 1, y0 - 4, 3, 4], [x0 + 1, y0 - 8, 2, 4]], [x0 + 1, y0 - 5, 3, 1], ringGlow(m, t));
-        px(x0, B - 6, 2, 1, ringGlow(m, t)); px(x0 + w - 2, B - 6, 2, 1, ringGlow(m, t)); }
-      if (f === 'coin' || f === 'float') ears([[x0 + 1, y0 - 3, 3, 3], [x0 + 2, y0 - 4, 1, 1]], f === 'coin' ? [x0 + 2, y0 - 2, 1, 2] : null, '#7a5a3a');
+      if (f === 'brush' || f === 'rays' || f === 'crescent') ears([[x0, y0 - 3, 5, 3], [x0 + 1, y0 - 6, 3, 3], [x0 + 1, y0 - 8, 2, 2]], [x0 + 2, y0 - 5, 1, 4], shade(C.body, -0.35));
+      if (f === 'lucky' || f === 'float') ears([[x0 + 1, y0 - 3, 3, 3], [x0 + 2, y0 - 4, 1, 1]], f === 'lucky' ? [x0 + 2, y0 - 2, 1, 2] : null, '#7a5a3a');
+      if (f === 'lucky') { const up = m === 'sleep' ? 0 : Math.round((Math.sin(t / 260) + 1) * 1.5); // the beckoning paw, and its collar and coin
+        blk([[x0 + w + 1, y0 + 3 - up, 3, 4]], C.body); px(x0 + w + 1, y0 + 3 - up, 3, 1, '#ffffff');
+        px(x0, B - 6, w, 1, C.band); blk([[x0 + Math.floor(w / 2) - 1, B - 5, 3, 3]], C.gold); px(x0 + Math.floor(w / 2), B - 4, 1, 1, '#c99a2e'); }
       if (f === 'float' && m !== 'sleep' && Math.random() < 0.04) spark(x0 + Math.random() * w, y0 + Math.random() * h, '#ffd6ea', 0.3, 30);
     }
-    // Over the face: gems, coins, cheeks, whiskers.
+    // Over the face: the moon's crescent, the lucky cat's whiskers.
     function formTop(f, x0, y0, w, h, eyeY, m, t) {
       const cx = x0 + Math.floor(w / 2);
-      if (f === 'pichu' || f === 'spark') { px(x0 + 1, eyeY + 4, 2, 2, C.red); px(x0 + w - 3, eyeY + 4, 2, 2, C.red); }
-      if (f === 'bolt') { px(x0 + 1, eyeY + 4, 2, 2, C.red); px(x0 + w - 3, eyeY + 4, 2, 2, C.red);
-        if ((m === 'happy' || m === 'working') && Math.random() < 0.15) spark(x0 + (Math.random() < .5 ? 1 : w - 2), eyeY + 4, C.gold, 0.7, 14); }
-      if (f === 'gem') { blk([[cx - 1, y0 + 1, 3, 2]], '#e2304a'); px(cx - 1, y0 + 1, 1, 1, '#ffb3c0'); }
-      if (f === 'rings') { const c = ringGlow(m, t); px(cx - 1, y0 + 1, 3, 1, c); px(cx - 2, y0 + 2, 1, 1, c); px(cx + 2, y0 + 2, 1, 1, c); px(cx - 1, y0 + 3, 3, 1, c); }
-      if (f === 'coin') { blk([[cx - 1, y0 - 5, 3, 1], [cx - 2, y0 - 4, 5, 3], [cx - 1, y0 - 1, 3, 1]], C.gold); px(cx, y0 - 4, 1, 3, '#c99a2e');
-        if (Math.round(t / 900) % 4 === 0) px(cx - 1, y0 - 4, 1, 1, '#fff8d0');
-        for (const y of [eyeY + 3, eyeY + 5]) { px(x0 - 4, y, 4, 1, C.dust); px(x0 + w, y, 4, 1, C.dust); } }
+      if (f === 'crescent') { const c = m === 'sleep' || Math.sin(t / 500) > 0.6 ? '#ffffff' : '#c9cff0'; // brighter in the dark
+        px(cx - 1, y0 + 1, 2, 1, c); px(cx - 2, y0 + 2, 1, 2, c); px(cx - 1, y0 + 4, 2, 1, c);
+        if (m === 'sleep' && Math.random() < 0.03) spark(x0 + Math.random() * w, y0 - 4, '#fff6c8', 0.2, 40); }
+      if (f === 'lucky') for (const y of [eyeY + 3, eyeY + 5]) { px(x0 - 4, y, 4, 1, C.dust); px(x0 + w, y, 4, 1, C.dust); }
     }
 
     const [bw, bh] = SIZES[stage] || SIZES.cube;

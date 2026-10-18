@@ -13,7 +13,7 @@ const { palette, css, contrast, portrait, self, ensureSelf, SELF_MD } = await im
 let failed = 0;
 const check = (name, ok, extra = '') => { console.log(`${ok ? '✓' : '✗'} ${name}${extra ? '  ' + extra : ''}`); if (!ok) failed++; };
 const lax = (o = {}) => ({ name: 'Lax', hatched: true, stage: 'blob', level: 23, traits: ['monocle', 'goggles'],
-  look: { form: 'ember', color: '#D97757', lift: 0 }, species: { name: 'fire' }, ...o });
+  look: { form: 'wick', color: '#D97757', lift: 0 }, species: { name: 'fire' }, ...o });
 
 // The palette.
 const fire = palette('#D97757');
@@ -37,7 +37,7 @@ check('in its own colour', svg.includes('fill="#d97757"'));
 const plain = lax({ look: { form: null, color: '#D97757' } }); // no ember tail: its flame is gold too
 check('wearing what it wears (the monocle is gold)', portrait(plain).includes('fill="#ffd25a"'));
 check('not what was switched off', !portrait(plain, { hide: ['monocle'] }).includes('fill="#ffd25a"'));
-check('a water Lax is blue', portrait(lax({ look: { form: 'shell0', color: '#5aa7e6' } })).includes('fill="#5aa7e6"'));
+check('a water Lax is blue', portrait(lax({ look: { form: 'drop', color: '#5aa7e6' } })).includes('fill="#5aa7e6"'));
 const egg = portrait({ hatched: false, look: { color: '#5aa7e6' } });
 check('an egg is an egg, speckled by what leads', egg.includes('fill="#f3e6cf"') && egg.includes('fill="#5aa7e6"'));
 check('the same Lax, the same picture', portrait(lax()) === portrait(lax()));
@@ -52,7 +52,7 @@ check('…and never overwritten', fs.readFileSync(SELF_MD, 'utf8') === '# How I 
 
 // The `self` answer.
 const s = self(lax({ traits: ['monocle', 'goggles', 'cape'] }), { hideTraits: ['cape'] });
-check('who it is today', s.name === 'Lax' && s.species === 'fire' && s.stage === 'blob' && s.level === 23 && s.form === 'ember');
+check('who it is today', s.name === 'Lax' && s.species === 'fire' && s.stage === 'blob' && s.level === 23 && s.form === 'wick');
 check('the companion is Lax until named, the app digi-lax (#23)', self(null).name === 'Lax' && self(null, { name: 'Ember' }).name === 'Ember'
   && (await import('../lib/names.mjs')).APP_NAME === 'digi-lax');
 check('what it wears, without what was switched off', s.wears.join() === 'monocle,goggles');
