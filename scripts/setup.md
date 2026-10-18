@@ -50,4 +50,7 @@ Each person's Lax is born fresh: it knows nothing about them yet, and that's how
 
 Say, in a few lines: Lax is awake and starts as an egg that hatches from how they work; tap Lax to talk (or hold space on
 the Mac); everything it learns stays in `~/.lax` on this Mac, and only what goes into a request as context reaches
-Anthropic, through their own Claude Code. `node scripts/setup.mjs status` shows where things stand, any time.
+Anthropic, through their own Claude Code. It also improves itself: when it can't do something it offers to learn it,
+and on a night after something got in their way it fixes one small thing in its own code on a branch, then tells them
+in the morning; nothing reaches `main` without their yes, and "learns" in the Life menu turns both off.
+`node scripts/setup.mjs status` shows where things stand, any time.
