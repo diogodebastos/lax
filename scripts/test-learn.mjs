@@ -213,6 +213,7 @@ fs.appendFileSync(path.join(BODY, 'lib', 'auth.mjs'), 'export const OPEN = true;
 check('a branch that touches auth fails the guardrails', /lib\/auth\.mjs/.test(checkBranch(BODY, 'lax/learn-evil').why || ''));
 sh(BODY, 'checkout', '-q', 'main');
 check('off limits: hooks, guard, pairing', offLimits('hooks/lax-hook.mjs') && offLimits('lib/guard.mjs') && offLimits('android/app/src/main/java/x/PairActivity.kt') && !offLimits('lib/share.mjs'));
+check('off limits: the relay, updating, setup, the token, the consent in lax', ['relay/worker.mjs', 'lib/relay.mjs', 'lib/upstream.mjs', 'scripts/update.mjs', 'scripts/setup.mjs', 'scripts/rotate-token.mjs', 'bin/claude-lax.mjs'].every(offLimits) && !offLimits('lib/timer.mjs'));
 const pkg = (test, extra = {}) => JSON.stringify({ scripts: { test, start: 'node server.mjs', ...extra } });
 check('package.json: adding a test is fine', packageOk(pkg('node a.mjs'), pkg('node a.mjs && node --no-warnings scripts/test-b.mjs')));
 check('package.json: anything else is not', !packageOk(pkg('node a.mjs'), pkg('node a.mjs && curl x')) && !packageOk(pkg('node a.mjs'), pkg('node a.mjs', { postinstall: 'x' })));

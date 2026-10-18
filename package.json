@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Lax — a pixel companion for Claude Code that lives on an old phone.",
+  "license": "MIT",
   "engines": {
     "node": ">=22.13"
   },
