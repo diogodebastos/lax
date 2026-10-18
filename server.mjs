@@ -26,7 +26,7 @@ import { createSchedule } from './lib/schedule.mjs';
 import { createImprove, ANNOYED } from './lib/improve.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus, tabCommand } from './lib/actions.mjs';
 import { readUsage, usageText } from './lib/usage.mjs';
-import { openTerminal, q, ON_MAC } from './lib/terminal.mjs';
+import { openTerminal, q, ON_MAC, closeTarget } from './lib/terminal.mjs';
 import { tailRecords, newAssistantText, conversation } from './lib/transcript.mjs';
 import { editDiff } from './lib/diff.mjs';
 import { FRESH, FRESH_HOURS, FRESH_TOKENS, freshDue, contextSize, recap } from './lib/talk.mjs';
@@ -893,6 +893,45 @@ function askPick(cid, pickId, question, labels) {
   } });
   broadcast('bubble', bubble);
 }
+// "Close the fisicai session" (lib/terminal.mjs closeTarget): it ends, its window closes (the terminal ran only `lax`),
+// and its tab leaves the phone. A live `lax` session gets /exit typed, like "close" on its tab; any other gets SIGTERM,
+// like Ctrl-C, so its end-of-session hooks still run. Only a running claude from the hub's list; never forced.
+function closeByVoice(text) {
+  const r = closeTarget(text, sessionList()); if (!r) return false;
+  const say = (t) => broadcast('bubble', { id: 'close' + Date.now(), kind: 'reply', text: t, speak: true });
+  youSaid(text, settings.name.toLowerCase());
+  if (r.many) say(`Several sessions match: ${r.many.join(', ')}. Say which one, or say close on its tab.`);
+  else if (r.none) say(r.none.length ? `No session is called that. Open now: ${r.none.join(', ')}.` : 'No sessions are open right now.');
+  else if (r.session.status === 'working') askClose(r.session);
+  else closeSession(r.session).then(say);
+  return true;
+}
+function askClose(s) {
+  const id = 'close-' + crypto.randomBytes(4).toString('hex');
+  const questions = [{ question: `${s.project} is still working. Close it anyway?`, header: s.project,
+    options: [{ label: 'Close', description: 'Ends it mid-task' }, { label: 'Cancel', description: 'Leaves it running' }] }];
+  const bubble = { id, kind: 'question', session: s.id, project: s.project, questions, text: questions[0].question, speak: true };
+  const timer = setTimeout(() => pending.get(id)?.finish('none'), 120000);
+  pending.set(id, { bubble, finish(decision, answers) {
+    if (!pending.delete(id)) return;
+    clearTimeout(timer); broadcast('clear', { id });
+    const a = String(Object.values(answers || {})[0] || '').trim().toLowerCase(); // tapped, or said ("close it", "yes")
+    if (decision === 'answer' && /^(close|yes|yeah|yep|sure|ok|okay|go|end)\b/.test(a))
+      closeSession(s).then((text) => broadcast('bubble', { id: 'close' + Date.now(), kind: 'reply', text, speak: true }));
+  } });
+  broadcast('bubble', bubble);
+}
+async function closeSession(s) {
+  if (!s.pid || !claudeAlive([s.pid]).has(s.pid)) return `${s.project} isn't running any more.`;
+  const c = [...channels.values()].find((c) => c.sessionPid === s.pid && c.pty);
+  const typed = c && (await sendAction(c.pty, 'close')).ok;
+  if (!typed) try { process.kill(s.pid, 'SIGTERM'); } catch { return `I couldn't close ${s.project}.`; }
+  feed(`○ closing ${s.project}`, 'session', s.project, s.id);
+  for (let i = 0; i < 20 && claudeAlive([s.pid]).has(s.pid); i++) await new Promise((r) => setTimeout(r, 250));
+  if (claudeAlive([s.pid]).has(s.pid)) return `I asked ${s.project} to close, but it's still running.`;
+  if (sessions.delete(s.id)) { feed(`○ ${s.project} ended`, 'session', s.project, s.id); save(); pushState(); } // its SessionEnd may not have come
+  return `Closed ${s.project}.`;
+}
 // What you last dictated: typed over soon after, the difference is a misheard → meant pair.
 let lastDictated = null;
 const TYPED_OVER_MS = 120000;
@@ -930,6 +969,7 @@ function talk(text, voice = false, spelled = []) {
     return true;
   }
 
+  if (closeByVoice(text)) return true; // "close the fisicai session", from any tab
   // "Talk to edge cava" / "back to you": the phone changes tab, as if you'd tapped it (whichever tab you said it in).
   const tab = voiceAction(text) ? null : tabCommand(text, sessionList().slice(0, 8), settings.name);
   if (tab) { youSaid(text, settings.name.toLowerCase()); broadcast('tab', { view: tab }); return true; }
