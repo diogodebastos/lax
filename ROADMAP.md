@@ -199,21 +199,7 @@ The personal-agent loop: notice friction → fix its own code → ask → ship s
 
 **Built** (2026-10-12; `lib/improve.mjs`, self-fixes in `lib/learn.mjs`, friction in `server.mjs`, tests in `scripts/test-improve.mjs`): friction is logged (answered at the terminal, unanswered on the phone, failed voice runs, sessions without Lax, "that was annoying"). Each night with friction, one fix is drafted read-only and built through the wish flow on a local branch, with no issue, PR or push. It's told at the first quiet moment from 8:00 ("Last night I noticed… Merge it?"); "no" throws it away for good. It's an internal nightly run, not a job in `jobs.json`. Fixed (2026-10-17): the 2026-10-15 run started in a dark wake, the Mac slept an hour mid-run and woke offline, and the night was spent with its friction lost; now a night counts only once its run answers (up to 3 tries, half an hour apart, before the morning), it waits while offline, and the Mac stays awake while it runs. Live, in [diogodebastos/lax#31](https://github.com/diogodebastos/lax/issues/31): a real night's fix, told and merged. Later: what it changed shown in the Life menu; the opt-in upstream PRs.
 
-## Next
-
-### Phase 11: Cloudflare-native relay [diogodebastos/lax#10](https://github.com/diogodebastos/lax/issues/10)
-Comes before Phase 9 (number kept for the links): it's how a new Lax reaches its person's phone, with only a free Cloudflare account, no domain.
-The Mac stays the brain; Cloudflare becomes the always-on link and Lax's public face.
-- A Worker + Durable Object relay: the phone and the Mac both connect over hibernatable WebSockets; messages queue while either side is offline.
-- With the Mac asleep, the phone shows "Mac asleep" and the last state; on wake, pending approvals arrive in order, exactly once.
-- Passes messages through with a short queue only (optional end-to-end encryption); memory, history and code never live on Cloudflare.
-- Serves the landing page and opt-in public share cards; optional Workers AI for small talk while the Mac sleeps.
-- Stays within the free tier for one user; the tunnel remains as a direct path.
-- Deployable by `setup` to anyone's own free Cloudflare account, on `workers.dev`: no domain needed. Pairing by QR as today.
-
-**Built so far** (2026-10-18; `relay/worker.mjs`, `lib/relay.mjs`, tests in `scripts/test-relay.mjs`): the relay as a pipe. The Mac holds one WebSocket to a Durable Object with its relay key; every request the phone makes is replayed against Lax on `127.0.0.1` and streamed back, so the page, the app, voice uploads and the token work unchanged. "Mac asleep" (503) without the Mac's link or a minute without its ping; 20 wrong tokens from one address in 10 minutes and it's refused; nothing relayed counts as "this Mac". Deployed to Diogo's account next to the tunnel and proven through real Cloudflare (the page, the live stream, the refusals). Next: the queue, acks and presence of a real protocol, falling back to the tunnel, end-to-end encryption, the public face. Live, in [diogodebastos/lax#31](https://github.com/diogodebastos/lax/issues/31): the lid closed, away from home, the free tier over a day.
-
-### Phase 9: open source, everyone their own Lax [diogodebastos/lax#4](https://github.com/diogodebastos/lax/issues/4)
+### Phase 9: open source, everyone their own Lax ✅ [diogodebastos/lax#4](https://github.com/diogodebastos/lax/issues/4)
 Not "Diogo's Lax, published": anyone can have their own. The first version is Diogo's way of Lax as the default (Mac, the Android app, Whisper, Cloudflare); other ways are for each Lax to grow.
 - **What you need:** a Mac and Claude Code to try it; a free Cloudflare account for your phone. Nothing else to install by hand.
 - **Three steps, one at a time.** Setup starts everyone on the first and offers the next whenever they want:
@@ -234,7 +220,21 @@ Not "Diogo's Lax, published": anyone can have their own. The first version is Di
 - **Easter eggs:** the forms stay as they are, inspired by familiar faces rather than copies of them (decided 2026-10-18). A redraw with only nods waits on the `forms-as-nods` branch, in case it's ever needed.
 - Test: a fresh macOS account gets its own working Lax from the README alone, on the Mac, then on a phone over the relay; then a friend does it without Diogo in the room.
 
-**Built so far** (2026-10-18; [diogodebastos/lax#4](https://github.com/diogodebastos/lax/issues/4)): nothing of Diogo's in the defaults (neutral `digi-lax.*` services, the public demo opt-in, `cf-setup` asking for host and email); `npm run setup` (a Claude Code conversation over `scripts/setup.mjs` steps: hooks, channel, service, relay, whisper, android, domain, pair); `npm run update`, `npm run doctor`, `npm run rotate-token`; GitHub only for a Lax's own repo; the channel warning answered only after you have, once; the Android tools and `cloudflared` without Homebrew, every download checked; your own domain from a pre-filled token link; MIT, SECURITY, CONTRIBUTING, a README for newcomers; history audited and rewritten to take out real people's details. Left: a usage budget, the hook timeouts, this roadmap as the project's, GitHub Support for the old commits, then the release. Live, in [diogodebastos/lax#31](https://github.com/diogodebastos/lax/issues/31): a fresh macOS account and a friend.
+**Built so far** (2026-10-18; [diogodebastos/lax#4](https://github.com/diogodebastos/lax/issues/4)): nothing of Diogo's in the defaults (neutral `digi-lax.*` services, the public demo opt-in, `cf-setup` asking for host and email); `npm run setup` (a Claude Code conversation over `scripts/setup.mjs` steps: hooks, channel, service, relay, whisper, android, domain, pair); `npm run update`, `npm run doctor`, `npm run rotate-token`; GitHub only for a Lax's own repo; the channel warning answered only after you have, once; the Android tools and `cloudflared` without Homebrew, every download checked; your own domain from a pre-filled token link; MIT, SECURITY, CONTRIBUTING, a README for newcomers; history audited and rewritten to take out real people's details. Then (same day): a usage budget for what Lax spends of your plan by itself (`lib/budget.mjs`), hook timeouts that hold (`hooks/timeouts.mjs`), and this roadmap as the project's. Live, in [diogodebastos/lax#31](https://github.com/diogodebastos/lax/issues/31): a fresh macOS account, a friend, and release day (public, vulnerability reporting, the tag). Dropped: asking GitHub Support to remove the commits from before the history rewrite.
+
+## Next
+
+### Phase 11: Cloudflare-native relay [diogodebastos/lax#10](https://github.com/diogodebastos/lax/issues/10)
+Comes before Phase 9 (number kept for the links): it's how a new Lax reaches its person's phone, with only a free Cloudflare account, no domain.
+The Mac stays the brain; Cloudflare becomes the always-on link and Lax's public face.
+- A Worker + Durable Object relay: the phone and the Mac both connect over hibernatable WebSockets; messages queue while either side is offline.
+- With the Mac asleep, the phone shows "Mac asleep" and the last state; on wake, pending approvals arrive in order, exactly once.
+- Passes messages through with a short queue only (optional end-to-end encryption); memory, history and code never live on Cloudflare.
+- Serves the landing page and opt-in public share cards; optional Workers AI for small talk while the Mac sleeps.
+- Stays within the free tier for one user; the tunnel remains as a direct path.
+- Deployable by `setup` to anyone's own free Cloudflare account, on `workers.dev`: no domain needed. Pairing by QR as today.
+
+**Built so far** (2026-10-18; `relay/worker.mjs`, `lib/relay.mjs`, tests in `scripts/test-relay.mjs`): the relay as a pipe. The Mac holds one WebSocket to a Durable Object with its relay key; every request the phone makes is replayed against Lax on `127.0.0.1` and streamed back, so the page, the app, voice uploads and the token work unchanged. "Mac asleep" (503) without the Mac's link or a minute without its ping; 20 wrong tokens from one address in 10 minutes and it's refused; nothing relayed counts as "this Mac". Deployed to Diogo's account next to the tunnel and proven through real Cloudflare (the page, the live stream, the refusals). Next: the queue, acks and presence of a real protocol, falling back to the tunnel, end-to-end encryption, the public face. Live, in [diogodebastos/lax#31](https://github.com/diogodebastos/lax/issues/31): the lid closed, away from home, the free tier over a day.
 
 ### Phase 10: viral release [diogodebastos/lax#9](https://github.com/diogodebastos/lax/issues/9)
 The best possible Lax, built to be shared. Phase 9 makes the repo presentable; this makes it spread.
