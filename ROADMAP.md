@@ -194,21 +194,40 @@ The personal-agent loop: notice friction → fix its own code → ask → ship s
 
 **Built** (2026-10-12; `lib/improve.mjs`, self-fixes in `lib/learn.mjs`, friction in `server.mjs`, tests in `scripts/test-improve.mjs`): friction is logged (answered at the terminal, unanswered on the phone, failed voice runs, sessions without Lax, "that was annoying"). Each night with friction, one fix is drafted read-only and built through the wish flow on a local branch, with no issue, PR or push. It's told at the first quiet moment from 8:00 ("Last night I noticed… Merge it?"); "no" throws it away for good. It's an internal nightly run, not a job in `jobs.json`. Fixed (2026-10-17): the 2026-10-15 run started in a dark wake, the Mac slept an hour mid-run and woke offline, and the night was spent with its friction lost; now a night counts only once its run answers (up to 3 tries, half an hour apart, before the morning), it waits while offline, and the Mac stays awake while it runs. To prove: a real night's fix, told and merged. Later: what it changed shown in the Life menu; the opt-in upstream PRs.
 
+### Phase 11: Cloudflare-native relay [diogodebastos/lax#10](https://github.com/diogodebastos/lax/issues/10)
+Comes before Phase 9 (number kept for the links): it's the middle way of reaching Lax, anywhere with only a free Cloudflare account, no domain.
+The Mac stays the brain; Cloudflare becomes the always-on link and Lax's public face.
+- A Worker + Durable Object relay: the phone and the Mac both connect over hibernatable WebSockets; messages queue while either side is offline.
+- With the Mac asleep, the phone shows "Mac asleep" and the last state; on wake, pending approvals arrive in order, exactly once.
+- Passes messages through with a short queue only (optional end-to-end encryption); memory, history and code never live on Cloudflare.
+- Serves the landing page and opt-in public share cards; optional Workers AI for small talk while the Mac sleeps.
+- Stays within the free tier for one user; the tunnel remains as a direct path.
+- Deployable by `setup` to anyone's own free Cloudflare account, on `workers.dev`: no domain needed. Pairing by QR as today.
+
 ### Phase 9: open source, everyone their own Lax [diogodebastos/lax#4](https://github.com/diogodebastos/lax/issues/4)
-Once Lax passes the one-week bar. Not "Diogo's Lax, published": anyone can have their own.
-- **Born fresh for each person:** their Lax lives in their `~/.lax`, learns them, and grows its own body on their clone. Nothing of Diogo's mind, memory or secrets ships.
-- **One command:** `npx lax setup` creates `~/.lax`, names your Lax, installs hooks, `lax`, `/lax` and the background services, sets up reaching it from anywhere (Cloudflare on your own domain, or simpler options), and shows the pairing QR.
-- **No Android SDK needed:** a signed APK on GitHub Releases; any Android 11+ (the Flip 3 cover screen is a bonus).
-- **Nothing personal in the code:** no domain, email or `~/REPOS` defaults, and neutral service names.
-- A README for newcomers with the honest privacy note; license, CONTRIBUTING, SECURITY; `npm run doctor`; token rotation; leftover LAN bits removed.
+Not "Diogo's Lax, published": anyone can have their own. The first version is Diogo's way of Lax as the default (Mac, the Android app, Whisper, Cloudflare when you want it); other ways are for each Lax to grow.
+- **What you need:** a Mac and Claude Code. Nothing else to install by hand.
+- **Three ways to reach it, one step at a time.** Setup starts everyone on the first and offers the next whenever they want:
+  - **At home (LAN):** nothing else needed. The server listens on the network with the token as its gate, the app allows plain HTTP to private addresses only, and you talk through the app (Chrome only gives the microphone to HTTPS pages, so the browser gets the feed and approvals).
+  - **Anywhere (relay, Phase 11):** a free Cloudflare account. HTTPS, voice in the browser too, and "Mac asleep" instead of an error.
+  - **Your own domain (tunnel + Access):** a domain on Cloudflare. Diogo's setup today, kept as the direct path next to the relay.
+- **The clone is the Lax:** `git clone` then `npm run setup`. The folder you clone into is your Lax's body, where it changes its own code on branches (Phases 5 and 8). No npm package.
+- **`lax update`:** fetches upstream and replays your Lax's own changes on top, on a branch. A conflict is solved like a wish: Lax works it out and asks on the phone. Upstream becomes one more of its loops.
+- **Lax sets itself up, like it did for Diogo:** setup is a Claude Code conversation in the new clone, backed by idempotent scripts. It checks Node and Claude Code, creates `~/.lax` (a fresh mind and `life.db`; your Lax is born today), installs hooks, `lax`, `/lax` and the background services, installs Whisper into `~/.lax-tools`, and shows the pairing QR. Moving up a way of reaching it is the same conversation later: it logs into Cloudflare in the browser (no hand-made API token) and deploys the relay, or installs `cloudflared` and sets up the tunnel and Access on your domain. It only asks the mechanical things; the personal ones Lax asks in its first conversation.
+- **The phone is part of the body, not a release:** no APK on GitHub. The browser works with no build at all; the Android app is built from your clone (setup fetches the JDK and Android tools into `~/.lax-tools`, no Homebrew), so you can change it, and an iOS app is a body someone's Lax can grow.
+- **Born fresh for each person:** nothing of Diogo's mind, memory or secrets ships. Diogo's own deployment (the public demo, its pre-push deploy, the public mind, his domain and site links) becomes opt-in config, off by default.
+- **Nothing personal in the code:** no domain, email or `~/REPOS` defaults (setup asks for the projects folder), neutral launchd labels (`move-home` migrates the old ones). The Android `applicationId` stays the publisher's.
+- **Honest about what's dangerous:** setup explains the development-channel warning and asks once instead of the wrapper accepting it silently; Lax keeps working on hooks alone if channels change. The nightly self-fix and the guardrails get their own tests and a SECURITY section. Background runs (reflections, jobs, nightly) have a usage budget with conservative defaults, since they spend the person's Claude plan.
+- A README for newcomers with the honest privacy note; MIT license, CONTRIBUTING, SECURITY; `npm run doctor`; token rotation; macOS only, said plainly.
+- **History kept, checked:** the commits are the proof of "it rewrote itself", so they stay; audited for anything private first, noreply email from now on.
 - **Easter eggs as hints:** the level 50 colour forms (and the other nods to familiar faces) become subtle references, not recognisable copies.
-- Test: a fresh macOS account gets its own working Lax from the README alone.
+- Test: a fresh macOS account gets its own working Lax from the README alone, at home, then over the relay; then a friend does it without Diogo in the room.
 
 ### Phase 10: viral release [diogodebastos/lax#9](https://github.com/diogodebastos/lax/issues/9)
 The best possible Lax, built to be shared. Phase 9 makes the repo presentable; this makes it spread.
 - Filmable moments: Lax waking on the closed phone and fixing failing tests by voice; the morning it changed itself; an evolution timelapse; "how did we fix that?"
 - A share card (stage, level, traits, skills learned, problems solved) and a timelapse export.
-- `npx lax`: zero to talking in under 5 minutes, on any Android phone or browser, with the Flip 3 as the hero.
+- `git clone` + `npm run setup`: zero to talking in under 5 minutes, on any Android phone or browser, with the Flip 3 as the hero.
 - Hand-drawn sprites and chiptune sound, promoted from *Later*.
 - Write-ups: how Lax uses every Claude Code extension point; Lax on Cloudflare; an agent that rewrites itself for one person. Then Show HN, r/ClaudeAI and the clips.
 - **The LinkedIn post:** the launch's main moment, so it has to be a good one. For Diogo's network: Cloudflare people, the Claude Code crowd, tech people deep into AI.
@@ -217,14 +236,6 @@ The best possible Lax, built to be shared. Phase 9 makes the repo presentable; t
   - **The points**, in whatever order works best: inspired by Hermes, OpenClaw and Perplexity, but it evolves; it notices in conversation what it can't do yet, then builds it; overnight it fixes its own friction with nobody watching (a light RSI) and asks in the morning; it learns how to learn: how it learns, remembers, wishes and sees itself are plain files in its mind (`learning.md`, `remembering.md`, `wishing.md`, `self.md`) that it rewrites itself, and its weekly review reads its own record (declined wishes, corrected notes, reverted merges) and changes them (the first real one: "ask me in a week" became its deferral rule); the mind is local, it runs on the Claude subscription with no API costs, reached through a Cloudflare tunnel; it's an agent personal enough that it becomes someone else's for someone else.
   - **The proof of "personal":** someone asks for a 3D Lax instead of a 2D one, and Lax makes the model and changes the app to match, inspired by Jolly, Meta's mascot for its Muse assistant. Built on its own branch, never `main`, when Diogo says so: [diogodebastos/lax#28](https://github.com/diogodebastos/lax/issues/28).
 - **A blog post written by and as Lax**, in its own voice, on the same points as the post, with room for the how. Lives on the Lax site and on diogodebastos.com/blog.
-
-### Phase 11: Cloudflare-native relay [diogodebastos/lax#10](https://github.com/diogodebastos/lax/issues/10)
-The Mac stays the brain; Cloudflare becomes the always-on link and Lax's public face.
-- A Worker + Durable Object relay: the phone and the Mac both connect over hibernatable WebSockets; messages queue while either side is offline.
-- With the Mac asleep, the phone shows "Mac asleep" and the last state; on wake, pending approvals arrive in order, exactly once.
-- Passes messages through with a short queue only (optional end-to-end encryption); memory, history and code never live on Cloudflare.
-- Serves the landing page and opt-in public share cards; optional Workers AI for small talk while the Mac sleeps.
-- Stays within the free tier for one user; the tunnel remains as a direct path.
 
 ## Later (ideas, not yet scheduled)
 
