@@ -37,12 +37,12 @@
   .note button { pointer-events:auto; font:inherit; background:none; border:0; padding:0; cursor:pointer; text-shadow:inherit; }
   /* What each part is: a short key, opened from the footer. */
   dialog { background:var(--bg); color:var(--fg); border:2px solid var(--coral); box-shadow:4px 4px 0 #000; padding:16px 18px; max-width:min(440px, calc(100vw - 32px));
-    font-family:'VT323',ui-monospace,monospace; font-size:19px; line-height:1.15; }
+    font-family:'VT323',ui-monospace,monospace; font-size:min(19px, 4.2vw); line-height:1.15; }
   dialog { margin:auto; } dialog:focus { outline:none; }
   dialog::backdrop { background:rgba(0,0,0,.6); }
   dialog h2 { color:var(--coral); font-weight:400; font-size:26px; margin-bottom:8px; }
   dialog dl { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; }
-  dialog dt { color:var(--fg); } dialog dd { color:var(--dim); }
+  dialog dt { color:var(--fg); } dialog dd { color:var(--dim); white-space:nowrap; } /* one line a row */
   dialog p { color:var(--dim); margin-top:10px; }
   .switches { display:flex; gap:18px; flex-wrap:wrap; margin-top:10px; color:var(--fg); }
   .switches label { display:flex; gap:6px; align-items:center; cursor:pointer; } .switches span { color:var(--dim); }
@@ -61,21 +61,21 @@
 <dialog id="key">
   <h2>What you're looking at</h2>
   <dl>
-    <dt>Lax</dt><dd>sits in the middle while it works</dd>
-    <dt>hearing</dt><dd>times you talked to it</dd>
-    <dt>speech</dt><dd>times it answered out loud</dd>
-    <dt>you</dt><dd>things it knows about you</dd>
-    <dt>long-term memory</dt><dd>moments it kept from past work</dd>
-    <dt>archive</dt><dd>full records of past sessions</dd>
-    <dt>dreams</dt><dd>times it went over a session on its own</dd>
-    <dt>learning</dt><dd>times its mind changed</dd>
-    <dt>skills</dt><dd>ways of working it wrote down (+ drafts)</dd>
-    <dt>wishes</dt><dd>things it can't do yet and wants to learn</dd>
-    <dt>projects</dt><dd>projects it knows; here each satellite is one</dd>
-    <dt>roles</dt><dd>kinds of work it does for you</dd>
-    <dt>sessions</dt><dd>Claude Code sessions open now</dd>
+    <dt class="lax">Lax</dt><dd>in the middle, at work</dd>
+    <dt style="color:#7fd3ff">hearing</dt><dd>times you talked to it</dd>
+    <dt style="color:#ffd25a">speech</dt><dd>times it spoke aloud</dd>
+    <dt class="lax">you</dt><dd>what it knows of you</dd>
+    <dt style="color:#c9a86a">lt-memory</dt><dd>moments it kept</dd>
+    <dt style="color:#a39c90">archive</dt><dd>full session records</dd>
+    <dt style="color:#8f99f0">dreams</dt><dd>sessions it went over</dd>
+    <dt style="color:#6fd36f">learning</dt><dd>times its mind changed</dd>
+    <dt style="color:#b58ad9">skills</dt><dd>how-tos it wrote down</dd>
+    <dt style="color:#ff8fb1">wishes</dt><dd>what it wants to learn</dd>
+    <dt style="color:#6fd36f">projects</dt><dd>a satellite per project</dd>
+    <dt class="role">roles</dt><dd>kinds of work it does</dd>
+    <dt style="color:#e8e2d6">sessions</dt><dd>Claude Code open now</dd>
   </dl>
-  <p>Size and number: all time. Satellites: this week. Lines connect the parts; a flash is something moving. Only counts: never what's inside.</p>
+  <p>Size: all time. Satellites: this week.</p>
   <div class="switches">
     <label><input type="checkbox" id="lookLabels" checked> labels</label>
     <label><input type="checkbox" id="lookOrbits"> orbits <span>(a solar system)</span></label>
@@ -87,9 +87,12 @@
 <script src="net.js"></script>
 <script>Mind.start();
   const key = document.getElementById('key');
-  document.getElementById('keyOpen').addEventListener('click', () => key.showModal());
+  // Each name in the colour of its orb; Lax, you and the roles in Lax's own colour, as on the page.
+  function paint() { const c = Mind.snap?.look?.color || '#d97757';
+    key.querySelectorAll('dt.lax').forEach((d) => { d.style.color = c; }); key.querySelectorAll('dt.role').forEach((d) => { d.style.color = Mind.shade(c, 0.35); }); }
+  document.getElementById('keyOpen').addEventListener('click', () => { paint(); key.showModal(); });
   key.addEventListener('click', (e) => { if (e.target === key) key.close(); });
-  if (location.hash === '#key') key.showModal(); // a link straight to the key
+  if (location.hash === '#key') { paint(); key.showModal(); } // a link straight to the key
   // The two switches: labels, and the solar system. Kept in this browser; net.js listens.
   const look = { labels: true, orbits: false };
   try { Object.assign(look, JSON.parse(localStorage.getItem('lax-mind-look') || '{}')); } catch {}

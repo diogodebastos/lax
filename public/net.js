@@ -41,7 +41,7 @@
     hearing: { at: AT.hearing, color: '#7fd3ff', label: 'hearing' },
     speech: { at: AT.speech, color: '#ffd25a', label: 'speech' },
     you: { at: AT.you, label: 'you' },
-    memory: { at: AT.memory, color: '#c9a86a', label: 'long-term memory' },
+    memory: { at: AT.memory, color: '#c9a86a', label: 'lt-memory' },
     dreams: { at: AT.dreams, color: '#7b86e0', label: 'dreams' }, // going over a session on its own, into memories
     archive: { at: AT.archive, color: '#8a8378', label: 'archive' }, // the full records, deeper down
     learning: { at: AT.learning, color: '#6fd36f', label: 'learning' },
