@@ -23,7 +23,7 @@ assert.equal(scrub('-----BEGIN RSA PRIVATE KEY-----\nMIIEow\nIBAAK\n-----END RSA
 assert.equal(scrub('-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNz'), MARK); // cut short
 // What's around the secret stays.
 assert.equal(scrub('Authorization: Bearer abc123def456ghi789jkl'), `Authorization: Bearer ${MARK}`);
-assert.equal(scrub('git clone https://diogo:hunter2pass@github.com/x.git'), `git clone https://${MARK}@github.com/x.git`);
+assert.equal(scrub('git clone https://alex:hunter2pass@github.com/x.git'), `git clone https://${MARK}@github.com/x.git`);
 assert.equal(scrub('export CF_API_TOKEN=Zx9k2Lm4Np6Qr8St0Uv1Wx3Yz'), `export CF_API_TOKEN=${MARK}`);
 assert.equal(scrub('{"client_secret": "a8f3k29dk2l3m4n5b6v7"}'), `{"client_secret": "${MARK}"}`);
 assert.equal(scrub('SecretBase_Text_Entrance:\n\tgText_Label123456789'), 'SecretBase_Text_Entrance:\n\tgText_Label123456789'); // a label, not a value

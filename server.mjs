@@ -39,7 +39,7 @@ import { createPublicMind, placesOf, lastCommitFiles, filesIn } from './lib/publ
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const PORT = Number(process.env.LAX_PORT || 7777);
 const STARTED = Date.now(); // for /api/health: a restart is over when a newer server answers
-const DEFAULT_WORKDIR = process.env.LAX_WORKDIR || path.join(os.homedir(), 'REPOS');
+const DEFAULT_WORKDIR = process.env.LAX_WORKDIR || path.dirname(ROOT); // your projects: by default the folder Lax was cloned into
 
 // ---------- memory ----------
 // lax.db became life.db (what Lax has lived); settings moved out to settings.json. Once, before opening it.
@@ -141,7 +141,7 @@ function journal(from, to = Infinity) {
     .filter((e) => e.project !== 'mind' && e.project !== '.lax' && !(e.repo || '').startsWith(HOME))
     .map((e) => ({ ...e, repo: e.repo || oldRepo(e.project) }));
 }
-// Rows from before the repo column: a folder of that name in ~/REPOS that is a git repo (a worktree "x-wt-…" is x).
+// Rows from before the repo column: a folder of that name in your projects folder that is a git repo (a worktree "x-wt-…" is x).
 function oldRepo(project) {
   if (!legacyRepo.has(project)) { const d = path.join(DEFAULT_WORKDIR, String(project).replace(/-wt-.*$/, '')); legacyRepo.set(project, fs.existsSync(path.join(d, '.git')) ? d : null); }
   return legacyRepo.get(project);

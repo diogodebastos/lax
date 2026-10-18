@@ -1,4 +1,5 @@
-// The public demo on Cloudflare (lax.diogodebastos.com/demo, see demo/wrangler.jsonc).
+// A public demo on Cloudflare (demo/wrangler.jsonc), for a Lax that wants one: served at LAX_DEMO_ROUTE (~/.lax/secrets/env.json,
+// e.g. "lax.example.com/demo*"). Without it, --deploy does nothing.
 //   node scripts/demo.mjs [ref]            build demo/dist (pages) and demo/build (the Worker) from that commit (default HEAD)
 //   node scripts/demo.mjs [ref] --deploy   …and deploy it (the pre-push hook does this for main)
 // Built from git, not the working folder, so what's public is exactly what was pushed. Same paths as server.mjs's
@@ -6,6 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { readEnv } from '../lib/paths.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const args = process.argv.slice(2), deploy = args.includes('--deploy'), ref = args.find((a) => !a.startsWith('--')) || 'HEAD';
@@ -27,4 +29,6 @@ fs.writeFileSync(path.join(build, 'worker.mjs'), git('demo/worker.mjs').replace(
 fs.writeFileSync(path.join(build, 'mind-shape.mjs'), git('lib/mind-shape.mjs'));
 console.log(`demo built from ${ref}`);
 
-if (deploy) execFileSync('npx', ['-y', 'wrangler@4', 'deploy', '--config', path.join(ROOT, 'demo', 'wrangler.jsonc')], { cwd: ROOT, stdio: 'inherit' });
+const route = process.env.LAX_DEMO_ROUTE || readEnv().LAX_DEMO_ROUTE;
+if (deploy && !route) console.log('no public demo (LAX_DEMO_ROUTE not set): nothing deployed');
+else if (deploy) execFileSync('npx', ['-y', 'wrangler@4', 'deploy', '--config', path.join(ROOT, 'demo', 'wrangler.jsonc'), '--route', route], { cwd: ROOT, stdio: 'inherit' });

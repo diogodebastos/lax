@@ -9,7 +9,7 @@ import { LOGS, readToken } from '../lib/paths.mjs';
 
 const [BODY, PREV, WISH] = process.argv.slice(2);
 const LAX = process.env.LAX_URL || `http://127.0.0.1:${process.env.LAX_PORT || 7777}`;
-const RESTART = process.env.LAX_RESTART || `launchctl kickstart -k gui/${process.getuid()}/com.diogodebastos.lax`;
+const RESTART = process.env.LAX_RESTART || `launchctl kickstart -k gui/${process.getuid()}/digi-lax.server`;
 const WAIT = Number(process.env.LAX_HEALTH_WAIT || 30) * 1000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (t) => { try { fs.appendFileSync(path.join(LOGS, 'merge.log'), `[${new Date().toISOString()}] ${WISH}: ${t}\n`); } catch {} };

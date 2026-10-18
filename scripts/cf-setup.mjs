@@ -1,16 +1,21 @@
 // One-shot, idempotent Cloudflare setup for Lax: Access (login in front) → tunnel → DNS.
 // Needs ~/.lax/secrets/cf-setup-token: a short-lived API token with Access (apps/policies, service tokens,
 // orgs/IdPs), Cloudflare Tunnel, and Zone DNS edit. Secrets are written to ~/.lax/secrets (0600), never printed.
+//   LAX_HOSTNAME=lax.example.com LAX_OWNER_EMAIL=you@example.com node scripts/cf-setup.mjs
+// Run again, the host comes from LAX_PUBLIC_URL and the email from LAX_OWNER_EMAIL, both kept in ~/.lax/secrets/env.json.
 import fs from 'node:fs';
 import path from 'node:path';
-import { SECRETS, ensureDirs } from '../lib/paths.mjs';
+import { SECRETS, ensureDirs, readEnv } from '../lib/paths.mjs';
 ensureDirs();
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const DATA = SECRETS;
-const HOST = process.env.LAX_HOSTNAME || 'lax.diogodebastos.com';
+const saved = readEnv();
+const HOST = process.env.LAX_HOSTNAME || (saved.LAX_PUBLIC_URL ? new URL(saved.LAX_PUBLIC_URL).hostname : '');
+const EMAIL = process.env.LAX_OWNER_EMAIL || saved.LAX_OWNER_EMAIL || '';
+if (!HOST || !EMAIL) { console.error('Usage: LAX_HOSTNAME=lax.example.com LAX_OWNER_EMAIL=you@example.com node scripts/cf-setup.mjs'); process.exit(1); }
 const ZONE = HOST.split('.').slice(-2).join('.');
-const EMAIL = process.env.LAX_OWNER_EMAIL || 'diogodebastos18@gmail.com';
+const DEMO = process.env.LAX_DEMO_ROUTE || saved.LAX_DEMO_ROUTE; // only for a Lax with a public demo (scripts/demo.mjs)
 const TOKEN = fs.readFileSync(path.join(DATA, 'cf-setup-token'), 'utf8').trim();
 
 async function cf(method, p, body) {
@@ -49,6 +54,7 @@ if (!st) {
 }
 env.CF_ACCESS_SERVICE_TOKEN_ID = st.id;
 env.LAX_PUBLIC_URL = `https://${HOST}`;
+env.LAX_OWNER_EMAIL = EMAIL;
 writeSecret('env.json', JSON.stringify(env, null, 2) + '\n');
 step('service token lax-android → ~/.lax/secrets/env.json');
 
@@ -69,13 +75,15 @@ const app = (await cf('GET', `/accounts/${A.id}/access/apps`)).find((a) => a.dom
 await (app ? cf('PUT', `/accounts/${A.id}/access/apps/${app.id}`, appBody) : cf('POST', `/accounts/${A.id}/access/apps`, appBody));
 step(`access app on ${HOST}: ${EMAIL} (email PIN) + service token`);
 
-// 3b. The public demo (/demo and what it loads: static pages in demo mode, see server.mjs) is open to everyone. Everything else stays
-// behind the app above: Access picks the most specific path, and the API still needs Lax's token.
-const pub = await policy('lax: public demos', 'bypass', [{ everyone: {} }]);
-const demoBody = { name: 'Lax demos', domain: `${HOST}/demo`, type: 'self_hosted', app_launcher_visible: false, policies: [{ id: pub.id, precedence: 1 }] };
-const demoApp = (await cf('GET', `/accounts/${A.id}/access/apps`)).find((a) => a.name === demoBody.name);
-await (demoApp ? cf('PUT', `/accounts/${A.id}/access/apps/${demoApp.id}`, demoBody) : cf('POST', `/accounts/${A.id}/access/apps`, demoBody));
-step(`public: https://${HOST}/demo`);
+// 3b. A public demo, if this Lax has one (/demo and what it loads: static pages in demo mode, see server.mjs), is open to everyone.
+// Everything else stays behind the app above: Access picks the most specific path, and the API still needs Lax's token.
+if (DEMO) {
+  const pub = await policy('lax: public demos', 'bypass', [{ everyone: {} }]);
+  const demoBody = { name: 'Lax demos', domain: `${HOST}/demo`, type: 'self_hosted', app_launcher_visible: false, policies: [{ id: pub.id, precedence: 1 }] };
+  const demoApp = (await cf('GET', `/accounts/${A.id}/access/apps`)).find((a) => a.name === demoBody.name);
+  await (demoApp ? cf('PUT', `/accounts/${A.id}/access/apps/${demoApp.id}`, demoBody) : cf('POST', `/accounts/${A.id}/access/apps`, demoBody));
+  step(`public: https://${HOST}/demo`);
+}
 
 // 4. Remotely-managed tunnel → 127.0.0.1:7777
 let tunnel = (await cf('GET', `/accounts/${A.id}/cfd_tunnel?is_deleted=false&name=lax`))[0];

@@ -69,7 +69,7 @@ npm run remove-hooks   # undo
 
 - `http://localhost:7777/pair`: a QR code to open Lax on the phone (only works from the Mac itself)
 - `http://localhost:7777/demo/app?demo`: every state, without Claude Code
-- `http://localhost:7777/demo`: the shareable demo (portrait / landscape / cover; opens in landscape on a computer, portrait on a phone, cover 5% of the time), live from the working folder. The public one, https://lax.diogodebastos.com/demo, runs on Cloudflare (works with the Mac off) and is redeployed from main on every `git push` (`git config core.hooksPath scripts/git-hooks` once per clone; by hand: `node scripts/demo.mjs --deploy`).
+- `http://localhost:7777/demo`: the shareable demo (portrait / landscape / cover; opens in landscape on a computer, portrait on a phone, cover 5% of the time), live from the working folder. Optionally, a public one on Cloudflare (works with the Mac off): set `LAX_DEMO_ROUTE` (e.g. `"lax.example.com/demo*"`) in `~/.lax/secrets/env.json`, and it's redeployed from main on every `git push` (`git config core.hooksPath scripts/git-hooks` once per clone; by hand: `node scripts/demo.mjs --deploy`). Without it, nothing is deployed.
 - `http://localhost:7777/preview.html`: a Flip 3 mockup (closed cover screen, open, Flex mode)
 
 ## Bodies
@@ -83,8 +83,8 @@ One URL. The layout follows the screen, and `?layout=wide|tall|big` forces one:
 
 Talking from **Lax's own tab** (the first one, named after it) goes to Lax itself: an assistant you can ask anything. It runs Claude Code in its mind, `~/.lax/mind`:
 - `CLAUDE.md` holds who Lax is, **its body** (this repo: what each part does, and how it may change it: on a `lax/<slug>` branch in a worktree, tests, then you merge), and **Notes** it keeps about you. It adds notes on its own, you can edit them, and it reads them to you when you ask what it remembers. Every change is committed to the mind's own git history.
-- `diogo/` (named after you) holds hard facts about your life that are too long for a note, like pay and contracts, one file per topic; the notes point to them.
-- `.claude/settings.json`: it reads your repos (`LAX_WORKDIR`, default `~/REPOS`) and its body freely; editing outside its mind needs your approval on the phone; its secrets and `life.db` are denied (and Lax's hook refuses them too).
+- `<your name>/` holds hard facts about your life that are too long for a note, like pay and contracts, one file per topic; the notes point to them.
+- `.claude/settings.json`: it reads your repos (`LAX_WORKDIR`, default the folder you cloned Lax into) and its body freely; editing outside its mind needs your approval on the phone; its secrets and `life.db` are denied (and Lax's hook refuses them too).
 - Each message also carries a short summary of your Claude Code sessions (one line each, more for a session you name), so "what's my cli session doing?" works.
 - The conversation starts fresh after 8 quiet hours (`LAX_FRESH_HOURS`), once it reaches 150k tokens (`LAX_FRESH_TOKENS`), or when you say "start fresh". Every message re-sends the whole conversation, so an endless one gets expensive. The first message of a new one carries the last few turns of the old one; what should last goes in the notes.
 
@@ -166,13 +166,15 @@ Tap **LAX ≡** to open the menu. It reads top to bottom:
 
 ## Reaching Lax from anywhere (Cloudflare Tunnel + Access)
 
-Lax only listens on `127.0.0.1`. The phone reaches it through a Cloudflare Tunnel at `https://lax.diogodebastos.com`, behind Cloudflare Access (an email-PIN login). Lax's token is a second lock. The tunnel's real HTTPS is also what lets Chrome use the mic, with no flags.
+Lax only listens on `127.0.0.1`. The phone reaches it through a Cloudflare Tunnel on your own domain (here `https://lax.example.com`), behind Cloudflare Access (an email-PIN login). Lax's token is a second lock. The tunnel's real HTTPS is also what lets Chrome use the mic, with no flags.
+
+The quick way: make a short-lived API token (Access apps/policies, service tokens, orgs/IdPs; Cloudflare Tunnel; Zone DNS edit) into `~/.lax/secrets/cf-setup-token`, then `LAX_HOSTNAME=lax.example.com LAX_OWNER_EMAIL=you@example.com node scripts/cf-setup.mjs` sets up all of the below. By hand:
 
 ```bash
 brew install cloudflared
-cloudflared tunnel login                      # browser: pick diogodebastos.com
+cloudflared tunnel login                      # browser: pick example.com
 cloudflared tunnel create lax
-cloudflared tunnel route dns lax lax.diogodebastos.com
+cloudflared tunnel route dns lax lax.example.com
 ```
 
 `~/.cloudflared/config.yml`:
@@ -181,7 +183,7 @@ cloudflared tunnel route dns lax lax.diogodebastos.com
 tunnel: lax
 credentials-file: /Users/<you>/.cloudflared/<tunnel-id>.json
 ingress:
-  - hostname: lax.diogodebastos.com
+  - hostname: lax.example.com
     service: http://127.0.0.1:7777
   - service: http_status:404
 ```
@@ -189,10 +191,10 @@ ingress:
 `~/.lax/secrets/env.json`:
 
 ```json
-{ "LAX_PUBLIC_URL": "https://lax.diogodebastos.com", "CF_ACCESS_CLIENT_ID": "…", "CF_ACCESS_CLIENT_SECRET": "…" }
+{ "LAX_PUBLIC_URL": "https://lax.example.com", "CF_ACCESS_CLIENT_ID": "…", "CF_ACCESS_CLIENT_SECRET": "…" }
 ```
 
-**Access (Zero Trust dashboard):** create a self-hosted app for `lax.diogodebastos.com` with:
+**Access (Zero Trust dashboard):** create a self-hosted app for `lax.example.com` with:
 - an **Allow** policy for your email (one-time PIN, 1-month session)
 - a **Service Auth** policy for the `lax-android` service token, which the Android app uses for its background connection
 
@@ -253,7 +255,7 @@ Talking to Lax itself (its own tab, not a live session) runs headless: no termin
 - **Voice runs** use their own Claude session per project (resumed each time). The project is the one where Claude Code was active most recently. Read-only tools run freely. Anything else (edits, Bash) needs ✓ on the phone, and silence counts as a no.
 - When the server is down, the hook exits in milliseconds, so Claude Code is never slowed down.
 
-Env (or `~/.lax/secrets/env.json`): `LAX_PORT` (7777), `LAX_HOST` (127.0.0.1), `LAX_PUBLIC_URL`, `LAX_ASK_TIMEOUT` (30), `LAX_WORKDIR` (fallback voice project, `~/REPOS`).
+Env (or `~/.lax/secrets/env.json`): `LAX_PORT` (7777), `LAX_HOST` (127.0.0.1), `LAX_PUBLIC_URL`, `LAX_ASK_TIMEOUT` (30), `LAX_WORKDIR` (your projects and the fallback voice project; default the folder Lax was cloned into), `LAX_DEMO_ROUTE` (a public demo, off by default).
 
 ---
 

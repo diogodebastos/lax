@@ -10,7 +10,7 @@ import java.net.URL
 object Lax {
     data class Config(val url: String, val cfId: String, val cfSecret: String) {
         private val uri: Uri get() = Uri.parse(url)
-        /** e.g. https://lax.diogodebastos.com */
+        /** e.g. https://lax.example.com */
         val origin: String get() = "${uri.scheme}://${uri.encodedAuthority}"
         val token: String get() = uri.getQueryParameter("t") ?: ""
         val host: String get() = uri.host ?: url

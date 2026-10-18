@@ -1,6 +1,7 @@
 // The public demo, served by Cloudflare so it works with the Mac off: static pages (assets) plus one Worker for Lax's
 // mind, live (worker.mjs: /demo/mind/api/*, one Durable Object). scripts/demo.mjs builds dist/ (pages) and build/ (the
 // Worker) from a git commit (the one being pushed) and deploys them. Access lets everyone through on /demo (cf-setup.mjs).
+// Where it's served is yours: LAX_DEMO_ROUTE in ~/.lax/secrets/env.json (e.g. "lax.example.com/demo*"), passed by scripts/demo.mjs.
 // The Mac's key: `npx wrangler secret put MIND_KEY --config demo/wrangler.jsonc`, the same as ~/.lax/secrets/mind-key.
 {
   "$schema": "../node_modules/wrangler/config-schema.json",
@@ -11,6 +12,5 @@
     "run_worker_first": ["/demo/mind/api/*"] },
   "durable_objects": { "bindings": [{ "name": "MIND", "class_name": "Mind" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Mind"] }],
-  "routes": [{ "pattern": "lax.diogodebastos.com/demo*", "zone_name": "diogodebastos.com" }],
   "workers_dev": false
 }

@@ -32,21 +32,29 @@ const plist = (label, args, log) => `<?xml version="1.0" encoding="UTF-8"?>
 </dict></plist>
 `;
 
+// Before Phase 9 the labels were com.diogodebastos.lax(-tunnel): installing clears them, so an upgrade has one of each.
+const SERVER = 'digi-lax.server', TUNNEL = 'digi-lax.tunnel', OLD = ['com.diogodebastos.lax', 'com.diogodebastos.lax-tunnel'];
 const agents = [
-  { label: 'com.diogodebastos.lax', args: [NODE, '--no-warnings', path.join(ROOT, 'server.mjs')], log: path.join(LOGS, 'server.log') },
+  { label: SERVER, args: [NODE, '--no-warnings', path.join(ROOT, 'server.mjs')], log: path.join(LOGS, 'server.log') },
 ];
 // Remotely-managed tunnel (scripts/cf-setup.mjs) → ~/.lax/secrets/tunnel-token; or a locally-managed one in ~/.cloudflared.
 const tokenFile = secret('tunnel-token');
 const tunnelArgs = fs.existsSync(tokenFile) ? ['tunnel', '--no-autoupdate', 'run', '--token-file', tokenFile]
   : fs.existsSync(path.join(os.homedir(), '.cloudflared', 'config.yml')) ? ['tunnel', '--no-autoupdate', 'run', 'lax'] : null;
 if (CLOUDFLARED && tunnelArgs) {
-  agents.push({ label: 'com.diogodebastos.lax-tunnel', args: [CLOUDFLARED, ...tunnelArgs], log: path.join(LOGS, 'tunnel.log') });
+  agents.push({ label: TUNNEL, args: [CLOUDFLARED, ...tunnelArgs], log: path.join(LOGS, 'tunnel.log') });
 } else if (!remove) {
   console.log('(tunnel agent skipped: run scripts/cf-setup.mjs first)');
 }
 
 ensureDirs();
-for (const { label, args, log } of remove ? [...agents, { label: 'com.diogodebastos.lax-tunnel' }] : agents) {
+for (const label of OLD) {
+  const file = path.join(AGENTS, `${label}.plist`);
+  if (!fs.existsSync(file)) continue;
+  try { execFileSync('launchctl', ['bootout', `${DOMAIN}/${label}`], { stdio: 'ignore' }); } catch {}
+  fs.rmSync(file, { force: true }); console.log(`removed the old ${label}`);
+}
+for (const { label, args, log } of remove ? [...agents, { label: TUNNEL }] : agents) {
   const file = path.join(AGENTS, `${label}.plist`);
   try { execFileSync('launchctl', ['bootout', `${DOMAIN}/${label}`], { stdio: 'ignore' }); } catch {}
   if (remove) { fs.rmSync(file, { force: true }); console.log(`removed ${label}`); continue; }

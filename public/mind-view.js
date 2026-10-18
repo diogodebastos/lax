@@ -105,7 +105,7 @@
   // ?fake (and the PNG previews): a made-up mind that keeps doing things.
   function fake() {
     const now = Date.now(), day = 86400e3;
-    Mind.setSnap({ v: 1, seen: qs.has('asleep') ? now - day : now, owner: 'diogo', look: { color: qs.get('color') || '#d97757', stage: 'blob' },
+    Mind.setSnap({ v: 1, seen: qs.has('asleep') ? now - day : now, owner: 'alex', look: { color: qs.get('color') || '#d97757', stage: 'blob' },
       you: 9, projects: [{ name: 'lax', notes: 24 }, { name: '', notes: 11 }, { name: '', notes: 6 }, { name: '', notes: 3 }],
       episodes: { total: 14, week: 3 }, archive: 400, skills: { drafts: 1, installed: 2 },
       rules: { learning: now - 2 * day, wishing: now - 9 * day, remembering: now - 1 * day }, week: { heard: 23, spoke: 19, changes: 31 }, doing: {},

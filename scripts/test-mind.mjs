@@ -29,11 +29,11 @@ const { shape, clean, cleanEvent, cleanEvents } = await import('../lib/mind-shap
 const { readMind, createPublicMind, placesOf, filesIn } = await import('../lib/public-mind.mjs');
 
 // ---------- the snapshot: counts, and only the names you allowed ----------
-const live = () => ({ color: '#D97757', stage: 'blob', heard: 5, spoke: 4, busy: true, owner: 'Diogo', doing: { hearing: true, secret: true }, sessions: [{ id: 'S1', project: 'lax', status: 'working', cwd: '/some/folder' }, { project: 'hidden-thing', status: 'idle' }, { project: 'elsewhere', status: 'weird' }] });
+const live = () => ({ color: '#D97757', stage: 'blob', heard: 5, spoke: 4, busy: true, owner: 'Alex', doing: { hearing: true, secret: true }, sessions: [{ id: 'S1', project: 'lax', status: 'working', cwd: '/some/folder' }, { project: 'hidden-thing', status: 'idle' }, { project: 'elsewhere', status: 'weird' }] });
 const snap = shape(readMind(live()), ['lax']);
 assert.deepEqual(leaks(snap), []);
-assert.equal(snap.owner, 'diogo');
-assert.equal(shape(readMind({ ...live(), owner: 'Diogo <me@x.com>' }), []).owner, ''); // only a plain name
+assert.equal(snap.owner, 'alex');
+assert.equal(shape(readMind({ ...live(), owner: 'Alex <me@x.com>' }), []).owner, ''); // only a plain name
 assert.deepEqual(Object.keys(snap), ['v', 'seen', 'look', 'owner', 'you', 'projects', 'episodes', 'archive', 'skills', 'rules', 'week', 'busy', 'doing', 'sessions', 'roles']);
 assert.deepEqual(snap.doing, { hearing: true, speaking: false, reflecting: false, recalling: false });
 assert.equal(snap.busy, true);

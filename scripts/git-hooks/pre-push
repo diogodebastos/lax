@@ -1,5 +1,5 @@
 #!/bin/sh
-# Pushing main redeploys the public demo (lax.diogodebastos.com/demo) from the commit being pushed.
+# Pushing main redeploys this Lax's public demo (LAX_DEMO_ROUTE, see scripts/demo.mjs) from the commit being pushed, if it has one.
 # A failed deploy warns but never blocks the push. Enabled by: git config core.hooksPath scripts/git-hooks
 while read -r local_ref local_sha remote_ref remote_sha; do
   [ "$remote_ref" = "refs/heads/main" ] && [ "$local_sha" != "0000000000000000000000000000000000000000" ] || continue

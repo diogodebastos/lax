@@ -13,7 +13,7 @@ const dry = process.argv.includes('--dry-run');
 const say = (s) => console.log((dry ? '[dry] ' : '') + s);
 const DOMAIN = `gui/${process.getuid()}`;
 
-if (!dry) for (const label of ['com.diogodebastos.lax', 'com.diogodebastos.lax-tunnel']) {
+if (!dry) for (const label of ['digi-lax.server', 'digi-lax.tunnel', 'com.diogodebastos.lax', 'com.diogodebastos.lax-tunnel']) {
   try { execFileSync('launchctl', ['bootout', `${DOMAIN}/${label}`], { stdio: 'ignore' }); say(`stopped ${label}`); } catch {}
 }
 if (!dry) ensureDirs();

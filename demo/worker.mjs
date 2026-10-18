@@ -1,4 +1,4 @@
-// The public demo's one piece of code: Lax's mind, live (lax.diogodebastos.com/demo/mind, Phase 6.1). Everything else
+// The public demo's one piece of code: Lax's mind, live (<host>/demo/mind, Phase 6.1). Everything else
 // under /demo is static (wrangler.jsonc: assets, built by scripts/demo.mjs). The Mac pushes the public shape of its mind
 // and what it's doing (lib/public-mind.mjs); one Durable Object keeps the last of it and hands it to every viewer, so the
 // page works with the Mac off. What comes in is checked against the shape (lib/mind-shape.mjs) by the Worker in front,

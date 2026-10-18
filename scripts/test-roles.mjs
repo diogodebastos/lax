@@ -19,7 +19,7 @@ const episode = (file, head, body = 'What happened.') => { const p = path.join(M
 const role = (name, text) => { fs.mkdirSync(ROLES, { recursive: true }); fs.writeFileSync(path.join(ROLES, name + '.md'), text); };
 
 // ---------- the work, from the episodes ----------
-episode('2026-10/2026-10-12-research-noticed-prior-art.md', 'when: 2026-10-12 13:48 to 16:11\nwhere: research\nkind: investigation\noutcome: done\nrole: researcher\nmade: reports/contact-ranking-guide.html');
+episode('2026-10/2026-10-12-research-acme-prior-art.md', 'when: 2026-10-12 13:48 to 16:11\nwhere: research\nkind: investigation\noutcome: done\nrole: researcher\nmade: reports/contact-ranking-guide.html');
 episode('2026-10/2026-10-13-research-identity.md', 'when: 2026-10-13 20:13 to 20:20\nwhere: research\nkind: decision\noutcome: done');
 episode('2026-10/2026-10-14-fisicai-papers.md', 'when: 2026-10-14 10:00 to 11:00\nwhere: fisicai\nkind: investigation\noutcome: partly\nrole: Researcher');
 episode('2026-10/2026-10-14-lax-bad-role.md', 'where: lax\nrole: not a role!');
@@ -48,12 +48,12 @@ const r = createRoles({ settings: () => ({ name: 'Lax', learns: true }), feed: (
   milestone: (t) => miles.push(t), record: (k, t) => record.push(`${k}: ${t}`), mind: (k, x) => minds.push([k, x?.role]) });
 assert.equal(r.drafted({ name: 'lawyer', why: 'x' }), false, 'no practice written: nothing to offer');
 assert.equal(r.drafted({ name: 'Not A Role', why: 'x' }), false);
-assert.equal(r.drafted({ name: 'researcher', why: 'two reports for Noticed' }), true);
+assert.equal(r.drafted({ name: 'researcher', why: 'two reports for Acme' }), true);
 assert.equal(r.drafted({ name: 'researcher', why: 'again' }), false, 'drafted once');
 r.tick();
 const b = bubbles.pop();
 assert.match(b.text, /I've worked as your researcher 2 times\. Shall I become your researcher\?/);
-assert.match(b.details, /Why: two reports for Noticed[\s\S]*Split the question/, 'its practice, before you say yes');
+assert.match(b.details, /Why: two reports for Acme[\s\S]*Split the question/, 'its practice, before you say yes');
 assert.equal(r.hears('yes'), true);
 assert.equal(r.list()[0].status, 'active'); assert.deepEqual(r.active(), ['researcher']);
 assert.equal(xp, 20); assert.deepEqual(miles, ['Lax took on its first role: researcher']);
@@ -109,7 +109,7 @@ const raw = { projects: [{ name: 'lax', notes: 20 }, { name: 'research', notes: 
 const s = shape(raw, ['lax'], Date.parse('2026-10-15'), ['researcher']);
 assert.deepEqual(s.roles, [{ name: 'researcher', work: 2, week: 2, p: [1] }, { name: '', work: 1, week: 1, p: [] }], 'most work first; a role not allowed is unnamed; projects by place');
 assert.ok(clean(s), 'the Worker keeps it');
-assert.equal(clean({ ...s, roles: [{ ...s.roles[0], title: 'Noticed prior art' }] }), null, 'nothing but the shape');
+assert.equal(clean({ ...s, roles: [{ ...s.roles[0], title: 'Acme prior art' }] }), null, 'nothing but the shape');
 const { roles: _, ...old } = s;
 assert.deepEqual(clean(old)?.roles, [], 'a snapshot kept from before roles still shows');
 assert.deepEqual(cleanEvent({ kind: 'track', at: 1, role: 0 }), { kind: 'track', at: 1, role: 0 });
