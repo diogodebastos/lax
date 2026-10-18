@@ -1,6 +1,6 @@
 # Lax roadmap
 
-Lax is a **personal agent** for Claude Code. It lives on an old Galaxy Z Flip 3, keeps its memory on your Mac, and evolves with you: in looks, from how you work; in usefulness, from what it learns and what it runs for you; and in its own code, which it improves when it notices you reaching past it. The Mac is the brain and memory; the phone is the body. It uses no API credits: all model work runs through your Claude Code login.
+Lax is a **personal agent** for Claude Code: a pixel companion on an old phone, its memory on your Mac. It evolves with you: in looks, from how you work; in usefulness, from what it learns and what it runs for you; and in its own code, which it improves when it notices you reaching past it. The Mac is the brain and memory; the phone is the body (any Android phone or Chrome; it was designed on a Galaxy Z Flip 3's cover screen). It uses no API credits: all model work runs through your own Claude Code login.
 
 ## Why Lax, when there's the Claude app?
 
@@ -9,12 +9,19 @@ The official app already does Claude Code in your pocket: remote control, push n
 - **Glance, don't open.** On the cover screen or the desk, you see every session's state without unlocking anything.
 - **Talk, don't type.** A spoken back-and-forth; Lax answers in short sentences you can hear with the phone closed.
 - **Every session, automatically.** Hooks see every Claude Code session on the Mac, without opting each one in.
-- **Yours.** Memory, skills and history live in `data/` on your Mac. Honest caveat: whatever goes into a request as context reaches Anthropic through Claude Code. Lax keeps that small.
-- **It improves itself.** If you reach for the Claude app or the laptop instead of Lax, that's friction. Lax logs it and proposes a fix to its own code, which you approve on the phone.
+- **Yours.** Memory, skills and history live in `~/.lax` on your Mac. Honest caveat: whatever goes into a request as context reaches Anthropic through your Claude Code. Lax keeps that small.
+- **It improves itself.** When it can't do something you asked, it offers to learn it; when something got in your way, it fixes its own code overnight. Always on a branch, always tested, and you approve it on the phone.
+- **Everyone their own.** Each Lax is born fresh for its person and grows its own body on its own clone; nothing of anyone else's comes with it.
 
-**The bar:** Lax has to be clearly better *for Diogo on his Flip 3* before anything else. The test is one week of real work where he never opens the Claude app or walks to the laptop just to check on a session. Open-sourcing comes after that.
+## How it's built
 
-Each phase has a detailed GitHub issue. We work phase by phase: build, test locally, commit, Diogo tests on the real phone, push, close, next.
+Phase by phase, each with a GitHub issue: build it, test it on a throwaway Lax (`npm test` never touches your own `~/.lax`), commit, then prove it on a real phone and a real Mac. What only living with it can prove (days of use, a real night, a fresh machine, someone else) is collected in [#31](https://github.com/diogodebastos/lax/issues/31) so a phase can close when it's built. The rule that started it still holds: a phase is done when it's better in real use, not when it passes its tests. To help, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Origin
+
+Lax started in October 2026 as Diogo Bastos's companion for his own Claude Code sessions, on an old Galaxy Z Flip 3: the cover screen showed what every session was doing, and he talked to it with the phone closed. The first bar was his alone: Lax had to be clearly better *for him on his Flip 3* than the Claude app, through a week of real work where he never opened the app or walked to the laptop just to check on a session. Only then would it open up.
+
+It was built with Claude Code, phase by phase, and partly by Lax itself: its first wish (telling him his Claude usage) went from "I can't" to a merged pull request by voice ([#21](https://github.com/diogodebastos/lax/pull/21)), and its nightly fixes come from the friction it notices. Phase 9 turned it from his Lax into anyone's. The phases below keep what happened as it happened, including where each was first proven on his phone.
 
 ## Done
 
