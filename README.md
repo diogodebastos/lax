@@ -4,18 +4,50 @@
 
 > Hi, I'm Lax. I live on an old phone, I watch your Claude Code sessions, and I grow from how you work. I keep what I learn in plain markdown you can read, and I ask before I change anything that's yours.
 
-digi-lax is the app; Lax is the companion it hatches (yours can have any name: say "your name is …" or set it in the Life menu). The `lax` command keeps its name.
+digi-lax is the app; Lax is the companion it hatches. Yours is born fresh the day you set it up, knows nothing about you, and learns you from there (and it can have any name: say "your name is …").
 
-A pixel companion for Claude Code that lives on an old phone (designed for the Galaxy Z Flip 3 cover screen, 260×512).
+- **On the phone:** Lax, a speech bubble for the one thing that needs you (✓/✗ for permission prompts), and a live feed of what your Claude Code sessions are doing. Made for an old phone on the desk (it was designed on a Galaxy Z Flip 3's cover screen), and it works in any Chrome.
+- **Voice:** tap Lax and talk. What you say goes to Claude Code, a running session or Lax's own conversation, and Lax reads the answer aloud.
+- **It learns:** notes about you and your projects, episodes of what happened, recall of how you fixed something in August. All plain markdown in `~/.lax`, in its own git history.
+- **It grows:** it starts as an egg and hatches into a species read from how you work, then changes through its stages. Rules, not a model (`lib/species.mjs`).
+- **It improves itself:** when it can't do something, it offers to learn it; overnight it fixes its own friction. Always on a branch, always tested, and nothing reaches `main` without your yes.
 
-- **Top half:** Lax, plus a speech bubble showing the one thing that needs you, with ✓/✗ for permission prompts.
-- **Bottom half:** a terminal-style live feed of what your Claude Code sessions are doing.
-- **Voice:** hold the top half to talk. What you say goes to Claude Code, and Lax reads the answer aloud.
-- **Evolves:** it starts as an egg and hatches into a species read from how you work (several sessions at once, many tools an hour, long sessions, long back and forth, many repos, or none of these: a brown fox). Each species has its own forms through the stages (sprout → blob → cube → brick → legend); traits come from the last 7 days of work. It's all rules, with no model calls (`lib/species.mjs`).
+No API credits: every time Lax thinks, it runs `claude -p` with your own Claude Code login. No agent framework, no vector database: Claude Code already is the agent loop (tools, permissions, resume, MCP, skills, hooks), and Lax gives each run a prompt, a folder, a time limit and a fence (`hooks/lax-hook.mjs` allows or denies each tool call).
 
-No API credits. Voice runs `claude -p` with your normal Claude Code login. The phone's own recognizer shows your words live and Whisper on the Mac writes them down (see [Hearing](#hearing-whisper-on-the-mac)); the voice is the phone browser's built-in Web Speech.
+## Get started
 
-No agent framework (no LangChain), no vector database, no API key. Claude Code already is the agent loop (tools, permissions, resume, MCP, skills, hooks), so every time Lax thinks it runs `claude -p` with a prompt, a folder, a time limit and a fence (`hooks/lax-hook.mjs` allows or denies each tool call, by which run it is).
+**You need:** a Mac, [Node](https://nodejs.org) 22.13 or newer, `git`, and [Claude Code](https://claude.com/claude-code), logged in. For the phone: a free Cloudflare account, and Chrome or the Android app.
+
+```bash
+git clone https://github.com/diogodebastos/lax.git
+cd lax
+npm run setup
+```
+
+Setup is a Claude Code conversation: Lax sets itself up with you, one step at a time, and only asks practical things (which folder your projects are in, yes or no). The personal ones it asks itself, later. It:
+
+1. wires Claude Code to Lax (hooks), and installs `lax` and `/lax` (to talk into a running session; it tells you about the warning that comes with it first);
+2. starts Lax in the background (launchd), listening only on your Mac: this is when `~/.lax` is created and your Lax is born;
+3. if you want Lax on your phone: logs you in to Cloudflare in the browser and deploys a small relay to your own account (`lax-relay.<you>.workers.dev`, no domain needed);
+4. optionally, Whisper on the Mac for better hearing;
+5. opens the pairing page: scan the QR with the phone, or open Lax right there on the Mac.
+
+**Try it on the Mac first:** "open Lax" on the pairing page (`http://localhost:7777/pair`) works in Chrome with no phone and no Cloudflare (hold space to talk). Add the phone any time with `node scripts/setup.mjs relay`.
+
+**The Android app** (optional: background link, notifications that wake the phone, the cover screen) is built from your clone, so you can change it: see [android/README.md](android/README.md).
+
+**Privacy, honestly:** everything Lax learns stays in `~/.lax` on your Mac. What goes into a request as context reaches Anthropic through your own Claude Code, like any session. With the relay, your phone's requests pass through your own Cloudflare Worker, which keeps nothing. Lax listens only on the Mac, every call needs its token, and anything that changes something asks you on the phone first. More in [SECURITY.md](SECURITY.md).
+
+### Every day
+
+```bash
+npm run update         # the project's new changes; what your Lax changed in itself stays (merged on a branch, tested, then main)
+npm run doctor         # is it all working: setup, secrets' permissions (-- --fix), and each way in, end to end
+npm run rotate-token   # a new token: old links get 401, pair the phone again
+npm run logs           # what Lax is doing, live
+lax                    # Claude Code that hears you through Lax (any folder, the same flags as claude)
+lax watch              # follow what Lax sees: your sessions, and the commands Lax itself runs
+```
 
 ## How it fits together
 
@@ -34,7 +66,7 @@ flowchart LR
   cc -- hooks --> srv
   srv -- allow / deny --> cc
   srv -- "feed (SSE)" --> phone
-  phone -- "voice, taps (Cloudflare Tunnel)" --> srv
+  phone -- "voice, taps (relay or tunnel)" --> srv
   srv -- spawns --> runs
   srv -- "your words (channel)" --> mcp
   runs -- "reads, writes" --> mind
@@ -57,24 +89,7 @@ The repo is Lax's **body** (code only). **Lax itself** lives in `~/.lax` on your
   archive/       every Claude Code transcript, kept past Claude Code's 30 days, secrets scrubbed
 ```
 
-The phone stores nothing except the access token. Coming from an older Lax with a `data/` folder? `npm run move-home` moves it, once.
-
-## Run
-
-```bash
-npm run setup          # sets Lax up with you, in a Claude Code conversation (node scripts/setup.mjs status: where it stands)
-npm run update         # the project's new changes, keeping what this Lax changed in itself (merged on a branch, tested, then main)
-npm run doctor         # is it all working: setup, secrets' permissions (-- --fix), and each way in, end to end
-npm run rotate-token   # a new token: old links get 401, pair the phone again
-npm start              # prints the Mac + phone URLs (with token)
-npm run install-hooks  # wire Claude Code → Lax (backup: ~/.claude/settings.json.bak-lax)
-npm run remove-hooks   # undo
-```
-
-- `http://localhost:7777/pair`: a QR code to open Lax on the phone (only works from the Mac itself)
-- `http://localhost:7777/demo/app?demo`: every state, without Claude Code
-- `http://localhost:7777/demo`: the shareable demo (portrait / landscape / cover; opens in landscape on a computer, portrait on a phone, cover 5% of the time), live from the working folder. Optionally, a public one on Cloudflare (works with the Mac off): set `LAX_DEMO_ROUTE` (e.g. `"lax.example.com/demo*"`) in `~/.lax/secrets/env.json`, and it's redeployed from main on every `git push` (`git config core.hooksPath scripts/git-hooks` once per clone; by hand: `node scripts/demo.mjs --deploy`). Without it, nothing is deployed.
-- `http://localhost:7777/preview.html`: a Flip 3 mockup (closed cover screen, open, Flex mode)
+The phone stores nothing except the access token.
 
 ## Bodies
 
@@ -168,9 +183,21 @@ Tap **LAX ≡** to open the menu. It reads top to bottom:
 - **What Lax knows**: how many notes and episodes, its skills (install or decline a draft after reading it; forget an installed one), its newest episodes (forget one: tap twice). Milestones and episodes show the newest 5; "show all" opens the rest
 - **Rebirth**: hold for 2s to start a new life. Its life (`life.db`) is wiped; your settings stay. What it knows stays too, unless you switch on "forget what it knows too" (notes, episodes and skills go; how it learns stays)
 
-## Reaching Lax from anywhere (Cloudflare Tunnel + Access)
+## Reaching Lax from the phone: the relay
 
-Lax only listens on `127.0.0.1`. The phone reaches it through a Cloudflare Tunnel on your own domain (here `https://lax.example.com`), behind Cloudflare Access (an email-PIN login). Lax's token is a second lock. The tunnel's real HTTPS is also what lets Chrome use the mic, with no flags.
+Lax listens only on `127.0.0.1`. The phone reaches it through a Worker on your own free Cloudflare account (`relay/`, at `lax-relay.<account>.workers.dev`): the Mac holds one WebSocket out to it, and the phone talks to the Worker over HTTPS (which is also what lets Chrome use the mic). For now it's a pipe: every request is replayed against Lax on the Mac and streamed back, so the page, the app and the token work the same as anywhere. With the Mac asleep, the phone gets "Mac asleep". Wrong tokens are limited per address (20 in 10 minutes). Nothing is kept on Cloudflare.
+
+`node scripts/setup.mjs relay` does it all: the browser login, the deploy, a relay key on both ends (`~/.lax/secrets/relay-key` and the Worker's `RELAY_KEY`), `LAX_RELAY_URL` (and `LAX_PUBLIC_URL`, for pairing) in `~/.lax/secrets/env.json`, and a restart; `[relay] linked` in the log. By hand:
+
+```bash
+npx wrangler@4 deploy --config relay/wrangler.jsonc             # prints its workers.dev URL
+openssl rand -hex 24 > ~/.lax/secrets/relay-key && chmod 600 ~/.lax/secrets/relay-key
+npx wrangler@4 secret put RELAY_KEY --config relay/wrangler.jsonc < ~/.lax/secrets/relay-key
+```
+
+## Or: your own domain (Cloudflare Tunnel + Access)
+
+If you have a domain on Cloudflare, the phone can also reach Lax through a tunnel on it (here `https://lax.example.com`), behind Cloudflare Access (an email-PIN login in the browser, a service token for the app). Lax's token is a second lock. It can run next to the relay.
 
 The quick way: make a short-lived API token (Access apps/policies, service tokens, orgs/IdPs; Cloudflare Tunnel; Zone DNS edit) into `~/.lax/secrets/cf-setup-token`, then `LAX_HOSTNAME=lax.example.com LAX_OWNER_EMAIL=you@example.com node scripts/cf-setup.mjs` sets up all of the below. By hand:
 
@@ -204,22 +231,10 @@ ingress:
 
 `/pair` only answers requests from the Mac itself. Anything that arrives through the tunnel gets a 403.
 
-## Reaching Lax through the relay (no domain)
-
-The other way in: a Worker on your own free Cloudflare account (`relay/`, at `lax-relay.<account>.workers.dev`). The Mac holds one WebSocket out to it and the phone talks to the Worker over HTTPS, so nothing on the Mac listens beyond `127.0.0.1` and no domain is needed. For now it's a pipe: every request is replayed against Lax on the Mac and streamed back, so the page, the app and the token work as through the tunnel. With the Mac asleep, the phone gets "Mac asleep" (503). Wrong tokens are limited per address (20 in 10 minutes). Nothing is kept on Cloudflare.
-
-```bash
-npx wrangler@4 deploy --config relay/wrangler.jsonc             # prints its workers.dev URL
-openssl rand -hex 24 > ~/.lax/secrets/relay-key && chmod 600 ~/.lax/secrets/relay-key
-npx wrangler@4 secret put RELAY_KEY --config relay/wrangler.jsonc < ~/.lax/secrets/relay-key
-```
-
-Then in `~/.lax/secrets/env.json`: `"LAX_RELAY_URL": "https://lax-relay.<account>.workers.dev"`, and the same as `LAX_PUBLIC_URL` to pair the phone through it. Restart Lax; `[relay] linked` in the log. Test: `npm run test-relay` (the Worker under `wrangler dev`, locally).
-
 ## Always on (launchd)
 
 ```bash
-npm run install-service   # server (+ tunnel once configured): starts at login, restarts on crash
+npm run install-service   # server (+ tunnel once configured): starts at login, restarts on crash (setup does this)
 npm run remove-service
 npm run logs
 ```
@@ -229,8 +244,8 @@ On power, turn on System Settings → Battery → Options → *Prevent automatic
 ## Phone
 
 1. Open `http://localhost:7777/pair` on the Mac and scan the QR code with the phone. Open it in **Chrome**; Brave has no speech recognition.
-2. Log in once with the email PIN. Tap "wake", then tap Lax to talk.
-3. Cover screen and background notifications: see the Android app (phase 2) and the cover-screen setup (phase 3) issues.
+2. Tap "wake", then tap Lax to talk. (Through your own domain, Access asks for your email and a PIN the first time.)
+3. The Android app adds a background link, approvals that wake the phone, and the Flip's cover screen: [android/README.md](android/README.md).
 
 ### Hearing: Whisper on the Mac
 
@@ -245,7 +260,7 @@ The app records you itself and feeds the same audio to Android's recognizer (And
 Lax is also a Claude Code **channel**: what you say to Lax goes into a running terminal session, and Claude answers back through Lax.
 
 ```bash
-npm run install-channel   # user-level MCP server `lax` + a `lax` command in ~/.local/bin (also `claude-lax`; remove-channel undoes)
+npm run install-channel   # user-level MCP server `lax` + a `lax` command in ~/.local/bin (also `claude-lax`; remove-channel undoes; setup does this)
 lax                       # = claude --dangerously-load-development-channels server:lax, from any folder; takes the same flags as claude
 lax watch                 # follow what Lax sees, live: your sessions, and the commands Lax itself runs with their output
 lax watch lax             # only Lax (or `lax watch <project>`); --no-history starts from now
@@ -263,7 +278,7 @@ Already in a session that wasn't started with `lax` (the desktop app, or plain `
 
 ## Lax's conversation on the Mac
 
-Talking to Lax itself (its own tab, not a live session) runs headless: no terminal window. To carry on in a real terminal, say "open on the Mac" (or "continue this on my Mac"). It opens the same conversation (`claude --resume`, in Lax's mind folder, with `~/REPOS` added) in Ghostty, iTerm or Terminal, like `/lax`. While it's open there, the phone waits: talking to Lax gets "quit there first". When you quit, the phone picks the conversation up again. To only look, without taking over, use `lax watch`.
+Talking to Lax itself (its own tab, not a live session) runs headless: no terminal window. To carry on in a real terminal, say "open on the Mac" (or "continue this on my Mac"). It opens the same conversation (`claude --resume`, in Lax's mind folder, with your projects folder added) in Ghostty, iTerm or Terminal, like `/lax`. While it's open there, the phone waits: talking to Lax gets "quit there first". When you quit, the phone picks the conversation up again. To only look, without taking over, use `lax watch`.
 
 ## Behaviour notes
 
@@ -271,8 +286,24 @@ Talking to Lax itself (its own tab, not a live session) runs headless: no termin
 - **Voice runs** use their own Claude session per project (resumed each time). The project is the one where Claude Code was active most recently. Read-only tools run freely. Anything else (edits, Bash) needs ✓ on the phone, and silence counts as a no.
 - When the server is down, the hook exits in milliseconds, so Claude Code is never slowed down.
 
-Env (or `~/.lax/secrets/env.json`): `LAX_PORT` (7777), `LAX_HOST` (127.0.0.1), `LAX_PUBLIC_URL`, `LAX_ASK_TIMEOUT` (30), `LAX_WORKDIR` (your projects and the fallback voice project; default the folder Lax was cloned into), `LAX_DEMO_ROUTE` (a public demo, off by default).
+Env (or `~/.lax/secrets/env.json`): `LAX_PORT` (7777), `LAX_HOST` (127.0.0.1), `LAX_PUBLIC_URL` (the way in the phone pairs through), `LAX_RELAY_URL`, `LAX_ASK_TIMEOUT` (30), `LAX_WORKDIR` (your projects and the fallback voice project; default the folder Lax was cloned into), `LAX_DEMO_ROUTE` (a public demo, off by default).
+
+## Development
+
+```bash
+npm start              # Lax in the foreground: prints the Mac and phone URLs (with the token)
+npm test               # everything, on a throwaway Lax (never your own ~/.lax)
+npm run test-relay     # the relay, under wrangler dev
+node scripts/setup.mjs status   # what setup did, step by step (each step runs on its own: hooks, channel, service, relay…)
+```
+
+- `http://localhost:7777/pair`: the pairing page (only from the Mac itself)
+- `http://localhost:7777/demo/app?demo`: every state, without Claude Code
+- `http://localhost:7777/demo`: the shareable demo (portrait / landscape / cover), live from the working folder. Optionally a public one on Cloudflare that works with the Mac off: set `LAX_DEMO_ROUTE` (e.g. `"lax.example.com/demo*"`) in `~/.lax/secrets/env.json`, and `git config core.hooksPath scripts/git-hooks` redeploys it on every push to main (by hand: `node scripts/demo.mjs --deploy`). Without it, nothing is deployed.
+- `http://localhost:7777/preview.html`: a Flip 3 mockup (closed cover screen, open, Flex mode)
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
-<p align="center"><img src="docs/tiny-lax.svg" width="44" alt="tiny Lax"><br><sub>made by Lax and Diogo</sub></p>
+<p align="center"><img src="docs/tiny-lax.svg" width="44" alt="tiny Lax"><br><sub>made by Lax and Diogo · <a href="ROADMAP.md">how it started, and where it's going</a></sub></p>
