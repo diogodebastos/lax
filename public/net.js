@@ -14,7 +14,9 @@
     skills: { at: [20, 3, -14], color: '#b58ad9', label: 'skills' },
     archive: { at: [-6, -19, 14], color: '#8a8378', label: 'archive' },
   };
-  const PROJ = [[-22, 12, -12], [-24, -9, 9], [-8, 19, -18], [-18, 1, -24]];
+  // The projects: one orb that says "projects", and each project a small unnamed satellite around it.
+  const HUB = [-26, 9, -16];
+  const PROJ = [[-31, 14, -13], [-31, 4, -12], [-21, 15, -21], [-27, 3, -22]];
   // Its roles (who it has become from the work it does: your researcher first), across from the projects.
   const ROLE = [[27, 16, 12], [28, -14, -2], [8, 23, 16], [30, 2, 22]];
   const LINKS = [['core', 'hearing'], ['core', 'speech'], ['core', 'you'], ['core', 'memory'], ['core', 'learning'], ['memory', 'you'],
@@ -75,7 +77,7 @@
   let bandBottom = -30;
   function resize(w, h, band = [0, h]) {
     renderer.setSize(w, h, false);
-    const bh = Math.max(1, band[1] - band[0]), halfH = 30, halfW = Math.max(halfH * w / bh, 33), upp = 2 * halfW / w;
+    const bh = Math.max(1, band[1] - band[0]), halfH = 30, halfW = Math.max(halfH * w / bh, 40), upp = 2 * halfW / w;
     const c = ((band[0] + band[1]) / 2 - h / 2) * upp, hh = h / 2 * upp; bandBottom = c - (band[1] - h / 2) * upp;
     Object.assign(cam, { left: -halfW, right: halfW, top: c + hh, bottom: c - hh }); cam.updateProjectionMatrix();
   }
@@ -98,7 +100,8 @@
       ...counts(s), you: s.you, memory: s.episodes.total, skills: s.skills.installed + s.skills.drafts, archive: s.archive };
     // Every orb's size and specks come from its own number: nothing is drawn bigger than what it holds.
     for (const [k, d] of Object.entries(NODES)) orb(k, d.at, d.color || color, sizeOf(n[k]), specks(n[k]));
-    s.projects.slice(0, 4).forEach((p, i) => orb('p' + i, PROJ[i], Mind.shade('#6fd36f', [-0.1, -0.35, 0.2, -0.5][i]), 1.3 + Math.min(1.4, Math.log2(p.notes + 1) / 4), 0));
+    orb('projects', HUB, '#6fd36f', sizeOf(s.projects.length * 8), 0);
+    s.projects.slice(0, 4).forEach((p, i) => orb('p' + i, PROJ[i], Mind.shade('#6fd36f', [-0.1, -0.35, 0.2, -0.5][i]), 0.8 + Math.min(0.8, Math.log2(p.notes + 1) / 6), 0));
     // A role, in Lax's own colour (it's what Lax is), sized by its work: a speck for each piece this week.
     (s.roles || []).slice(0, 4).forEach((r, i) => orb('r' + i, ROLE[i], Mind.shade(color, 0.35), sizeOf(r.work * 4), Math.min(10, r.week)));
     // Sessions plugged in right now: a small cube beside its project (or near Lax), linked straight to Lax.
@@ -114,7 +117,7 @@
       const l = new T.Line(geo, new T.LineBasicMaterial({ color: live ? '#8a8378' : '#3a332c' })); net.add(l); lines[a + '-' + b] = lines[b + '-' + a] = l;
       if (a === 'core' || b === 'core') l.userData.core = { other: a === 'core' ? b : a, end: a === 'core' ? 0 : 1 }; };
     for (const [a, b] of LINKS) link(a, b);
-    s.projects.slice(0, 4).forEach((p, i) => link('p' + i, 'memory'));
+    link('projects', 'memory'); s.projects.slice(0, 4).forEach((p, i) => link('p' + i, 'projects'));
     (s.roles || []).slice(0, 4).forEach((r, i) => { link('core', 'r' + i); link('r' + i, 'memory'); for (const p of r.p || []) link('r' + i, 'p' + p); });
     (s.sessions || []).slice(0, 6).forEach((ss, i) => { link('s' + i, 'core', true); if (ss.p != null && nodes['p' + ss.p]) link('s' + i, 'p' + ss.p); });
   }
@@ -258,7 +261,7 @@
       { ...place('learning'), text: 'learning', n: counts(s).learning, hot: hot.learning > t },
       { ...place('skills'), text: 'skills', n: s.skills.installed + (s.skills.drafts ? `+${s.skills.drafts}` : ''), hot: hot.skills > t },
       { ...place('archive'), text: 'archive', n: s.archive, hot: hot.archive > t },
-      ...s.projects.slice(0, 4).map((p, i) => ({ ...place('p' + i), text: p.name || '', n: p.notes, hot: hot['p' + i] > t })),
+      { ...place('projects'), text: 'projects', n: s.projects.length, hot: hot.projects > t },
       ...(s.roles || []).slice(0, 4).map((r, i) => ({ ...place('r' + i), text: r.name || 'role', n: r.work, hot: hot['r' + i] > t })),
       ...(sessions ? [{ ...place('s0', 8), text: 'sessions', n: working ? `${working}/${sessions}` : sessions, hot: hot.core > t }] : []),
     ];
