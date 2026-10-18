@@ -14,6 +14,7 @@
   .qr { background:#fff; padding:14px; display:inline-block; border:4px solid #D97757; box-shadow:6px 6px 0 #A9522F; }
   ol { text-align:left; color:#b7b0a4; line-height:1.15; padding-left:22px; }
   code { color:#7CFC9A; word-break:break-all; }
+  p { color:#b7b0a4; } a { color:#D97757; }
   h2 { color:#D97757; font-weight:400; font-size:28px; margin:28px 0 10px; }
   .tabs { display:flex; gap:8px; justify-content:center; margin-bottom:14px; }
   .tabs button { font:inherit; background:#000; color:#b7b0a4; border:2px solid #3a332c; padding:2px 12px; cursor:pointer; }
@@ -24,29 +25,33 @@
 <body>
 <main>
   <h1>pair with Lax</h1>
+  <p>On this Mac: <a href="%%LOCAL%%">open Lax</a> (Chrome; hold space to talk).</p>
+  <p id="nophone" hidden>To have Lax on your phone too, it needs a way in from anywhere: <code style="white-space:nowrap">node scripts/setup.mjs relay</code> (a free Cloudflare account), then reload this page.</p>
+  <div id="phone">
   <div class="tabs"><button data-t="app" class="on">Android app</button><button data-t="web">browser</button></div>
   <section id="app">
     <div class="qr" id="qrApp"></div>
     <ol>
       <li>Install the app: <code>npm run android</code> with the phone plugged in (USB debugging on).</li>
-      <li>Scan this with the Flip's camera. It opens Lax; tap <b>pair ▶</b>. (Or <code>npm run android -- --pair</code> does it over USB.)</li>
+      <li>Scan this with the phone's camera. It opens Lax; tap <b>pair ▶</b>. (Or <code>npm run android -- --pair</code> does it over USB.)</li>
       <li>Allow the mic and notifications, and let Lax ignore battery optimisation. On Samsung also add Lax to Settings → Battery → Background usage limits → <b>Never sleeping apps</b>.</li>
     </ol>
-    <p style="color:#6b6459">This code holds your Lax token and Access service token. Don't share it.</p>
+    <p style="color:#6b6459">This code holds your Lax token (and Access service token, if you have one). Don't share it.</p>
   </section>
   <section id="web" hidden>
     <div class="qr" id="qrWeb"></div>
     <ol>
-      <li>Scan with the Flip's camera and open the link in <b>Chrome</b>. It works on any network: home Wi-Fi, mobile data, anywhere.</li>
-      <li>The first time, Cloudflare asks for your email and sends you a PIN. After that you stay logged in for a month.</li>
+      <li>Scan with the phone's camera and open the link in <b>Chrome</b>. It works on any network: home Wi-Fi, mobile data, anywhere.</li>
+      <li>Behind Cloudflare Access (your own domain), the first time it asks for your email and sends you a PIN. After that you stay logged in for a month.</li>
       <li>Tap "wake". Tap the top half to talk (allow the mic), and tap <b>LAX ≡</b> for the life menu. Chrome menu → <b>Add to Home screen</b> gives you an icon.</li>
     </ol>
   </section>
+  </div>
 </main>
 <script>
   const qr = (id, text) => new QRCode(document.getElementById(id), { text, width: 260, height: 260, correctLevel: QRCode.CorrectLevel.L });
-  qr('qrWeb', '%%URL%%');
-  qr('qrApp', '%%APP%%');
+  if ('%%PHONE%%') { qr('qrWeb', '%%URL%%'); qr('qrApp', '%%APP%%'); }
+  else { document.getElementById('phone').hidden = true; document.getElementById('nophone').hidden = false; }
   document.querySelector('.tabs').addEventListener('click', (e) => {
     const t = e.target.dataset.t; if (!t) return;
     document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.t === t));

@@ -8,6 +8,7 @@
     "node": ">=22.13"
   },
   "scripts": {
+    "setup": "node --no-warnings scripts/setup.mjs",
     "start": "node --no-warnings server.mjs",
     "install-hooks": "node scripts/install-hooks.mjs",
     "remove-hooks": "node scripts/install-hooks.mjs --remove",
