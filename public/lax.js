@@ -92,7 +92,7 @@ function applyLook() {
 let pet = { name: 'Lax', level: 1, stage: 'sprout', traits: [], mood: 'happy', xp: 0, prevXp: 0, nextXp: 10 };
 // A trait it earned, unless you switched it off in the Life menu.
 const wears = (t) => pet.traits.includes(t) && !settings.hideTraits?.includes(t);
-let sessions = [], voiceBusy = false, thinking = false, lastWork = 0, channels = [], voiceTarget = 'background', usage = null;
+let sessions = [], voiceBusy = false, thinking = false, lastWork = 0, channels = [], voiceTarget = 'background', usage = null, budget = null;
 // The Mac is asleep or off (no link): Lax sleeps too. ASLEEP = the app's offline copy of this page (no Mac at all).
 const ASLEEP = qs.has('asleep'); let macAsleep = ASLEEP;
 // No key: Lax hasn't hatched. Just an egg that wobbles now and then (and when tapped).
@@ -857,7 +857,7 @@ wakeEl.addEventListener('click', async () => {
 });
 
 // ---------- live link ----------
-function applyState(s) { pet = s.pet; if (s.pet.hatched === false) shell = true; else if (shell && !hatchAt) hatch(); sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; usage = s.usage || null; if (s.vocab) vocab = s.vocab; whisperOn = !!s.whisper; updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
+function applyState(s) { pet = s.pet; if (s.pet.hatched === false) shell = true; else if (shell && !hatchAt) hatch(); sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; usage = s.usage || null; budget = s.budget || null; if (s.vocab) vocab = s.vocab; whisperOn = !!s.whisper; updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
 // Remember how Lax looks, so the app's offline page can show the same Lax asleep.
 const remember = () => { try { NATIVE?.remember(JSON.stringify({ pet, settings })); } catch {} };
 function setAsleep(v) { if (macAsleep === v) return; macAsleep = v; updateHint(); }
@@ -1000,6 +1000,7 @@ function renderLife() {
   lifeEl.querySelectorAll('.tog[data-k]').forEach((t) => t.classList.toggle('on', !!settings[t.dataset.k]));
   $('#sWait').querySelectorAll('button').forEach((b) => b.classList.toggle('on', +b.dataset.v === settings.askTimeout));
   $('#sListen').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === (settings.listen || 'phone')));
+  $('#sBudget').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === (settings.budget || 'light')));
   $('#sTheme').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === (settings.theme || 'system')));
   const raw = memory?.raw || {}, p = memory?.pet || pet;
   const days = p.born ? Math.max(0, Math.floor((Date.now() - p.born) / 864e5)) : 0;
@@ -1019,6 +1020,9 @@ function renderLife() {
     return `<div class="bar"><span>${l}${w.resets ? ' · ' + resets(w.resets) : ''}</span><div class="track"><i style="width:${w.pct}%${hot ? ';background:var(--red)' : ''}"></i></div><b>${w.pct}%</b></div>`; }).join('')
     : '<div class="bar"><span>shows once a terminal session runs</span></div>';
   $('#usageAge').textContent = usage?.ts ? `${Math.round((Date.now() - usage.ts) / 60000)} min ago` : '';
+  // What Lax spent by itself today (lib/budget.mjs), and why its own work waits, if it does.
+  $('#budget').innerHTML = budget ? `<div class="bar"><span>${esc(settings.name)}'s own work today${budget.paused ? ` · waits: ${esc(budget.paused)}` : ''}</span>`
+    + `<div class="track"><i style="width:${Math.min(100, Math.round(100 * budget.own / budget.cap))}%"></i></div><b>${budget.own}/${budget.cap}</b></div>` : '';
   const miles = memory?.milestones || [];
   $('#miles').innerHTML = (miles.slice(0, showAll.miles ? miles.length : FEW).map((m) => `<li>${new Date(m.ts).toLocaleDateString()} ${m.text.replace(/</g, '&lt;')}</li>`).join('') || '<li>…</li>') + moreRow('miles', miles.length);
 }
@@ -1060,6 +1064,7 @@ $('#sTraits').addEventListener('click', (e) => { const t = e.target.dataset.t; i
 $('#wipeKnows').addEventListener('click', (e) => e.currentTarget.classList.toggle('on')); // not a setting: only for this rebirth
 $('#sWait').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ askTimeout: +e.target.dataset.v }));
 $('#sListen').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ listen: e.target.dataset.v }));
+$('#sBudget').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ budget: e.target.dataset.v }));
 $('#sTheme').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ theme: e.target.dataset.v }));
 // Rebirth needs a 2-second hold so it can't happen by accident.
 { const btn = $('#rebirth'), fill = btn.querySelector('i'); let t0, raf;

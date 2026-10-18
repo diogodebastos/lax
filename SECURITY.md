@@ -47,6 +47,10 @@ vulnerability**).
   Looking (`ls`, `cat`, `git status`…) and small local steps you can undo (`npm test`, `git commit` in a repo) don't ask.
   Pushing, deleting, sending, `curl`, `ssh`, `osascript`, `sudo`, `launchctl` and anything outside your repos always ask
   (`lib/allow.mjs`).
+- **What it spends of your Claude plan by itself** (`lib/budget.mjs`): its own work (reflections, the weekly review,
+  drafting a wish, the nightly fix) is capped and pauses near your plan's limits: "light" by default (8 runs a day,
+  paused at 50% of the 5-hour limit or 70% of the week), "normal" in the Life menu (24 runs, 75% / 85%). The jobs you
+  scheduled pause at 90% / 95% and say so. What you ask for yourself never waits.
 - **The development-channel warning:** talking into a live session needs Claude Code's research-preview channels, which
   `lax` starts with `--dangerously-load-development-channels`. Lax answers that warning for you only after you've answered
   it yourself once (`~/.lax/consent.json`; delete it to be asked again).

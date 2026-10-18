@@ -36,6 +36,7 @@ import { recall } from './lib/recall.mjs';
 import * as whisper from './lib/whisper.mjs';
 import { createPublicMind, placesOf, lastCommitFiles, filesIn } from './lib/public-mind.mjs';
 import { startRelay } from './lib/relay.mjs';
+import { createBudget, LEVELS } from './lib/budget.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const PORT = Number(process.env.LAX_PORT || 7777);
@@ -83,6 +84,7 @@ if (!kvGet('newPath', false)) { if (kvGet('pet', null)) milestone(`${readSetting
 // Life menu settings — live on the Mac, edited from the phone.
 const DEFAULTS = { name: DEFAULT_COMPANION_NAME, voice: true, pitch: 1.6, speakDone: false, captions: false,
   phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system', learns: true, listen: 'phone',
+  budget: 'light', // what Lax may spend of your plan by itself (lib/budget.mjs): light or normal
   speciesPick: false, speciesOverride: null, // while the species bars get tuned: pick one by hand
   publicProjects: ['lax'], // the projects whose names its mind on the website may show (the others show unnamed)
   publicRoles: ['researcher'], // the same for its roles (lib/roles.mjs): a role like a doctor's says more about you
@@ -105,6 +107,7 @@ function updateSettings(b) {
   if ([15, 30, 60, 120].includes(b.askTimeout)) clean.askTimeout = b.askTimeout;
   if (['system', 'light', 'dark'].includes(b.theme)) clean.theme = b.theme;
   if (['phone', 'en-US', 'pt-PT'].includes(b.listen)) clean.listen = b.listen;
+  if (Object.hasOwn(LEVELS, b.budget)) clean.budget = b.budget;
   if (Array.isArray(b.hideTraits)) clean.hideTraits = [...new Set(b.hideTraits.filter((t) => typeof t === 'string' && /^[a-z]{1,16}$/.test(t)))];
   const renamed = clean.name && clean.name !== settings.name;
   settings = { ...settings, ...clean }; writeSettings(settings);
@@ -369,7 +372,7 @@ function sessionList() {
   const cutoff = Date.now() - SESSION_QUIET;
   return [...sessions.entries()].filter(([id, s]) => (s.pid || s.ts > cutoff) && !laxOwn(id)).map(([id, s]) => ({ id, ...s }));
 }
-const stateMsg = () => ({ pet: petView(), sessions: sessionList(), voiceBusy: !!voiceRun, thinking: !!channelWait, settings,
+const stateMsg = () => ({ pet: petView(), sessions: sessionList(), voiceBusy: !!voiceRun, thinking: !!channelWait, settings, budget: budget.view(),
   channels: channelList(), voiceTarget, usage, vocab: vocabNow(), whisper: whisper.running() });
 // What the phone listens for and fixes (lib/vocab.mjs): the names your words may contain, and misheard → meant.
 function vocabNow() {
@@ -384,6 +387,8 @@ function learnHeard(heard, meant, from) {
 }
 // Your Claude plan usage, as the last terminal's status line saw it (hooks/lax-status.mjs). Kept across restarts.
 let usage = kvGet('usage', null);
+// What Lax may spend of your plan by itself (lib/budget.mjs): every background run asks it first.
+const budget = createBudget({ usage: () => usage, settings: () => settings });
 function setUsage(rl) {
   const u = readUsage(rl); if (!u) return false;
   const changed = JSON.stringify(u) !== JSON.stringify({ five_hour: usage?.five_hour, seven_day: usage?.seven_day });
@@ -740,7 +745,7 @@ let recalling = 0;
 const voiceState = { listening: 0, speaking: 0 };
 const doing = () => ({ hearing: Date.now() < voiceState.listening, speaking: Date.now() < voiceState.speaking, reflecting: brain.busy(), recalling: recalling > 0 });
 const working = () => sessionList().some((s) => s.status === 'working') || !!voiceRun || !!channelWait || Object.values(doing()).some(Boolean);
-const brain = createBrain({ db, settings: () => settings, feed, mind: mindEvent, diary: (t) => diary(t), broadcast, gainXp: (n) => { gainXp(n); save(); pushState(); },
+const brain = createBrain({ db, budget, settings: () => settings, feed, mind: mindEvent, diary: (t) => diary(t), broadcast, gainXp: (n) => { gainXp(n); save(); pushState(); },
   sessionInfo: (sid) => sessions.get(sid), skip: laxOwn, claude: process.env.LAX_CLAUDE,
   wish: (w) => learn.gap({ ...w, project: 'mind', via: 'review' }), // a fix its weekly review says needs code
   milestone: (t) => { milestone(t); pushState(); }, skill: (k) => skills.drafted(k), skills: () => skills.list(), role: (k) => roles.drafted(k), roles: () => roles.list(),
@@ -756,13 +761,13 @@ const record = (kind, text) => logEvent('', 'mind', 'learning', `${kind}: ${shor
 // A quiet moment to offer one: the phone is there, nothing is waiting on you, and no session is busy.
 const quiet = () => clients.size > 0 && !voiceRun && !channelWait && !laxOnMac && pending.size === 0
   && ![...sessions.values()].some((s) => s.status === 'working' && Date.now() - s.ts < 120e3);
-const learn = createLearn({ settings: () => settings, feed, diary: (t) => diary(t), broadcast, pending, quiet,
+const learn = createLearn({ budget, settings: () => settings, feed, diary: (t) => diary(t), broadcast, pending, quiet,
   gainXp: (n) => { gainXp(n); save(); pushState(); }, body: process.env.LAX_BODY || ROOT, claude: process.env.LAX_CLAUDE,
   say: (text, kind = 'reply') => broadcast('bubble', { id: 'learn' + Date.now(), kind, text, speak: true }),
   record: (kind, text) => record(kind, text),
   log: (...a) => console.log('[learn]', ...a) });
 // ---------- what it notices by itself: friction, and one fix a night, told in the morning (lib/improve.mjs) ----------
-const improve = createImprove({ settings: () => settings, feed, learn, body: process.env.LAX_BODY || ROOT, claude: process.env.LAX_CLAUDE,
+const improve = createImprove({ budget, settings: () => settings, feed, learn, body: process.env.LAX_BODY || ROOT, claude: process.env.LAX_CLAUDE,
   log: (...a) => console.log('[improve]', ...a) });
 // ---------- know-how: workflows you repeat become skills, installed on your yes (lib/skills.mjs) ----------
 const skills = createSkills({ settings: () => settings, feed, mind: mindEvent, diary: (t) => diary(t), broadcast, pending, quiet,
@@ -781,7 +786,7 @@ const roles = createRoles({ settings: () => settings, feed, mind: mindEvent, dia
   say: (text, kind = 'reply') => broadcast('bubble', { id: 'role' + Date.now(), kind, text, speak: true }),
   log: (...a) => console.log('[roles]', ...a) });
 // ---------- jobs you scheduled: confirmed on the phone, run unattended on the Mac (lib/schedule.mjs) ----------
-const schedule = createSchedule({ settings: () => settings, feed, diary: (t) => diary(t), broadcast, pending, workdir: DEFAULT_WORKDIR,
+const schedule = createSchedule({ budget, settings: () => settings, feed, diary: (t) => diary(t), broadcast, pending, workdir: DEFAULT_WORKDIR,
   say: (text, kind = 'reply') => broadcast('bubble', { id: 'sched' + Date.now(), kind, text, speak: true }),
   brief: (project) => brief(project, settings.name, roles.active()), spoken: (t) => spoken(t), claude: process.env.LAX_CLAUDE,
   log: (...a) => console.log('[schedule]', ...a) });

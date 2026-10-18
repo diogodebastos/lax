@@ -12,7 +12,7 @@ digi-lax is the app; Lax is the companion it hatches. Yours is born fresh the da
 - **It grows:** it starts as an egg and hatches into a species read from how you work, then changes through its stages. Rules, not a model (`lib/species.mjs`).
 - **It improves itself:** when it can't do something, it offers to learn it; overnight it fixes its own friction. Always on a branch, always tested, and nothing reaches `main` without your yes.
 
-No API credits: every time Lax thinks, it runs `claude -p` with your own Claude Code login. No agent framework, no vector database: Claude Code already is the agent loop (tools, permissions, resume, MCP, skills, hooks), and Lax gives each run a prompt, a folder, a time limit and a fence (`hooks/lax-hook.mjs` allows or denies each tool call).
+No API credits: every time Lax thinks, it runs `claude -p` with your own Claude Code login. What it does by itself (reflecting, drafting, its nightly fix) spends your plan too, so it's capped: a few runs a day, paused near your plan's limits (Life menu → its own work: light or normal). No agent framework, no vector database: Claude Code already is the agent loop (tools, permissions, resume, MCP, skills, hooks), and Lax gives each run a prompt, a folder, a time limit and a fence (`hooks/lax-hook.mjs` allows or denies each tool call).
 
 ## Get started
 

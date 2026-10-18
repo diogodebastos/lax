@@ -143,5 +143,25 @@ check('"run it now" → the answer spoken on the phone', /^Brief you on open PRs
 check('…and in Lax\'s tab, in full', phone.slice(from).some((e) => e.ev === 'feed' && e.d.answer && /#32 is a draft/.test(e.d.text)));
 await c.close();
 
+// ---------- the budget (lib/budget.mjs): a job at its time asks it; "run it now" doesn't ----------
+{
+  let clock = MON; const out = [], pending = new Map(), spent = []; let wait = 'your 5-hour limit is at 93%';
+  const budget = { may: (k) => (wait ? { ok: false, why: wait } : { ok: true }), spent: (k) => spent.push(k) };
+  const s = createSchedule({ budget, settings: () => ({ name: 'Lax' }), feed: (line) => out.push({ line }), diary: () => {}, broadcast: (type, d) => out.push({ type, d }),
+    pending, say: () => {}, brief: () => '', spoken: (t) => t.split('. ')[0] + '.', claude: FAKE, workdir: HOME, now: () => clock });
+  s.tool({ title: 'Morning brief', when: { time: '08:00', days: 'weekdays' }, prompt: 'Brief me.', cwd: PROJ }); s.hears('yes');
+  const before = runsLog().length;
+  clock = at('2026-10-13T08:00:10'); s.tick(); await sleep(400);
+  const said = out.find((o) => o.type === 'bubble' && /^I skipped Morning brief/.test(o.d.text || ''));
+  check('near your limit, a job at its time is skipped, and says so aloud', runsLog().length === before && said?.d.speak
+    && said.d.text === 'I skipped Morning brief: your 5-hour limit is at 93%. Say "run it now" to run it anyway.', said?.d.text);
+  check('…not tried again until its next time', s.jobs().find((j) => j.title === 'Morning brief').next === at('2026-10-14T08:00') && !spent.length);
+  s.tool({ action: 'run', id: s.jobs().find((j) => j.title === 'Morning brief').id });
+  await until(() => runsLog().length > before);
+  check('"run it now" is you asking: it runs, and isn\'t counted', runsLog().length === before + 1 && !spent.length);
+  wait = ''; clock = at('2026-10-14T08:00:10'); s.tick(); await until(() => runsLog().length > before + 1);
+  check('room again → it runs at its time, counted as a job', runsLog().length === before + 2 && spent.join() === 'job');
+}
+
 console.log(failed ? `\n${failed} check(s) failed` : '\nall good');
 process.exit(failed ? 1 : 0);
