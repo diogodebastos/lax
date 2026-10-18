@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { LOGS, readToken } from '../lib/paths.mjs';
+import { ownsOrigin } from '../lib/upstream.mjs';
 
 const [BODY, PREV, WISH] = process.argv.slice(2);
 const LAX = process.env.LAX_URL || `http://127.0.0.1:${process.env.LAX_PORT || 7777}`;
@@ -36,8 +37,8 @@ const tell = (body) => fetch(`${LAX}/api/learn/merged`, { method: 'POST', header
 
 await sleep(1500); // let Lax say "merging…" first
 if (await restart()) {
-  let pushed = true;
-  try { git('push', 'origin', 'main'); } catch (e) { pushed = false; log(`push failed: ${String(e.stderr || e.message).trim().slice(0, 300)}`); }
+  let pushed = await ownsOrigin(BODY); // only to their own repo (lib/upstream.mjs); a clone of the project keeps main on the Mac
+  if (pushed) try { git('push', 'origin', 'main'); } catch (e) { pushed = false; log(`push failed: ${String(e.stderr || e.message).trim().slice(0, 300)}`); }
   log(`healthy${pushed ? ', pushed' : ', not pushed'}`);
   await tell({ ok: true, pushed });
 } else {

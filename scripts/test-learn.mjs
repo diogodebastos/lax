@@ -23,7 +23,7 @@ fs.mkdirSync(PROJ);
 write(path.join(BODY, 'package.json'), JSON.stringify({ name: 'body', type: 'module', scripts: { test: 'node scripts/test-ok.mjs' } }, null, 2) + '\n');
 write(path.join(BODY, 'scripts', 'test-ok.mjs'), 'console.log("ok");\n');
 write(path.join(BODY, 'lib', 'auth.mjs'), 'export const TOKEN = 1;\n');
-write(path.join(BODY, 'scripts', 'after-merge.mjs'), fs.readFileSync(path.join(ROOT, 'scripts', 'after-merge.mjs'), 'utf8').replace("'../lib/paths.mjs'", JSON.stringify(path.join(ROOT, 'lib', 'paths.mjs'))));
+write(path.join(BODY, 'scripts', 'after-merge.mjs'), fs.readFileSync(path.join(ROOT, 'scripts', 'after-merge.mjs'), 'utf8').replace("'../lib/paths.mjs'", JSON.stringify(path.join(ROOT, 'lib', 'paths.mjs'))).replace("'../lib/upstream.mjs'", JSON.stringify(path.join(ROOT, 'lib', 'upstream.mjs'))));
 execFileSync('git', ['init', '-q', '--bare', '-b', 'main', ORIGIN]);
 sh(HOME, 'init', '-q', '-b', 'main', BODY); sh(BODY, 'add', '-A'); sh(BODY, 'commit', '-qm', 'body'); sh(BODY, 'remote', 'add', 'origin', ORIGIN); sh(BODY, 'push', '-q', 'origin', 'main');
 
@@ -33,6 +33,7 @@ write(GH, `#!${process.execPath}
 import fs from 'node:fs';
 fs.appendFileSync(${JSON.stringify(path.join(HOME, 'gh.log'))}, JSON.stringify(process.argv.slice(2)) + '\\n');
 const [a, b] = process.argv.slice(2);
+if (a === 'repo' && b === 'view') console.log(process.env.FAKE_GH_PERM || 'WRITE');
 if (a === 'issue' && b === 'create') console.log('https://github.com/me/lax/issues/42');
 if (a === 'pr' && b === 'create') console.log('https://github.com/me/lax/pull/43');
 `, 0o755);
@@ -170,9 +171,14 @@ check('not healthy after the restart → main is put back', sh(BODY, 'rev-parse'
 check('…and nothing was pushed to main', sh(ORIGIN, 'rev-parse', 'main') === before);
 check('…and it says so in its log', /rolled back/.test(fs.readFileSync(path.join(HOME, 'logs', 'merge.log'), 'utf8')));
 
-// after-merge on its own: a healthy restart pushes main and tells Lax.
+// after-merge on its own: a healthy restart pushes main (to their own repo only) and tells Lax.
 {
   sh(BODY, 'commit', '-q', '--allow-empty', '-m', 'merged thing');
+  const told0 = [], lax0 = http.createServer((req, res) => { let b = ''; req.on('data', (d) => (b += d)); req.on('end', () => {
+    if (req.url === '/api/learn/merged') told0.push(JSON.parse(b)); res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ ok: true, started: Date.now() })); }); }).listen(7796);
+  await new Promise((r) => spawn(process.execPath, [path.join(BODY, 'scripts', 'after-merge.mjs'), BODY, before, 'w1'], { env: { ...ENV, LAX_URL: 'http://127.0.0.1:7796', FAKE_GH_PERM: 'READ' }, stdio: 'ignore' }).on('close', r));
+  lax0.close();
+  check('a clone of someone else\'s repo: healthy, but main is never pushed there', sh(ORIGIN, 'rev-parse', 'main') !== sh(BODY, 'rev-parse', 'main') && told0[0]?.ok === true && told0[0]?.pushed === false, JSON.stringify(told0));
   const told = [];
   const fakeLax = http.createServer((req, res) => {
     let b = ''; req.on('data', (d) => (b += d)); req.on('end', () => {
@@ -187,6 +193,18 @@ check('…and it says so in its log', /rolled back/.test(fs.readFileSync(path.jo
 }
 const merged = await post('/api/learn/merged', { id: wish('Timers').id, ok: true });
 check('"merged and healthy" → the wish is learned', merged.ok && wish('Timers').status === 'merged');
+
+// Whose origin (lib/upstream.mjs): gh's permission decides; no gh, or an error, is never "theirs".
+{
+  const { ownsOrigin } = await import(path.join(ROOT, 'lib', 'upstream.mjs'));
+  const dir = (n) => { const d = path.join(HOME, 'origins', n); fs.mkdirSync(d, { recursive: true }); return d; };
+  const fakeGh = (perm) => { const f = path.join(HOME, `gh-${perm || 'fail'}.sh`); write(f, perm ? `#!/bin/sh\necho ${perm}\n` : '#!/bin/sh\nexit 1\n', 0o755); return f; };
+  const g = { ...process.env }; delete process.env.LAX_GITHUB;
+  check('origin they can push to → GitHub', await ownsOrigin(dir('a'), fakeGh('WRITE')) && await ownsOrigin(dir('b'), fakeGh('ADMIN')));
+  check('the project they cloned (read only) → the Mac only', !(await ownsOrigin(dir('c'), fakeGh('READ'))));
+  check('no gh, or gh fails → the Mac only', !(await ownsOrigin(dir('d'), fakeGh(''))) && !(await ownsOrigin(dir('e'), '/nonexistent/gh')));
+  process.env = g;
+}
 
 // The guardrails, on branches.
 process.env.LAX_HOME = HOME; const { checkBranch, offLimits, packageOk, refuses } = await import('../lib/guard.mjs');
