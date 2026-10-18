@@ -222,7 +222,7 @@ Not "Diogo's Lax, published": anyone can have their own. The first version is Di
 - **Honest about what's dangerous:** setup explains the development-channel warning and asks once instead of the wrapper accepting it silently; Lax keeps working on hooks alone if channels change. The nightly self-fix and the guardrails get their own tests and a SECURITY section. Background runs (reflections, jobs, nightly) have a usage budget with conservative defaults, since they spend the person's Claude plan.
 - A README for newcomers with the honest privacy note; MIT license, CONTRIBUTING, SECURITY; `npm run doctor`; token rotation; macOS only, said plainly.
 - **History kept, checked:** the commits are the proof of "it rewrote itself", so they stay; audited for anything private first, noreply email from now on.
-- **Easter eggs as hints:** the level 50 colour forms (and the other nods to familiar faces) become subtle references, not recognisable copies.
+- **Easter eggs:** the forms stay as they are, inspired by familiar faces rather than copies of them (decided 2026-10-18). A redraw with only nods waits on the `forms-as-nods` branch, in case it's ever needed.
 - Test: a fresh macOS account gets its own working Lax from the README alone, on the Mac, then on a phone over the relay; then a friend does it without Diogo in the room.
 
 ### Phase 10: viral release [diogodebastos/lax#9](https://github.com/diogodebastos/lax/issues/9)
