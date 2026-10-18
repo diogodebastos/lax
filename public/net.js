@@ -9,10 +9,12 @@
     hearing: { at: [-12, 10, 10], color: '#7fd3ff', label: 'hearing' },
     speech: { at: [12, 10, -10], color: '#ffd25a', label: 'speech' },
     you: { at: [-16, -3, -8], label: 'you' },
-    memory: { at: [0, -12, 5], color: '#c9a86a', label: 'memory' },
+    memory: { at: [0, -12, 5], color: '#c9a86a', label: 'long-term memory' },
     learning: { at: [15, -5, 9], color: '#6fd36f', label: 'learning' },
     skills: { at: [20, 3, -14], color: '#b58ad9', label: 'skills' },
     archive: { at: [-6, -19, 14], color: '#8a8378', label: 'archive' },
+    dreams: { at: [14, -20, -6], color: '#7b86e0', label: 'dreams' }, // going over a session on its own, into memories
+    wishes: { at: [-25, -15, -16], color: '#ff8fb1', label: 'wishes' }, // what it can't do yet and would learn
   };
   // The projects: one orb that says "projects", and each project a small unnamed satellite around it.
   const HUB = [-26, 9, -16];
@@ -20,15 +22,16 @@
   // Its roles (who it has become from the work it does: your researcher first), across from the projects.
   const ROLE = [[27, 16, 12], [28, -14, -2], [8, 23, 16], [30, 2, 22]];
   const LINKS = [['core', 'hearing'], ['core', 'speech'], ['core', 'you'], ['core', 'memory'], ['core', 'learning'], ['memory', 'you'],
-    ['memory', 'learning'], ['learning', 'skills'], ['memory', 'archive'], ['learning', 'you']];
+    ['memory', 'learning'], ['learning', 'skills'], ['memory', 'archive'], ['learning', 'you'], ['dreams', 'memory'], ['dreams', 'learning'],
+    ['core', 'wishes'], ['wishes', 'learning']];
   // Where each event goes, along the links: from one node to each of the others. An event that says where it went (to:
   // a recall's sources, what a change touched) goes there instead.
-  const ROUTES = { recall: ['core', 'memory'], reflect: ['memory', 'learning'], episode: ['core', 'memory'], skill: ['learning', 'skills'],
+  const ROUTES = { recall: ['core', 'memory'], reflect: ['dreams', 'memory'], episode: ['core', 'memory'], skill: ['learning', 'skills'],
     install: ['skills', 'core'], forget: ['core', 'memory'], learned: ['core', 'you'], review: ['memory', 'learning'], rules: ['memory', 'learning'],
     hear: ['hearing', 'core'], speak: ['core', 'speech'] };
   // What it's doing for as long as it lasts (the snapshot's doing): pulses keep running on these links meanwhile.
   const DOING = { hearing: { every: 450, links: [['hearing', 'core']] }, speaking: { every: 450, links: [['core', 'speech']] },
-    reflecting: { every: 900, links: [['memory', 'learning'], ['learning', 'you']] }, recalling: { every: 700, links: [['core', 'memory']] } };
+    reflecting: { every: 900, links: [['dreams', 'memory'], ['dreams', 'learning']] }, recalling: { every: 700, links: [['core', 'memory']] } };
 
   let renderer, scene, cam, amb, sun, world, net, lax, zzz, zzzCtx, ring, floor, bubble, beam;
   const nodes = {}, lines = {}, pulses = [], hot = {}, texs = new WeakMap();
@@ -94,10 +97,11 @@
   // This week: times you talked to it (hearing), it answered aloud (speech), its mind changed (learning).
   const counts = (s) => ({ hearing: s.week?.heard || 0, speech: s.week?.spoke || 0, learning: s.week?.changes || 0 });
   function build(s) {
-    const now = JSON.stringify([s.you, s.episodes.total, s.archive, s.skills, s.projects.map((p) => p.notes), s.sessions, s.week, s.look?.color, s.roles]); if (now === sig) return; sig = now;
+    const now = JSON.stringify([s.you, s.episodes.total, s.archive, s.skills, s.projects.map((p) => p.notes), s.sessions, s.week, s.look?.color, s.roles, s.wishes]); if (now === sig) return; sig = now;
     net.clear(); for (const k in nodes) delete nodes[k]; for (const k in lines) delete lines[k];
     const color = s.look?.color || '#D97757', n = {
-      ...counts(s), you: s.you, memory: s.episodes.total, skills: s.skills.installed + s.skills.drafts, archive: s.archive };
+      ...counts(s), you: s.you, memory: s.episodes.total, skills: s.skills.installed + s.skills.drafts, archive: s.archive,
+      dreams: s.week?.dreams || 0, wishes: s.wishes || 0 };
     // Every orb's size and specks come from its own number: nothing is drawn bigger than what it holds.
     for (const [k, d] of Object.entries(NODES)) orb(k, d.at, d.color || color, sizeOf(n[k]), specks(n[k]));
     orb('projects', HUB, '#6fd36f', sizeOf(s.projects.length * 8), 0);
@@ -257,10 +261,11 @@
     const sessions = (s.sessions || []).length, working = (s.sessions || []).filter((x) => x.state === 'working').length;
     const list = [
       { ...place('hearing'), text: 'hearing', n: counts(s).hearing, hot: hot.hearing > t }, { ...place('speech'), text: 'speech', n: counts(s).speech, hot: hot.speech > t },
-      { ...place('you'), text: s.owner || 'you', n: s.you, hot: hot.you > t }, { ...place('memory'), text: 'memory', n: s.episodes.total, hot: hot.memory > t },
+      { ...place('you'), text: s.owner || 'you', n: s.you, hot: hot.you > t }, { ...place('memory'), text: 'long-term memory', n: s.episodes.total, hot: hot.memory > t },
       { ...place('learning'), text: 'learning', n: counts(s).learning, hot: hot.learning > t },
       { ...place('skills'), text: 'skills', n: s.skills.installed + (s.skills.drafts ? `+${s.skills.drafts}` : ''), hot: hot.skills > t },
       { ...place('archive'), text: 'archive', n: s.archive, hot: hot.archive > t },
+      { ...place('dreams'), text: 'dreams', n: s.week?.dreams || 0, hot: hot.dreams > t }, { ...place('wishes'), text: 'wishes', n: s.wishes || 0, hot: hot.wishes > t },
       { ...place('projects'), text: 'projects', n: s.projects.length, hot: hot.projects > t },
       ...(s.roles || []).slice(0, 4).map((r, i) => ({ ...place('r' + i), text: r.name || 'role', n: r.work, hot: hot['r' + i] > t })),
       ...(sessions ? [{ ...place('s0', 8), text: 'sessions', n: working ? `${working}/${sessions}` : sessions, hot: hot.core > t }] : []),

@@ -108,8 +108,8 @@
     Mind.setSnap({ v: 1, seen: qs.has('asleep') ? now - day : now, owner: 'alex', look: { color: qs.get('color') || '#d97757', stage: 'blob' },
       you: 9, projects: [{ name: 'lax', notes: 24 }, { name: '', notes: 11 }, { name: '', notes: 6 }, { name: '', notes: 3 }],
       episodes: { total: 14, week: 3 }, archive: 400, skills: { drafts: 1, installed: 2 },
-      rules: { learning: now - 2 * day, wishing: now - 9 * day, remembering: now - 1 * day }, week: { heard: 23, spoke: 19, changes: 31 }, doing: {},
-      sessions: [{ p: 0, state: 'working' }, { p: 1, state: 'idle' }, { p: null, state: 'working' }], roles: [{ name: 'researcher', work: 3, week: 2, p: [1] }] });
+      rules: { learning: now - 2 * day, wishing: now - 9 * day, remembering: now - 1 * day }, week: { heard: 23, spoke: 19, changes: 31, dreams: 4 }, doing: {},
+      sessions: [{ p: 0, state: 'working' }, { p: 1, state: 'idle' }, { p: null, state: 'working' }], roles: [{ name: 'researcher', work: 3, week: 2, p: [1] }], wishes: 3 });
     if (qs.has('asleep')) return;
     const kinds = ['tool', 'hear', 'speak', 'track', 'tool', 'recall', 'reflect', 'episode', 'practice', 'skill', 'forget', 'learned', 'work', 'review'];
     let i = 0;
@@ -121,7 +121,7 @@
       if (lasts) { s.doing[lasts] = true; setTimeout(() => { s.doing[lasts] = false; }, 3000); }
       if (kind === 'tool') { e.session = 0; e.n = 4; }
       if (['track', 'practice', 'work'].includes(kind)) { e.role = 0; if (kind === 'work') { e.project = 1; s.roles[0].work++; s.roles[0].week++; } }
-      if (kind === 'hear') s.week.heard++; if (kind === 'speak') s.week.spoke++; if (['episode', 'learned', 'review', 'forget'].includes(kind)) s.week.changes++;
+      if (kind === 'reflect') s.week.dreams++; if (kind === 'hear') s.week.heard++; if (kind === 'speak') s.week.spoke++; if (['episode', 'learned', 'review', 'forget'].includes(kind)) s.week.changes++;
       if (kind === 'forget') s.episodes.total = Math.max(0, s.episodes.total - 1);
       if (kind === 'learned') s.you++;
       if (kind === 'review') s.rules.learning = Date.now();

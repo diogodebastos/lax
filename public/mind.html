@@ -32,7 +32,19 @@
   #labels span b { color:var(--dim); font-weight:400; }
   #labels span.hot { color:var(--coral); }
   .note { color:var(--dim); font-size:18px; text-align:center; max-width:560px; line-height:1.1; }
-  .note a { color:var(--fg); text-decoration:none; } .note a:hover { text-decoration:underline; }
+  .note a, .note button { color:var(--fg); text-decoration:none; } .note a:hover, .note button:hover { text-decoration:underline; }
+  .note button { pointer-events:auto; font:inherit; background:none; border:0; padding:0; cursor:pointer; text-shadow:inherit; }
+  /* What each part is: a short key, opened from the footer. */
+  dialog { background:var(--bg); color:var(--fg); border:2px solid var(--coral); box-shadow:4px 4px 0 #000; padding:16px 18px; max-width:min(440px, calc(100vw - 32px));
+    font-family:'VT323',ui-monospace,monospace; font-size:19px; line-height:1.15; }
+  dialog { margin:auto; } dialog:focus { outline:none; }
+  dialog::backdrop { background:rgba(0,0,0,.6); }
+  dialog h2 { color:var(--coral); font-weight:400; font-size:26px; margin-bottom:8px; }
+  dialog dl { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; }
+  dialog dt { color:var(--fg); } dialog dd { color:var(--dim); }
+  dialog p { color:var(--dim); margin-top:10px; }
+  dialog button { margin-top:12px; font:inherit; color:var(--bg); background:var(--coral); border:0; padding:2px 12px; cursor:pointer; }
+  button:focus-visible { outline:2px solid var(--fg); outline-offset:2px; }
 </style>
 </head>
 <body>
@@ -41,10 +53,34 @@
   <p class="sub" id="sub">What Lax keeps, live. Only the shape: never what's in it.</p>
 </header>
 <div id="view"><div id="stage"><canvas id="c"></canvas><div id="labels"></div></div></div>
-<p class="note"><a href="../demo">meet Lax</a> · <a href="https://github.com/diogodebastos/lax">github</a></p>
+<p class="note"><a href="../demo">meet Lax</a> · <button type="button" id="keyOpen">what's this?</button> · <a href="https://github.com/diogodebastos/lax">github</a></p>
+<dialog id="key">
+  <h2>What you're looking at</h2>
+  <dl>
+    <dt>Lax</dt><dd>sits in the middle while it works</dd>
+    <dt>hearing</dt><dd>times you talked to it this week</dd>
+    <dt>speech</dt><dd>times it answered out loud this week</dd>
+    <dt>you</dt><dd>things it knows about you</dd>
+    <dt>long-term memory</dt><dd>moments it kept from past work</dd>
+    <dt>archive</dt><dd>full records of past sessions</dd>
+    <dt>dreams</dt><dd>times it went over a session on its own this week</dd>
+    <dt>learning</dt><dd>times its mind changed this week</dd>
+    <dt>skills</dt><dd>ways of working it wrote down (+ drafts)</dd>
+    <dt>wishes</dt><dd>things it can't do yet and wants to learn</dd>
+    <dt>projects</dt><dd>projects it knows; each small orb is one</dd>
+    <dt>roles</dt><dd>kinds of work it does for you</dd>
+    <dt>sessions</dt><dd>Claude Code sessions open now</dd>
+  </dl>
+  <p>Lines connect the parts; a flash is something moving. Only counts: never what's inside.</p>
+  <form method="dialog"><button>Got it</button></form>
+</dialog>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="mind-view.js"></script>
 <script src="net.js"></script>
-<script>Mind.start();</script>
+<script>Mind.start();
+  const key = document.getElementById('key');
+  document.getElementById('keyOpen').addEventListener('click', () => key.showModal());
+  key.addEventListener('click', (e) => { if (e.target === key) key.close(); });
+  if (location.hash === '#key') key.showModal(); // a link straight to the key</script>
 </body>
 </html>
