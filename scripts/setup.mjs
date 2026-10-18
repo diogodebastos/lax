@@ -2,7 +2,7 @@
 // clone that sets Lax up with you, step by step (scripts/setup.md is what it's told). The steps are here, each one safe
 // to run again:
 //   node scripts/setup.mjs status         what's done, what's left (--json for the conversation)
-//   node scripts/setup.mjs <step>         deps, workdir [<folder>], hooks, channel, service, whisper, relay, pair
+//   node scripts/setup.mjs <step>         deps, workdir [<folder>], hooks, channel, service, whisper, relay, android, pair
 //   node scripts/setup.mjs --all          every step but whisper, in order, without the conversation
 //   node scripts/setup.mjs doctor [--fix] npm run doctor: is it all working? (--fix: secrets' permissions)
 import fs from 'node:fs';
@@ -11,6 +11,7 @@ import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { HOME, MIND, SECRETS, secret, readEnv, readToken, ensureDirs } from '../lib/paths.mjs';
 import { BIN as WHISPER, MODEL as WHISPER_MODEL } from '../lib/whisper.mjs';
+import { SDK, jdkHome } from './android-tools.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const PORT = Number(process.env.LAX_PORT || 7777), LAX = `http://127.0.0.1:${PORT}`;
@@ -53,6 +54,7 @@ async function status() {
     service: { ok: read(path.join(AGENTS, `${SERVICE}.plist`)).includes(ROOT) && await healthy(1500), detail: 'Lax runs in the background, from login' },
     home: { ok: fs.existsSync(path.join(MIND, 'CLAUDE.md')), detail: HOME },
     whisper: { ok: fs.existsSync(WHISPER) && fs.existsSync(WHISPER_MODEL), detail: 'optional: better hearing, on the Mac (~600 MB)' },
+    android: { ok: !!jdkHome() && fs.existsSync(path.join(SDK, 'platform-tools')), detail: 'optional: what building the Android app needs (~1 GB, no Homebrew)' },
     relay: { ok: !!relayUrl && !!read(secret('relay-key')), detail: relayUrl || 'the phone reaches Lax through your own Worker (a free Cloudflare account)' },
     phone: { ok: !!env.LAX_PUBLIC_URL, detail: env.LAX_PUBLIC_URL ? `pairs through ${env.LAX_PUBLIC_URL}` : 'on this Mac only, at localhost' },
   };
@@ -103,6 +105,7 @@ const STEPS = {
     say(await healthy() ? `service: Lax is awake on ${LAX}` : 'service: Lax did not answer yet; see ~/.lax/logs/server.log');
   },
   whisper() { node('whisper.mjs'); if (restart()) say('whisper: Lax restarted to use it'); },
+  android(...a) { node('android-tools.mjs', ...a); }, // --accept-licenses: Google's SDK licenses, once you've said yes
   async relay() {
     // Logged in to Cloudflare (a browser window, once), the Worker deployed on workers.dev, its key on both ends.
     let who = ''; try { who = wrangler(['whoami']); } catch (e) { who = String(e.stdout || ''); }

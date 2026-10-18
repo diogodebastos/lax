@@ -11,16 +11,13 @@ It's Kotlin with framework APIs only (no androidx, no third-party libraries). mi
 
 ## Tooling (Mac, once)
 
-Homebrew compiles `openjdk@17` from source on Intel Macs (an hour or more), so use prebuilt Temurin 17 instead. `npm run android` finds it in `~/.lax-tools`.
-
 ```bash
-mkdir -p ~/.lax-tools && cd ~/.lax-tools
-curl -L https://api.adoptium.net/v3/binary/latest/17/ga/mac/x64/jdk/hotspot/normal/eclipse | tar xz
-brew install --cask android-commandlinetools
-export JAVA_HOME=$(echo ~/.lax-tools/jdk-17*/Contents/Home) SDK=$(brew --prefix)/share/android-commandlinetools
-yes | sdkmanager --sdk_root=$SDK --licenses
-sdkmanager --sdk_root=$SDK "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+node scripts/setup.mjs android     # or: node scripts/android-tools.mjs
 ```
+
+It puts a prebuilt JDK 17 (Temurin) and Google's Android command-line tools, platform-tools (`adb`), the Android 34 platform and build tools into `~/.lax-tools`, with no Homebrew (which compiles `openjdk@17` from source on Intel Macs: an hour or more). About 1 GB, a minute or two; every download is checked against its published checksum. Google's Android SDK licenses are shown for you to accept (`--accept-licenses` says yes for you). The command-line tools are pinned to 19.0, the plain `sdkmanager`: from 23.0 it hands over to Google's new `android` CLI, which downloads itself into `~/.android` and sends usage metrics.
+
+`npm run android` uses these, else a Homebrew Android SDK (`brew install --cask android-commandlinetools`) and `JAVA_HOME`/`ANDROID_HOME` if you set them.
 
 The Gradle wrapper (`android/gradlew`) is checked in, so Gradle downloads itself.
 
