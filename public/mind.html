@@ -31,6 +31,7 @@
     text-shadow:0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000; }
   #labels span b { color:var(--dim); font-weight:400; }
   #labels span.hot { color:var(--coral); }
+  #labels span.dim { opacity:.35; } /* a label with nowhere free to go, behind the others */
   .note { color:var(--dim); font-size:18px; text-align:center; max-width:560px; line-height:1.1; }
   .note a, .note button { color:var(--fg); text-decoration:none; } .note a:hover, .note button:hover { text-decoration:underline; }
   .note button { pointer-events:auto; font:inherit; background:none; border:0; padding:0; cursor:pointer; text-shadow:inherit; }
@@ -43,6 +44,9 @@
   dialog dl { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; }
   dialog dt { color:var(--fg); } dialog dd { color:var(--dim); }
   dialog p { color:var(--dim); margin-top:10px; }
+  .switches { display:flex; gap:18px; flex-wrap:wrap; margin-top:10px; color:var(--fg); }
+  .switches label { display:flex; gap:6px; align-items:center; cursor:pointer; } .switches span { color:var(--dim); }
+  .switches input { accent-color:var(--coral); width:16px; height:16px; }
   dialog button { margin-top:12px; font:inherit; color:var(--bg); background:var(--coral); border:0; padding:2px 12px; cursor:pointer; }
   button:focus-visible { outline:2px solid var(--fg); outline-offset:2px; }
 </style>
@@ -72,6 +76,10 @@
     <dt>sessions</dt><dd>Claude Code sessions open now</dd>
   </dl>
   <p>Size and number: all time. Satellites: this week. Lines connect the parts; a flash is something moving. Only counts: never what's inside.</p>
+  <div class="switches">
+    <label><input type="checkbox" id="lookLabels" checked> labels</label>
+    <label><input type="checkbox" id="lookOrbits"> orbits <span>(a solar system)</span></label>
+  </div>
   <form method="dialog"><button>Got it</button></form>
 </dialog>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -81,6 +89,14 @@
   const key = document.getElementById('key');
   document.getElementById('keyOpen').addEventListener('click', () => key.showModal());
   key.addEventListener('click', (e) => { if (e.target === key) key.close(); });
-  if (location.hash === '#key') key.showModal(); // a link straight to the key</script>
+  if (location.hash === '#key') key.showModal(); // a link straight to the key
+  // The two switches: labels, and the solar system. Kept in this browser; net.js listens.
+  const look = { labels: true, orbits: false };
+  try { Object.assign(look, JSON.parse(localStorage.getItem('lax-mind-look') || '{}')); } catch {}
+  if (new URLSearchParams(location.search).has('orbits')) look.orbits = true;
+  const sw = { labels: document.getElementById('lookLabels'), orbits: document.getElementById('lookOrbits') };
+  for (const [k, el] of Object.entries(sw)) { el.checked = !!look[k]; el.addEventListener('change', () => { look[k] = el.checked;
+    try { localStorage.setItem('lax-mind-look', JSON.stringify(look)); } catch {}
+    window.dispatchEvent(new CustomEvent('mind:look', { detail: { ...look } })); }); }</script>
 </body>
 </html>

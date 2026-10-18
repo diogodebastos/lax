@@ -4,23 +4,101 @@
 // Drawn in three.js at a low resolution so it stays pixel art. Counts only (see mind-view.js).
 (() => {
   const T = window.THREE;
-  // Where each faculty sits around Lax (x right, y up, z towards you), its colour, and what it's connected to.
+  // Where things sit: on two spheres around Lax, an inner one for its faculties and an outer one for its work and the
+  // archive, like regions of a brain: senses above, memory below, learning to the right; projects with their sessions to
+  // the left, roles behind on the right, the archive deep below. Placed once (arrange): each orb settles near its region,
+  // and two closer than a spacing push apart (a wide one on the same sphere, a narrow one across, so the two spheres
+  // don't line up as seen from Lax). Always the same result.
+  function arrange({ IN = 16, OUT = 27, steps = 600 } = {}) {
+    // Where each would like to be: its region, spread sideways within it (so the two at a pole don't stack front to back).
+    const SEEK = { hearing: [-0.45, 0.85, 0.1], speech: [0.45, 0.85, -0.1], // senses, above
+      you: [-0.55, -0.8, 0.1], memory: [0.45, -0.8, 0.15], dreams: [0, -0.75, -0.6], // memory, below
+      learning: [0.95, 0.05, 0.05], skills: [0.7, -0.55, 0.35], wishes: [0.7, 0.55, -0.3], // learning, to the right
+      archive: [-0.6, -0.7, -0.3], projects: [-0.95, 0.15, 0.2], roles: [0.55, 0.55, -0.6] }; // outer: archive deep, projects left, roles behind right
+    const ITEMS = [...['hearing', 'speech', 'you', 'memory', 'dreams', 'learning', 'skills', 'wishes'].map((k) => [k, IN, k]),
+      ['archive', OUT, 'archive'], ['projects', OUT, 'projects', 1.6],
+      ...[0, 1, 2, 3, 4, 5].map((i) => ['s' + i, OUT, 'projects', 0.55]), ...[0, 1, 2, 3].map((i) => ['r' + i, OUT, 'roles'])];
+    const norm = (v) => { const l = Math.hypot(...v) || 1; return v.map((x) => x / l); };
+    const chord = (deg) => 2 * Math.sin(deg * Math.PI / 360);
+    const P = ITEMS.map(([k, r, g, size = 1], i) => ({ k, r, size, a: norm(SEEK[g]), v: norm(SEEK[g].map((x, d) => x + 0.25 * Math.sin(i * [2.4, 1.7, 0.9][d] + d))) }));
+    for (let s = 0; s < steps; s++) {
+      const step = 0.08 * (1 - s / steps) + 0.005;
+      const F = P.map((p) => {
+        let f = p.a.map((x, i) => (x - p.v[i]) * 0.15); // towards its region
+        for (const q of P) { if (q === p) continue;
+          const near = (p.r === q.r ? chord(p.r === IN ? 55 : 32) : chord(18)) * (p.size + q.size) / 2;
+          const d = p.v.map((x, i) => x - q.v[i]), dist = Math.hypot(...d) + 1e-6;
+          if (dist < near) f = f.map((x, i) => x + d[i] / dist * (near - dist) * 2); }
+        const dot = f.reduce((t, x, i) => t + x * p.v[i], 0);
+        return f.map((x, i) => x - dot * p.v[i]);
+      });
+      P.forEach((p, i) => { p.v = norm(p.v.map((x, d) => x + step * F[i][d])); });
+    }
+    return Object.fromEntries(P.map((p) => [p.k, p.v.map((x) => Math.round(x * p.r * 10) / 10)]));
+  }
+  const AT = arrange();
   const NODES = {
-    hearing: { at: [-12, 10, 10], color: '#7fd3ff', label: 'hearing' },
-    speech: { at: [12, 10, -10], color: '#ffd25a', label: 'speech' },
-    you: { at: [-17, -7, -8], label: 'you' },
-    memory: { at: [0, -12, 5], color: '#c9a86a', label: 'long-term memory' },
-    learning: { at: [15, -5, 9], color: '#6fd36f', label: 'learning' },
-    skills: { at: [20, 3, -14], color: '#b58ad9', label: 'skills' },
-    archive: { at: [-6, -19, 14], color: '#8a8378', label: 'archive' },
-    dreams: { at: [14, -20, -6], color: '#7b86e0', label: 'dreams' }, // going over a session on its own, into memories
-    wishes: { at: [-25, -15, -16], color: '#ff8fb1', label: 'wishes' }, // what it can't do yet and would learn
+    hearing: { at: AT.hearing, color: '#7fd3ff', label: 'hearing' },
+    speech: { at: AT.speech, color: '#ffd25a', label: 'speech' },
+    you: { at: AT.you, label: 'you' },
+    memory: { at: AT.memory, color: '#c9a86a', label: 'long-term memory' },
+    dreams: { at: AT.dreams, color: '#7b86e0', label: 'dreams' }, // going over a session on its own, into memories
+    archive: { at: AT.archive, color: '#8a8378', label: 'archive' }, // the full records, deeper down
+    learning: { at: AT.learning, color: '#6fd36f', label: 'learning' },
+    skills: { at: AT.skills, color: '#b58ad9', label: 'skills' },
+    wishes: { at: AT.wishes, color: '#ff8fb1', label: 'wishes' }, // what it can't do yet and would learn
   };
-  // The projects: one orb that says "projects", and each project a small unnamed satellite around it.
-  const HUB = [-26, 9, -16];
-  const PROJ = [[-31, 14, -13], [-31, 4, -12], [-21, 15, -21], [-27, 3, -22]];
-  // Its roles (who it has become from the work it does: your researcher first), across from the projects.
-  const ROLE = [[27, 16, 12], [28, -14, -2], [8, 23, 16], [30, 2, 22]];
+  // The projects: one orb that says "projects", and each project a small unnamed satellite around it, on a ring
+  // square to the way it faces out.
+  const HUB = AT.projects;
+  const PROJ = (() => { const n = HUB.map((v) => v / Math.hypot(...HUB)), up = Math.abs(n[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0];
+    const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    const u = cross(n, up).map((v, _, a) => v / Math.hypot(...a)), w = cross(n, u);
+    return [0, 1, 2, 3].map((i) => { const a = (i * 90 + 45) * Math.PI / 180; return HUB.map((h, d) => Math.round((h + 5 * (Math.cos(a) * u[d] + Math.sin(a) * w[d])) * 10) / 10); }); })();
+  // The sessions plugged in right now, near the projects; the roles it became, across from them.
+  const SESS = [0, 1, 2, 3, 4, 5].map((i) => AT['s' + i]);
+  const ROLE = [0, 1, 2, 3].map((i) => AT['r' + i]);
+  // The solar system (the "orbits" switch in the key): Lax the sun, each region a ring (senses, memory, learning, the
+  // archive, the roles, the projects), its orbs evenly round it so they never meet. Rings are spaced by the orbs on them,
+  // with gaps that differ like a real system's; the nearer, the faster. The projects carry their satellites and the
+  // sessions as moons. Planned in build() from the orbs there are (plan()).
+  const REGIONS = [['hearing', 'speech'], ['you', 'memory', 'dreams'], ['learning', 'skills', 'wishes'], ['archive'], ['r0', 'r1', 'r2', 'r3'], ['projects']];
+  const GAPS = [0.6, 2.4, 1.1, 3.2, 1.7];
+  const TILT = [[0, 0], [0.19, 0.6], [0, 0], [0, 0], [-0.16, 2.2], [0, 0]]; // two rings slightly off the plane: [how much, along which way]
+  let orbitPlan = {}, orbitFit = 1;
+  function plan() {
+    const ext = (k) => nodes[k].size + 0.3 + (k === 'projects' ? 3.2 : 0);
+    const groups = REGIONS.map((g) => g.filter((k) => nodes[k])).filter((g) => g.length);
+    // The system is shrunk to fit the screen but Lax's seat isn't, so the first ring starts far enough out to stay clear
+    // of it after shrinking: worked out from the fit, which depends on where the rings start (a few rounds settle it).
+    let start = 11;
+    for (let round = 0; round < 4; round++) {
+      orbitPlan = {};
+      let r = start, prev = 0;
+      groups.forEach((g, i) => {
+        const e = Math.max(...g.map(ext)); r = i ? r + prev + e + GAPS[(i - 1) % GAPS.length] : r + e; prev = e;
+        const [tilt, way] = TILT[REGIONS.findIndex((x) => x.includes(g[0]))] || [0, 0];
+        g.forEach((k, j) => { orbitPlan[k] = { r, tilt, way, phase: i * 1.3 + j / g.length * Math.PI * 2 }; });
+      });
+      orbitFit = Math.min(1, 36 / (r + prev));
+      start = Math.max(11, 8 / orbitFit);
+    }
+  }
+  function orbitAt(k, t) {
+    const o = orbitPlan[k];
+    if (o) { const a = o.phase + t * 0.00028 * (10 / o.r) ** 1.5, x = o.r * Math.cos(a), z0 = o.r * Math.sin(a);
+      const y = z0 * Math.sin(o.tilt), z = z0 * Math.cos(o.tilt); // tilted about the x axis, then that tilt turned to its own way
+      return new T.Vector3(x * Math.cos(o.way) + z * Math.sin(o.way), y, -x * Math.sin(o.way) + z * Math.cos(o.way)); }
+    const m = /^([ps])(\d)$/.exec(k); if (!m || !orbitPlan.projects) return null;
+    const j = +m[2], a = m[1] === 'p' ? j * Math.PI / 2 + t * 0.0009 : j * Math.PI / 3 - t * 0.0006, r = m[1] === 'p' ? 2.6 : 3.9;
+    return orbitAt('projects', t).add(new T.Vector3(r * Math.cos(a), m[1] === 'p' ? 0 : 1, r * Math.sin(a)));
+  }
+  // What the key's switches say (mind.html): labels shown, orbits on. Kept in this browser.
+  const look = { labels: true, orbits: false };
+  try { Object.assign(look, JSON.parse(localStorage.getItem('lax-mind-look') || '{}')); } catch {}
+  if (new URLSearchParams(location.search).has('orbits')) look.orbits = true; // a link straight to the solar system
+  window.addEventListener('mind:look', (e) => Object.assign(look, e.detail || {}));
+  let solar = look.orbits ? 1 : 0, lastT = 0; // how far into the solar system it is, 0 to 1
   const LINKS = [['core', 'hearing'], ['core', 'speech'], ['core', 'you'], ['core', 'memory'], ['core', 'learning'], ['memory', 'you'],
     ['memory', 'learning'], ['learning', 'skills'], ['memory', 'archive'], ['learning', 'you'], ['dreams', 'memory'], ['dreams', 'learning'],
     ['core', 'wishes'], ['wishes', 'learning']];
@@ -90,7 +168,7 @@
     const g = new T.Group(); g.position.set(...at); net.add(g);
     const core = new T.Mesh(new T.IcosahedronGeometry(size, 0), toon(color)); g.add(core);
     const bits = []; for (let i = 0; i < specks; i++) { const b = new T.Mesh(new T.BoxGeometry(0.7, 0.7, 0.7), toon(color)); g.add(b); bits.push({ b, a: i / specks * Math.PI * 2, r: size + 1.6 + (i % 3) * 0.7, tilt: (i % 2 ? 0.6 : -0.4) }); }
-    nodes[key] = { g, core, bits, color: new T.Color(color), size };
+    nodes[key] = { g, core, bits, color: new T.Color(color), size, home: new T.Vector3(...at) };
   }
   // Satellites: this week (one more each time it doubles). The orb's size and its number: all time.
   const specks = (n) => Math.min(10, Math.ceil(Math.log2((n || 0) + 1)));
@@ -111,22 +189,23 @@
     s.projects.slice(0, 4).forEach((p, i) => orb('p' + i, PROJ[i], Mind.shade('#6fd36f', [-0.1, -0.35, 0.2, -0.5][i]), 0.8 + Math.min(0.8, Math.log2(p.notes + 1) / 6), 0));
     // A role, in Lax's own colour (it's what Lax is), sized by its work: a speck for each piece this week.
     (s.roles || []).slice(0, 4).forEach((r, i) => orb('r' + i, ROLE[i], Mind.shade(color, 0.35), sizeOf(r.work * 4), specks(r.week)));
-    // Sessions plugged in right now: a small cube beside its project (or near Lax), linked straight to Lax.
+    // Sessions plugged in right now: a small cube in the row above the projects, linked to Lax and to its project.
     (s.sessions || []).slice(0, 6).forEach((ss, i) => {
-      const base = ss.p != null && PROJ[ss.p] ? PROJ[ss.p] : [-6, 16, 2], at = [base[0] + 5 + (i % 2) * 2, base[1] + 4 - (i % 3) * 2, base[2] + 6];
+      const at = SESS[i];
       const g = new T.Group(); g.position.set(...at); net.add(g);
       const core = new T.Mesh(new T.BoxGeometry(2, 2, 2), toon(ss.state === 'working' ? '#e8e2d6' : '#6b645a')); g.add(core);
-      nodes['s' + i] = { g, core, bits: [], color: new T.Color('#e8e2d6'), size: 1, session: ss };
+      nodes['s' + i] = { g, core, bits: [], color: new T.Color('#e8e2d6'), size: 1, session: ss, home: new T.Vector3(...at) };
     });
     const pos = (k) => (k === 'core' ? new T.Vector3(0, 0, 0) : nodes[k]?.g.position);
     const link = (a, b, live) => { if (!pos(a) || !pos(b)) return;
       const geo = new T.BufferGeometry().setFromPoints([pos(a), pos(b)]);
       const l = new T.Line(geo, new T.LineBasicMaterial({ color: live ? '#8a8378' : '#3a332c' })); net.add(l); lines[a + '-' + b] = lines[b + '-' + a] = l;
-      if (a === 'core' || b === 'core') l.userData.core = { other: a === 'core' ? b : a, end: a === 'core' ? 0 : 1 }; };
+      l.userData.ab = [a, b]; };
     for (const [a, b] of LINKS) link(a, b);
     link('projects', 'memory'); s.projects.slice(0, 4).forEach((p, i) => link('p' + i, 'projects'));
     (s.roles || []).slice(0, 4).forEach((r, i) => { link('core', 'r' + i); link('r' + i, 'memory'); for (const p of r.p || []) link('r' + i, 'p' + p); });
     (s.sessions || []).slice(0, 6).forEach((ss, i) => { link('s' + i, 'core', true); if (ss.p != null && nodes['p' + ss.p]) link('s' + i, 'p' + ss.p); });
+    plan(); // the solar system, for the orbs there are now
   }
 
   function pulse(from, to, t0, grey) {
@@ -162,15 +241,25 @@
     const asleep = Mind.asleep(), glow = new T.Color(s.look?.color || '#D97757'), white = new T.Color('#fff8ee');
     const dimmer = asleep ? 0.55 + 0.15 * Math.sin(t / 900) : 1;
     amb.intensity = 0.35 * dimmer; sun.intensity = 0.75 * dimmer;
-    world.rotation.set(view.pitch, view.yaw, 0, 'XYZ'); world.scale.setScalar(view.zoom); world.updateMatrixWorld();
-    for (const l of new Set(Object.values(lines))) { const c = l.userData.core; if (!c || !nodes[c.other]) continue;
-      const p = edge(nodes[c.other].g.position); l.geometry.attributes.position.setXYZ(c.end, p.x, p.y, p.z); l.geometry.attributes.position.needsUpdate = true; }
+    // Into the solar system or back, gliding over about a second (looking down on it from higher up); then every orb
+    // where it belongs right now.
+    const dt = Math.min(100, t - (lastT || t)); lastT = t;
+    solar = Math.max(0, Math.min(1, solar + (look.orbits ? 1 : -1) * dt / 900));
+    const glide = solar * solar * (3 - 2 * solar);
+    world.rotation.set(Math.min(1.3, view.pitch + glide * 0.45), view.yaw, 0, 'XYZ'); world.scale.setScalar(view.zoom * (1 - glide * (1 - orbitFit))); world.updateMatrixWorld();
+    for (const [k, n] of Object.entries(nodes)) {
+      const p = n.home.clone(); if (glide > 0) { const o = orbitAt(k, t); if (o) p.lerp(o, glide); }
+      p.y += Math.sin(t / 1200 + n.size * 3) * 0.3 * (1 - glide); n.g.position.copy(p);
+    }
+    for (const l of new Set(Object.values(lines))) { const [a, b] = l.userData.ab || []; const pa = at(a), pb = at(b); if (!pa || !pb) continue;
+      const e = [a === 'core' ? edge(pb) : pa, b === 'core' ? edge(pa) : pb];
+      e.forEach((v, i) => l.geometry.attributes.position.setXYZ(i, v.x, v.y, v.z)); l.geometry.attributes.position.needsUpdate = true;
+      l.material.transparent = true; l.material.opacity = 1 - 0.75 * glide; } // faint in the solar system: the orbs' paths are the picture there
     for (const [k, n] of Object.entries(nodes)) {
       const on = hot[k] > t, heat = on ? (hot[k] - t) / 2500 : 0;
       n.core.material.color.copy(n.color).lerp(white, heat * (0.5 + 0.3 * Math.sin(t / 80))).multiplyScalar(asleep ? 0.6 : 1);
       if (n.session) n.core.material.color.copy(n.session.state === 'working' && !asleep ? n.color : new T.Color('#6b645a'));
       n.core.rotation.y = t / 2400 + n.size; n.core.rotation.x = t / 3100;
-      n.g.position.y += Math.sin(t / 1200 + n.size * 3) * 0.004;
       for (const b of n.bits) { const a = b.a + t / 2600; b.b.position.set(Math.cos(a) * b.r, Math.sin(a) * b.r * b.tilt, Math.sin(a) * b.r); }
     }
     for (const [k, l] of Object.entries(lines)) l.material.color.set(hot[k] > t ? glow : l.userData.base ||= '#' + l.material.color.getHexString());
@@ -258,18 +347,42 @@
 
   let lastLabels = '';
   function labels(s, t) {
-    const place = (k, dy) => { const n = nodes[k]; if (!n) return { x: -99, y: -99 };
-      const v = n.g.getWorldPosition(new T.Vector3()).project(cam);
-      return { x: Math.round((v.x + 1) / 2 * Mind.current.W), y: Math.round((1 - v.y) / 2 * Mind.current.H) + (dy ?? Math.round(n.size * 2) + 6) }; };
+    if (!look.labels) { if (lastLabels !== 'off') { lastLabels = 'off'; Mind.labels([]); } return; }
+    // Where an orb is on screen (the view's own pixels), how big, and how near (smaller is nearer).
+    const where = (k) => { const n = nodes[k]; if (!n) return null; const v = n.g.getWorldPosition(new T.Vector3()).project(cam);
+      return { x: (v.x + 1) / 2 * Mind.current.W, y: (1 - v.y) / 2 * Mind.current.H, z: v.z, r: n.size * 2 + 1 }; };
     const sessions = (s.sessions || []).length, working = (s.sessions || []).filter((x) => x.state === 'working').length;
     const n = totals(s);
-    const list = [
-      ...['hearing', 'speech', 'you', 'memory', 'learning', 'skills', 'archive', 'dreams', 'wishes'].map((k) => ({ ...place(k), text: k === 'you' ? s.owner || 'you' : NODES[k].label,
+    const want = [
+      ...['hearing', 'speech', 'you', 'memory', 'learning', 'skills', 'archive', 'dreams', 'wishes'].map((k) => ({ k, text: k === 'you' ? s.owner || 'you' : NODES[k].label,
         n: k === 'skills' ? s.skills.installed + (s.skills.drafts ? `+${s.skills.drafts}` : '') : n[k], hot: hot[k] > t })),
-      { ...place('projects'), text: 'projects', n: s.projects.length, hot: hot.projects > t },
-      ...(s.roles || []).slice(0, 4).map((r, i) => ({ ...place('r' + i), text: r.name || 'role', n: r.work, hot: hot['r' + i] > t })),
-      ...(sessions ? [{ ...place('s0', 8), text: 'sessions', n: working ? `${working}/${sessions}` : sessions, hot: hot.core > t }] : []),
+      { k: 'projects', text: 'projects', n: s.projects.length, hot: hot.projects > t },
+      ...(s.roles || []).slice(0, 4).map((r, i) => ({ k: 'r' + i, text: r.name || 'role', n: r.work, hot: hot['r' + i] > t })),
+      ...(sessions ? [{ k: 's0', text: 'sessions', n: working ? `${working}/${sessions}` : sessions, hot: hot.core > t }] : []),
     ];
+    // Labels make room for each other: the nearest orbs choose first; each label goes under its orb, else above, right,
+    // left, on a diagonal or a step further out, wherever it covers no other label and no orb. One that fits nowhere
+    // stays under its orb, dimmed.
+    const canvas = document.getElementById('c'), px = (canvas?.clientWidth || Mind.current.W) / Mind.current.W;
+    const font = parseFloat(getComputedStyle(document.getElementById('labels')).fontSize) || 14, ch = font * 0.5 / px, lh = font / px;
+    const orbs = Object.keys(nodes).map((k) => [k, where(k)]).filter(([, p]) => p);
+    const hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    const placed = [], list = [];
+    for (const l of want.map((l) => ({ ...l, p: where(l.k) })).filter((l) => l.p).sort((a, b) => a.p.z - b.p.z)) {
+      const w = (l.text.length + (l.n != null ? String(l.n).length + 1 : 0)) * ch, h = lh, { x, y, r } = l.p;
+      const spots = [[x - w / 2, y + r + 2], [x - w / 2, y - r - 2 - h], [x + r + 2, y - h / 2], [x - r - 2 - w, y - h / 2],
+        [x + r * 0.7, y + r * 0.7], [x - r * 0.7 - w, y + r * 0.7], [x + r * 0.7, y - r * 0.7 - h], [x - r * 0.7 - w, y - r * 0.7 - h],
+        [x - w / 2, y + r + 3 + h], [x - w / 2, y - r - 3 - 2 * h]];
+      let at = null;
+      for (const [sx, sy] of spots) { const box = { x: sx, y: sy, w, h };
+        if (box.x < 0 || box.x + w > Mind.current.W || box.y < 0 || box.y + h > Mind.current.H) continue;
+        if (placed.some((b) => hit(box, b))) continue;
+        if (orbs.some(([k, o]) => k !== l.k && !(l.k === 'projects' && /^p\d$/.test(k)) && hit(box, { x: o.x - o.r, y: o.y - o.r, w: o.r * 2, h: o.r * 2 }))) continue;
+        at = box; break; }
+      const box = at || { x: spots[0][0], y: spots[0][1], w, h };
+      placed.push(box);
+      list.push({ x: Math.round(box.x + w / 2), y: Math.round(box.y), text: l.text, n: l.n, hot: l.hot, dim: !at });
+    }
     const k = JSON.stringify(list); if (k === lastLabels) return; lastLabels = k; Mind.labels(list);
   }
 

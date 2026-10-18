@@ -18,7 +18,7 @@
     labels(list) {
       const v = Mind.current, box = $('#labels');
       box.replaceChildren(...list.map((l) => { const s = document.createElement('span');
-        s.style.left = (l.x / v.W * 100) + '%'; s.style.top = (l.y / v.H * 100) + '%'; if (l.hot) s.className = 'hot';
+        s.style.left = (l.x / v.W * 100) + '%'; s.style.top = (l.y / v.H * 100) + '%'; s.className = [l.hot && 'hot', l.dim && 'dim'].filter(Boolean).join(' ');
         s.append(l.text); if (l.n != null) { const b = document.createElement('b'); b.textContent = ' ' + l.n; s.append(b); }
         return s; }));
     },
