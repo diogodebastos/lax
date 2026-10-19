@@ -36,6 +36,7 @@ import { recall } from './lib/recall.mjs';
 import * as whisper from './lib/whisper.mjs';
 import { createPublicMind, placesOf, lastCommitFiles, filesIn } from './lib/public-mind.mjs';
 import { startRelay } from './lib/relay.mjs';
+import { once } from './lib/once.mjs';
 import { MAX_WAIT_S } from './hooks/timeouts.mjs';
 import { createBudget, LEVELS } from './lib/budget.mjs';
 
@@ -1059,6 +1060,7 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.
 const body = (req) => new Promise((res) => { let b = ''; req.on('data', (d) => (b += d)); req.on('end', () => { try { res(JSON.parse(b || '{}')); } catch { res({}); } }); });
 const json = (res, obj, code = 200) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
 
+const onceIds = once();
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/pair') return pairPage(req, res, { root: ROOT, port: PORT });
@@ -1129,6 +1131,7 @@ http.createServer(async (req, res) => {
     return json(res, { notes: { projects, you }, skills: skills.view(), roles: roles.view(), episodes: episodes(1000) });
   }
   if (req.method !== 'POST') return json(res, { error: 'method' }, 405);
+  if (onceIds.seen(req.headers['x-lax-once'], res)) return; // a retry, or what the relay held: done already (lib/once.mjs)
   const b = await body(req);
   switch (url.pathname) {
     case '/api/hook': onHook(b); return json(res, { ok: true });
@@ -1205,7 +1208,7 @@ http.createServer(async (req, res) => {
 });
 // The relay (lib/relay.mjs, Phase 11): the phone reaches Lax through the person's own Worker. With LAX_RELAY_URL and its key.
 { let key = process.env.LAX_RELAY_KEY; try { key ||= fs.readFileSync(secret('relay-key'), 'utf8').trim(); } catch {}
-  if (process.env.LAX_RELAY_URL && key) startRelay({ url: process.env.LAX_RELAY_URL, key, port: PORT, log: (m) => console.log(`[${m.replace(': ', '] ')}`) }); }
+  if (process.env.LAX_RELAY_URL && key) startRelay({ url: process.env.LAX_RELAY_URL, key, port: PORT, token: TOKEN, log: (m) => console.log(`[${m.replace(': ', '] ')}`) }); }
 // Whisper on the Mac (lib/whisper.mjs), the port after Lax's. Not in tests (a throwaway LAX_HOME) unless asked.
 if (process.env.LAX_WHISPER === '1' || (process.env.LAX_WHISPER !== '0' && !process.env.LAX_HOME && !process.env.LAX_DATA)) {
   if (whisper.start({ port: PORT + 1, onLog: (m) => { console.log(`[whisper] ${m}`); pushState(); } })) console.log('[whisper] starting');

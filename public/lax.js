@@ -52,7 +52,18 @@ const VERSION = 'v0.5';
 const diag = (event, data = {}) => { if (DEMO || !TOKEN) return; try { fetch('/api/diag', { method: 'POST', keepalive: true,
   headers: { 'content-type': 'application/json', 'x-lax-token': TOKEN }, body: JSON.stringify({ event, ...data }) }); } catch {} };
 addEventListener('error', (e) => diag('js-error', { msg: e.message, at: `${e.filename}:${e.lineno}` }));
-const api = (p, body) => fetch(p, { method: 'POST', headers: { 'content-type': 'application/json', 'x-lax-token': TOKEN }, body: JSON.stringify(body || {}) }).then((r) => r.json());
+// Each POST has its own id, the same on a retry (the network switched mid-request), so the Mac does it once (lib/once.mjs).
+// What you said, a yes or no and settings may be held by the relay while the Mac sleeps ({ queued: true }, relay/worker.mjs).
+const onceId = () => crypto.randomUUID?.() || Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+const HELD = /^\/api\/(talk|decide|settings)$/;
+async function api(p, body) {
+  const headers = { 'content-type': 'application/json', 'x-lax-token': TOKEN, 'x-lax-once': onceId() };
+  if (HELD.test(p)) headers['x-lax-queue'] = '1';
+  for (let i = 0; ; i++) {
+    try { return await fetch(p, { method: 'POST', headers, body: JSON.stringify(body || {}) }).then((r) => r.json()); }
+    catch (e) { if (i >= 2) throw e; await new Promise((r) => setTimeout(r, 1500 * (i + 1))); }
+  }
+}
 
 // ---------- palette ----------
 const C = { bg: '#000', shadow: '#2a2521', ink: '#000', out: '#120c0a', body: '#D97757', hi: '#F2A585', lo: '#A9522F', eye: '#fff8ee', red: '#ff4b3e', band: '#e0302a', stick: '#d9d2c4',
@@ -641,7 +652,7 @@ updateHint();
   diag('load', { v: VERSION, native: !!NATIVE, ua: navigator.userAgent, secure: isSecureContext, sr: !!SR, brave: isBrave, mediaDevices: !!navigator.mediaDevices, mic, w: innerWidth, h: innerHeight, dpr: devicePixelRatio }); })();
 function startListening() { if (listening || hearing) cancelListening(); else beginListening('tap'); } // tap: talk / cancel
 function beginListening(m) {
-  if (macAsleep) { hop(0.5); showBubble({ id: 'asleep', kind: 'reply', text: 'Zzz… I\'m asleep right now. I\'ll wake up on my own.' }); return; }
+  if (macAsleep && !relayHolds) { hop(0.5); showBubble({ id: 'asleep', kind: 'reply', text: 'Zzz… I\'m asleep right now. I\'ll wake up on my own.' }); return; }
   if (voiceBusy && !answerHook) { showBubble({ id: 'busy', kind: 'reply', text: 'Still working on the last one…' }); return; }
   if (hearing) return;
   if (voiceBroken) return typeInstead();
@@ -805,7 +816,9 @@ function talkingTo() {
 function send(text, heard) {
   showBubble({ id: 'you' + Date.now(), kind: 'you', text: '“' + text + '”', fixed: heard?.fixed });
   if (DEMO) { voiceBusy = true; setTimeout(() => { voiceBusy = false; showBubble({ id: 'r' + Date.now(), kind: 'reply', text: 'Demo mode — I heard you!', speak: true }); }, 1800); return; }
-  api('/api/talk', { text, voice: !!heard, spelled: heard?.spelled, target: tabTarget() }).then((r) => { if (!r.ok) showBubble({ id: 'busy', kind: 'error', text: 'I\'m busy, try again in a sec.' }); })
+  api('/api/talk', { text, voice: !!heard, spelled: heard?.spelled, target: tabTarget() }).then((r) => {
+    if (r.queued) showBubble({ id: 'held', kind: 'reply', text: 'Your Mac is asleep. I\'ll pass it on when it wakes.', speak: true });
+    else if (!r.ok) showBubble({ id: 'busy', kind: 'error', text: 'I\'m busy, try again in a sec.' }); })
     .catch(() => showBubble({ id: 'net', kind: 'error', text: 'Couldn\'t reach your Mac.' }));
 }
 const topEl = $('#top');
@@ -860,7 +873,10 @@ wakeEl.addEventListener('click', async () => {
 function applyState(s) { pet = s.pet; if (s.pet.hatched === false) shell = true; else if (shell && !hatchAt) hatch(); sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; usage = s.usage || null; budget = s.budget || null; if (s.vocab) vocab = s.vocab; whisperOn = !!s.whisper; updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
 // Remember how Lax looks, so the app's offline page can show the same Lax asleep.
 const remember = () => { try { NATIVE?.remember(JSON.stringify({ pet, settings })); } catch {} };
-function setAsleep(v) { if (macAsleep === v) return; macAsleep = v; updateHint(); }
+// Through the relay, a sleeping Mac is its "Mac asleep" (JSON), and what you say is held for it: you can still talk.
+let relayHolds = false;
+function setAsleep(v) { if (macAsleep === v) return; macAsleep = v; updateHint();
+  if (v) fetch('/api/memory', { headers: { 'x-lax-token': TOKEN } }).then((r) => r.json()).then((j) => { relayHolds = j.error === 'Mac asleep'; }, () => { relayHolds = false; }); }
 // The first link asks the Mac for its recent lines, so a fresh page (the app moving to the cover screen, a reload)
 // still shows the conversation. Relinks don't: the page already has them.
 let linkedOnce = false;

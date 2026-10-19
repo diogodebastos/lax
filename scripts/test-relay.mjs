@@ -1,6 +1,7 @@
 // The relay (Phase 11), locally: the real Worker under `wrangler dev`, the Mac's client (lib/relay.mjs), first against an
 // echo server (requests, a 2 MB body, a stream, the phone going away, wrong tokens, the Mac's link going and coming back),
-// then a throwaway Lax end to end (its event stream through the relay, and nothing relayed counts as "this Mac").
+// what the phone sent while the Mac slept (held, then handed over in order, once), then a throwaway Lax end to end (its
+// event stream through the relay, nothing relayed counts as "this Mac", a repeated request done once).
 //   node --no-warnings scripts/test-relay.mjs     (needs wrangler: npx fetches it the first time)
 import fs from 'node:fs';
 import os from 'node:os';
@@ -21,7 +22,8 @@ process.on('exit', () => { for (const p of procs) try { process.kill(-p.pid, 'SI
 for (const s of ['SIGINT', 'SIGTERM']) process.on(s, () => process.exit(1));
 
 // An echo server, standing in for Lax.
-let closedStreams = 0;
+let closedStreams = 0; const got_ = []; // what reached the "Mac", in order
+const TOK = 'phone-token-' + crypto.randomBytes(4).toString('hex');
 http.createServer((req, res) => {
   if (req.url === '/stream') {
     res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -29,6 +31,7 @@ http.createServer((req, res) => {
     return req.on('close', () => { clearInterval(t); closedStreams++; });
   }
   if (req.url === '/nope') { res.writeHead(401, { 'content-type': 'application/json' }); return res.end('{"error":"bad token"}'); }
+  got_.push(`${req.method} ${req.url}${req.headers['x-lax-once'] ? ' ' + req.headers['x-lax-once'] : ''}`);
   const h = crypto.createHash('sha256'); let len = 0;
   req.on('data', (d) => { h.update(d); len += d.length; });
   req.on('end', () => { res.writeHead(200, { 'content-type': 'application/json', 'x-echo': 'yes' }); res.end(JSON.stringify({ method: req.method, path: req.url, relay: req.headers['x-lax-relay'], cf: Object.keys(req.headers).filter((k) => k.startsWith('cf-')), len, sha: h.digest('hex') })); });
@@ -51,7 +54,7 @@ await sleep(1500);
 check('a wrong relay key never links', !wrong.linked()); wrong.stop();
 
 // ---------- the pipe ----------
-let mac = startRelay({ url: RELAY, key: KEY, port: ECHO });
+let mac = startRelay({ url: RELAY, key: KEY, port: ECHO, token: TOK });
 for (let i = 0; i < 40 && !mac.linked(); i++) await sleep(100);
 check('the Mac links with its key', mac.linked());
 r = await fetch(RELAY + '/hello?x=1&t=abc', { headers: { 'cf-connecting-ip': '9.9.9.9' } });
@@ -82,10 +85,40 @@ check('…other addresses aren\'t', r.status === 200); await r.text();
 mac.stop(); await sleep(500);
 r = await fetch(RELAY + '/hello');
 check('the Mac\'s link goes: "Mac asleep" right away', r.status === 503, String(r.status)); await r.text();
-mac = startRelay({ url: RELAY, key: KEY, port: ECHO });
+mac = startRelay({ url: RELAY, key: KEY, port: ECHO, token: TOK });
 for (let i = 0; i < 40 && !mac.linked(); i++) await sleep(100);
 r = await fetch(RELAY + '/hello');
 check('…and back when it links again', r.status === 200, String(r.status)); await r.text();
+mac.stop(); await sleep(500);
+
+// ---------- held while the Mac sleeps ----------
+const post = (p, once, { token = TOK, queue = true } = {}) => fetch(RELAY + p, { method: 'POST', body: JSON.stringify({ text: 'hi' }),
+  headers: { 'content-type': 'application/json', 'x-lax-token': token, 'x-lax-once': once, ...(queue ? { 'x-lax-queue': '1' } : {}) } });
+r = await post('/api/talk', 'once-talk-1');
+e = await r.json();
+check('Mac asleep: what you said is held (202, queued)', r.status === 202 && e.queued === true, `${r.status} ${JSON.stringify(e)}`);
+r = await post('/api/talk', 'once-talk-1'); await r.text();
+check('…the same request again (a retry) too, but it\'s kept once', r.status === 202);
+r = await post('/api/decide', 'once-decide-1'); await r.text();
+check('…a yes or no too', r.status === 202);
+r = await post('/api/talk', 'once-wrong-1', { token: 'not-the-phone' }); await r.text();
+check('…not with another token: "Mac asleep"', r.status === 503, String(r.status));
+r = await post('/api/action', 'once-action-1'); await r.text();
+check('…nor a quick action ("stop" hours later)', r.status === 503, String(r.status));
+r = await post('/api/talk', 'once-plain-1', { queue: false }); await r.text();
+check('…nor what the phone didn\'t mark to hold', r.status === 503, String(r.status));
+got_.length = 0;
+mac = startRelay({ url: RELAY, key: KEY, port: ECHO, token: TOK });
+for (let i = 0; i < 40 && !mac.linked(); i++) await sleep(100);
+for (let i = 0; i < 40 && got_.length < 2; i++) await sleep(100);
+r = await fetch(RELAY + '/hello'); await r.text(); await sleep(300);
+check('the Mac wakes: what was held arrives in order, each once, before anything new',
+  JSON.stringify(got_) === JSON.stringify(['POST /api/talk once-talk-1', 'POST /api/decide once-decide-1', 'GET /hello']), JSON.stringify(got_));
+mac.stop(); await sleep(500);
+mac = startRelay({ url: RELAY, key: KEY, port: ECHO, token: TOK });
+for (let i = 0; i < 40 && !mac.linked(); i++) await sleep(100);
+await sleep(500);
+check('…and never again on the next link', got_.length === 3, JSON.stringify(got_));
 mac.stop(); await sleep(300);
 
 // ---------- a real Lax through the relay ----------
@@ -110,6 +143,10 @@ r = await fetch(RELAY + '/api/health');
 check('…and so is the health check', r.status !== 200 || !(await r.json()).ok, String(r.status));
 r = await fetch(`${RELAY}/api/stream?t=wrong`); await r.text();
 check('a wrong token through the relay: 401 from Lax itself', r.status === 401, String(r.status));
+{ const tok = fs.readFileSync(path.join(DATA, 'secrets', 'token'), 'utf8').trim();
+  const again = () => fetch(`${RELAY}/api/settings`, { method: 'POST', body: '{}', headers: { 'content-type': 'application/json', 'x-lax-token': tok, 'x-lax-once': 'once-settings-1' } });
+  const a = await again(), b = await again(); await a.text(); await b.text();
+  check('a request sent twice (a retry) is done once: the repeat gets the first answer', a.status === 200 && b.status === 200 && !a.headers.get('x-lax-once') && b.headers.get('x-lax-once') === 'repeat', `${a.status} ${b.status} ${b.headers.get('x-lax-once')}`); }
 
 console.log(failed ? `\n${failed} relay check(s) failed` : '\nall relay checks passed');
 process.exit(failed ? 1 : 0);
