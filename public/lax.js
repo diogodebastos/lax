@@ -878,8 +878,26 @@ wakeEl.addEventListener('click', async () => {
 
 // ---------- live link ----------
 function applyState(s) { pet = s.pet; if (s.pet.hatched === false) shell = true; else if (shell && !hatchAt) hatch(); sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; usage = s.usage || null; budget = s.budget || null; if (s.vocab) vocab = s.vocab; whisperOn = !!s.whisper; updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
-// Remember how Lax looks, so the app's offline page can show the same Lax asleep.
+// Remember how Lax looks, so the app's offline page can show the same Lax asleep. In the browser, the last state and
+// the last 150 lines, so a reload while the Mac can't answer (the page then comes from sw.js) shows the same.
 const remember = () => { try { NATIVE?.remember(JSON.stringify({ pet, settings })); } catch {} };
+const KEPT = 150;
+let lastState = null, keptFeed = [], keepTimer = 0;
+try { lastState = JSON.parse(localStorage.lax_last || 'null'); keptFeed = JSON.parse(localStorage.lax_feed || '[]'); } catch {}
+function keep(st, f) {
+  if (NATIVE || DEMO) return;
+  if (st) lastState = { ...st, voiceBusy: false, thinking: false };
+  if (f) { keptFeed.push({ ...f, line: String(f.line || '').slice(0, 2000) }); keptFeed.splice(0, keptFeed.length - KEPT); }
+  clearTimeout(keepTimer); keepTimer = setTimeout(() => { try { localStorage.lax_last = JSON.stringify(lastState); localStorage.lax_feed = JSON.stringify(keptFeed); } catch {} }, 1000);
+}
+// Never linked since this page loaded, and the Mac can't answer: show what was kept, until the Mac's own lines replace it.
+let showingKept = false;
+function showKept() {
+  if (showingKept || linkedOnce || (!lastState && !keptFeed.length)) return;
+  showingKept = true;
+  if (lastState) applyState(lastState);
+  for (const f of keptFeed) feed(f.line, f.kind, f.project, f.session, f);
+}
 // Asked again on every retry: right as the Mac goes, the relay may not know yet, and the first answer can be wrong.
 const probeRelay = () => fetch('/api/memory', { headers: { 'x-lax-token': TOKEN } }).then((r) => r.json())
   .then((j) => { relayHolds = j.error === 'Mac asleep'; diag('probe', { holds: relayHolds, error: j.error }); updateHint(); },
@@ -891,21 +909,23 @@ let linkedOnce = false;
 if (DEMO) demo();
 else if (ASLEEP) asleep();
 else if (!TOKEN) feed('no token — open the URL printed by `npm start`', 'error', undefined, '*');
-else connect();
+else { connect(); if (!NATIVE && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch((e) => diag('sw-error', { msg: String(e).slice(0, 120) })); }
 function connect() {
   const es = new EventSource('/api/stream?t=' + encodeURIComponent(TOKEN) + (linkedOnce ? '' : '&backlog=150'));
-  es.addEventListener('state', (e) => { applyState(JSON.parse(e.data)); remember(); });
-  es.addEventListener('feed', (e) => { const f = JSON.parse(e.data); feed(f.line, f.kind, f.project, f.session, f); });
+  es.addEventListener('state', (e) => { const st = JSON.parse(e.data); applyState(st); remember(); keep(st); });
+  es.addEventListener('feed', (e) => { const f = JSON.parse(e.data); feed(f.line, f.kind, f.project, f.session, f); keep(null, f); });
   es.addEventListener('bubble', (e) => showBubble(JSON.parse(e.data)));
   es.addEventListener('clear', (e) => clearBubble(JSON.parse(e.data).id));
   es.addEventListener('tab', (e) => { const v = JSON.parse(e.data).view, chip = $('#chips').querySelector(`[data-view="${CSS.escape(v)}"]`); if (chip) goTab(chip); });
   es.addEventListener('reborn', () => { [...term.children].slice(0, -1).forEach((d) => d.remove()); where.clear(); parts.length = 0; hop(1.8);
     showBubble({ id: 'born', kind: 'reply', text: `Hi! I'm ${settings.name}. Nice to meet you.`, speak: true }); });
   es.addEventListener('react', (e) => { const r = JSON.parse(e.data); if (r.state === 'thinking') voiceBusy = true; else setReact(r.state); });
-  es.onopen = () => { linkedOnce = true; if (macAsleep) { setAsleep(false); hop(1.4); } if (diagLater.length) diag('while-asleep', { events: diagLater.splice(0) }); feed('linked to mac ✓', 'session', undefined, '*'); };
+  es.onopen = () => {
+    if (showingKept) { showingKept = false; [...term.children].slice(0, -1).forEach((d) => d.remove()); where.clear(); parts.length = 0; keptFeed = []; } // the Mac's backlog follows
+    linkedOnce = true; if (macAsleep) { setAsleep(false); hop(1.4); } if (diagLater.length) diag('while-asleep', { events: diagLater.splice(0) }); feed('linked to mac ✓', 'session', undefined, '*'); };
   es.onerror = () => {
     if (!macAsleep) feed(`${settings.name.toLowerCase()} fell asleep. zzz…`, 'session', undefined, '*');
-    setAsleep(true);
+    setAsleep(true); showKept();
     // Cloudflare answers for a sleeping Mac with an error page, which ends EventSource for good: retry by hand.
     probeRelay();
     if (es.readyState === EventSource.CLOSED) setTimeout(connect, 10000);
