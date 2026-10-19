@@ -115,21 +115,59 @@ class LaxService : Service() {
 
     private fun loop() {
         var backoff = 1000L
+        var fails = 0; var unreachable = 0
         while (running) {
             val cfg = Lax.config(this) ?: break
             // stream() returns why it couldn't link (shown as is), or null when the link dropped.
+            var threw = false
             val why = try {
-                stream(cfg) { backoff = 1000L }
+                stream(cfg) { backoff = 1000L; fails = 0; unreachable = 0 }
             } catch (e: Exception) {
-                Log.i(TAG, "link: ${e.javaClass.simpleName}: ${e.message}"); null
+                Log.i(TAG, "link: ${e.javaClass.simpleName}: ${e.message}"); threw = true; null
             }
             conn = null
             linkedAt = 0
             if (!running) break
+            fails++; if (threw) unreachable++ else unreachable = 0 // a link that opened set both back to 0
+            if (fails >= 2 && otherWay(cfg, unreachable >= 2)) { fails = 0; unreachable = 0; backoff = 1000L; continue }
             setLink(why ?: "reconnecting…")
             synchronized(lock) { lock.wait(backoff) }
             backoff = (backoff * 2).coerceAtMost(30_000L)
         }
+    }
+
+    // ---------- the other way in (lib/ways.mjs) ----------
+    /** The link keeps failing: through the tunnel, move to the relay if it says the Mac is there; through a relay that
+     *  doesn't answer at all, to the tunnel. True when it moved (the page follows, MainActivity). */
+    private fun otherWay(cfg: Lax.Config, unreachable: Boolean): Boolean {
+        val w = Lax.ways(this) ?: return false
+        val here = Lax.wayOf(this, cfg) ?: return false
+        val to = when {
+            here == "tunnel" && w.has("relay") && relayHasMac(w.getJSONObject("relay").optString("url"), cfg.token) -> "relay"
+            here == "relay" && w.has("tunnel") && unreachable -> "tunnel"
+            else -> return false
+        }
+        val back = Lax.paired(this)?.let { Lax.wayOf(this, it) } == to
+        if (!Lax.move(this, if (back) null else to)) return false
+        Log.i(TAG, "the $here isn't answering, moving to the $to")
+        setLink("the $here isn't answering, through the $to")
+        return true
+    }
+
+    private fun relayHasMac(url: String, token: String): Boolean = try {
+        val c = java.net.URL(url.trimEnd('/') + "/_relay/up?t=" + Uri.encode(token)).openConnection() as HttpURLConnection
+        c.connectTimeout = 8000; c.readTimeout = 8000
+        (c.responseCode == 200 && JSONObject(c.inputStream.bufferedReader().readText()).optBoolean("mac")).also { c.disconnect() }
+    } catch (_: Exception) { false }
+
+    /** The Mac says which ways work: away from the one you paired with, go back once it works again. */
+    private fun gotWays(w: JSONObject) {
+        Lax.saveWays(this, w)
+        val now = Lax.config(this) ?: return
+        val chosen = Lax.paired(this)?.let { Lax.wayOf(this, it) } ?: return
+        if (Lax.wayOf(this, now) == chosen || w.optJSONObject(chosen)?.optBoolean("up") != true) return
+        if (Lax.move(this, null)) { Log.i(TAG, "the $chosen works again, moving back"); Thread { kick() }.start() }
+        else main.postDelayed({ Lax.ways(this)?.let(::gotWays) }, 60_000) // moved too recently: the Mac only says when something changes
     }
 
     private fun stream(cfg: Lax.Config, onOpen: () -> Unit): String? {
@@ -182,7 +220,10 @@ class LaxService : Service() {
         main.post {
             when (event) {
                 "bubble" -> onBubble(j)
-                "state" -> j.optJSONObject("settings")?.optString("name")?.takeIf { it.isNotBlank() }?.let(::rename)
+                "state" -> {
+                    j.optJSONObject("settings")?.optString("name")?.takeIf { it.isNotBlank() }?.let(::rename)
+                    j.optJSONObject("ways")?.let(::gotWays)
+                }
                 "clear" -> cancelAsk(j.optString("id"))
             }
         }

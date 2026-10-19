@@ -120,6 +120,7 @@ class MainActivity : Activity() {
             }
         }
         load()
+        getSharedPreferences("lax", MODE_PRIVATE).registerOnSharedPreferenceChangeListener(moved)
         LaxService.start(this)
         firstRun()
         getSystemService(SensorManager::class.java).run { getDefaultSensor(Sensor.TYPE_HINGE_ANGLE)?.let { registerListener(hinge, it, SensorManager.SENSOR_DELAY_NORMAL, main) } }
@@ -177,6 +178,11 @@ class MainActivity : Activity() {
                 if (up) main.post { asleep = false; load() }
             }
         }, "lax-wake").start()
+    }
+
+    /** The service moved to the other way in (or back): the page follows. */
+    private val moved = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == "movedAt") main.post { asleep = false; load() }
     }
 
     /** Service-token headers let the first load through Cloudflare Access; the browser login (email PIN) also works and its cookie persists. */
@@ -271,6 +277,7 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         resumed = false
         getSystemService(SensorManager::class.java).unregisterListener(hinge)
+        getSharedPreferences("lax", MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(moved)
         if (::web.isInitialized) {
             bridge.shutdown()
             web.destroy()

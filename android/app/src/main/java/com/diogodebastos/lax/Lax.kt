@@ -23,14 +23,38 @@ object Lax {
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("lax", Context.MODE_PRIVATE)
 
+    /** Where it links now: the paired address, or the other way in while that one is broken (see [move]). */
     fun config(ctx: Context): Config? {
+        val c = paired(ctx) ?: return null
+        val way = prefs(ctx).getString("active", null)?.let { ways(ctx)?.optJSONObject(it)?.optString("url") }
+        return if (way.isNullOrBlank()) c else c.copy(url = way.trimEnd('/') + "/?t=" + Uri.encode(c.token))
+    }
+
+    /** The address you paired with: the way in you chose. */
+    fun paired(ctx: Context): Config? {
         val p = prefs(ctx)
         val url = p.getString("url", null) ?: return null
         return Config(url, p.getString("cfId", "") ?: "", p.getString("cfSecret", "") ?: "")
     }
 
     fun save(ctx: Context, c: Config) {
-        prefs(ctx).edit().putString("url", c.url).putString("cfId", c.cfId).putString("cfSecret", c.cfSecret).apply()
+        prefs(ctx).edit().putString("url", c.url).putString("cfId", c.cfId).putString("cfSecret", c.cfSecret).remove("active").apply()
+    }
+
+    // The ways in (lib/ways.mjs on the Mac): { tunnel: { url, up }, relay: { url, up }, prefer }, as the Mac last said.
+    fun ways(ctx: Context): JSONObject? = try { prefs(ctx).getString("ways", null)?.let(::JSONObject) } catch (_: Exception) { null }
+    fun saveWays(ctx: Context, w: JSONObject) = prefs(ctx).edit().putString("ways", w.toString()).apply()
+    /** Which way a config links through ("tunnel", "relay"), or null if the Mac never said. */
+    fun wayOf(ctx: Context, c: Config): String? {
+        val w = ways(ctx) ?: return null
+        return listOf("tunnel", "relay").firstOrNull { k -> w.optJSONObject(k)?.optString("url")?.let { Uri.parse(it).encodedAuthority == Uri.parse(c.url).encodedAuthority } == true }
+    }
+    /** Link through the other way (null: back to the paired one). Never twice within 3 minutes, so a bad minute can't bounce it. */
+    fun move(ctx: Context, way: String?): Boolean {
+        val p = prefs(ctx)
+        if (System.currentTimeMillis() - p.getLong("movedAt", 0) < 3 * 60_000) return false
+        p.edit().apply { if (way == null) remove("active") else putString("active", way) }.putLong("movedAt", System.currentTimeMillis()).apply()
+        return true
     }
 
     fun name(ctx: Context): String = prefs(ctx).getString("name", null) ?: "Lax"
