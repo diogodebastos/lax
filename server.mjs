@@ -1100,6 +1100,7 @@ http.createServer(async (req, res) => {
   if (url.pathname === '/api/stream') {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache, no-transform', connection: 'keep-alive', 'x-accel-buffering': 'no' });
     res.sealed = url.searchParams.get('seal') === '1'; // an EventSource can't send headers
+    if (!isLocal(req)) console.log(`[link] a phone linked, ${res.sealed ? 'sealed' : 'plain'}, through the ${'x-lax-relay' in req.headers ? 'relay' : 'tunnel'}`);
     clients.add(res); req.on('close', () => clients.delete(res));
     res.write(sse('state', stateMsg(), res.sealed));
     // ?backlog=N: the last N feed lines first (`lax watch`; the phone keeps its own).
