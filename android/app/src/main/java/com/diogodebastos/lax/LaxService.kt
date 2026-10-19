@@ -171,7 +171,8 @@ class LaxService : Service() {
     }
 
     private fun stream(cfg: Lax.Config, onOpen: () -> Unit): String? {
-        val c = Lax.open(cfg, "/api/stream?t=" + Uri.encode(cfg.token))
+        val c = Lax.open(cfg, "/api/stream?t=" + Uri.encode(cfg.token) + if (cfg.sealKey != null) "&seal=1" else "")
+        seal = cfg
         c.connectTimeout = 15_000
         c.readTimeout = 60_000 // the server pings every 20s
         c.setRequestProperty("accept", "text/event-stream")
@@ -215,8 +216,10 @@ class LaxService : Service() {
         return null
     }
 
+    @Volatile private var seal: Lax.Config? = null // the config the stream was opened with: its key opens the events
     private fun dispatch(event: String, data: String) {
-        val j = try { JSONObject(data) } catch (_: Exception) { return }
+        val raw = try { JSONObject(data) } catch (_: Exception) { return }
+        val j = seal?.takeIf { it.sealKey != null }?.opened(raw) ?: if (raw.has("sealed")) return else raw
         main.post {
             when (event) {
                 "bubble" -> onBubble(j)

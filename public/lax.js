@@ -5,7 +5,8 @@
 const qs = new URLSearchParams(location.search);
 let TOKEN = qs.get('t');
 try { if (TOKEN) localStorage.lax_t = TOKEN; else TOKEN = localStorage.lax_t; } catch {}
-if (qs.get('t')) history.replaceState(null, '', location.pathname);
+const HASH_K = new URLSearchParams(location.hash.slice(1)).get('k'); // the sealing key (below), before the URL is cleaned
+if (qs.get('t') || HASH_K) history.replaceState(null, '', location.pathname);
 // Demo mode only under /demo (the public demo and its local preview); a plain /?demo is the real app.
 const DEMO = qs.has('demo') && location.pathname.startsWith('/demo');
 // Inside the Lax Android app: Android's own speech recognition, TTS and vibration (see android/…/LaxBridge.kt).
@@ -53,18 +54,43 @@ const VERSION = 'v0.5';
 const diagLater = [];
 const diag = (event, data = {}) => { if (DEMO || !TOKEN) return;
   if (typeof macAsleep !== 'undefined' && macAsleep) { diagLater.push({ event, ...data, at: new Date().toISOString().slice(11, 19) }); diagLater.splice(0, diagLater.length - 50); return; }
-  try { fetch('/api/diag', { method: 'POST', keepalive: true,
-  headers: { 'content-type': 'application/json', 'x-lax-token': TOKEN }, body: JSON.stringify({ event, ...data }) }); } catch {} };
+  sealed({ event, ...data }).then((b) => fetch('/api/diag', { method: 'POST', keepalive: true, headers: sealHeaders({ 'content-type': 'application/json', 'x-lax-token': TOKEN }), body: b })).catch(() => {}); };
+// ---------- sealed (lib/seal.mjs) ----------
+// What this page and the Mac say to each other is sealed with a key only they have: it came after the # of the pairing
+// link (never sent to any server), and is kept here. Without one (paired before), plain, as before.
+let SEAL = null;
+{ const k = HASH_K;
+  try { if (k) localStorage.lax_k = k; } catch {}
+  let key = k; try { key ||= localStorage.lax_k; } catch {}
+  if (key && crypto.subtle) SEAL = crypto.subtle.importKey('raw', Uint8Array.from(atob(key.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)), 'AES-GCM', false, ['encrypt', 'decrypt']).catch(() => null); }
+const SEAL_K = (() => { try { return localStorage.lax_k || ''; } catch { return ''; } })();
+const b64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(s); };
+const sealHeaders = (h) => (SEAL ? { ...h, 'x-lax-seal': '1' } : h);
+/** A body to send: { sealed } when there's a key. */
+async function sealed(obj) {
+  const key = await SEAL; if (!key) return JSON.stringify(obj);
+  const iv = crypto.getRandomValues(new Uint8Array(12)), c = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(obj))));
+  const all = new Uint8Array(12 + c.length); all.set(iv); all.set(c, 12); return JSON.stringify({ sealed: b64(all) });
+}
+/** What came: opened if it's { sealed }. */
+async function opened(j) {
+  if (typeof j?.sealed !== 'string') return j;
+  const key = await SEAL; if (!key) throw new Error('sealed, and no key: pair again');
+  const b = Uint8Array.from(atob(j.sealed), (c) => c.charCodeAt(0));
+  return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b.subarray(0, 12) }, key, b.subarray(12))));
+}
+const getJson = (p) => fetch(p, { headers: sealHeaders({ 'x-lax-token': TOKEN }) }).then((r) => r.json()).then(opened);
 addEventListener('error', (e) => diag('js-error', { msg: e.message, at: `${e.filename}:${e.lineno}` }));
 // Each POST has its own id, the same on a retry (the network switched mid-request), so the Mac does it once (lib/once.mjs).
 // What you said, a yes or no and settings may be held by the relay while the Mac sleeps ({ queued: true }, relay/worker.mjs).
 const onceId = () => crypto.randomUUID?.() || Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
 const HELD = /^\/api\/(talk|decide|settings)$/;
 async function api(p, body) {
-  const headers = { 'content-type': 'application/json', 'x-lax-token': TOKEN, 'x-lax-once': onceId() };
+  const headers = sealHeaders({ 'content-type': 'application/json', 'x-lax-token': TOKEN, 'x-lax-once': onceId() });
   if (HELD.test(p)) headers['x-lax-queue'] = '1';
+  const sent = await sealed(body || {});
   for (let i = 0; ; i++) {
-    try { return await fetch(p, { method: 'POST', headers, body: JSON.stringify(body || {}) }).then((r) => r.json()); }
+    try { return await fetch(p, { method: 'POST', headers, body: sent }).then((r) => r.json()).then(opened); }
     catch (e) { if (i >= 2) throw e; await new Promise((r) => setTimeout(r, 1500 * (i + 1))); }
   }
 }
@@ -899,7 +925,7 @@ function showKept() {
   for (const f of keptFeed) feed(f.line, f.kind, f.project, f.session, f);
 }
 // Asked again on every retry: right as the Mac goes, the relay may not know yet, and the first answer can be wrong.
-const probeRelay = () => fetch('/api/memory', { headers: { 'x-lax-token': TOKEN } }).then((r) => r.json())
+const probeRelay = () => getJson('/api/memory')
   .then((j) => { probeThrew = 0; relayHolds = j.error === 'Mac asleep'; diag('probe', { holds: relayHolds, error: j.error }); updateHint(); },
     (e) => { relayHolds = false; probeThrew++; diag('probe', { holds: false, threw: String(e).slice(0, 80) }); updateHint(); });
 let probeThrew = 0; // in a row: the relay itself didn't answer
@@ -924,7 +950,7 @@ function gotWays(w) {
 function moveTo(k, why, back) {
   if (moving || DEMO || NATIVE) return; moving = true;
   feed(`> ${why}, moving to the ${k}`, 'session', undefined, '*'); diag('move', { to: k, why });
-  setTimeout(() => location.replace(`${ways[k].url}/?t=${encodeURIComponent(TOKEN)}${back ? '' : '&moved=' + Date.now()}`), 1500);
+  setTimeout(() => location.replace(`${ways[k].url}/?t=${encodeURIComponent(TOKEN)}${back ? '' : '&moved=' + Date.now()}${SEAL_K ? '#k=' + SEAL_K : ''}`), 1500); // the key too: each way's page keeps its own
 }
 setInterval(() => { if (fellBack && ways && !macAsleep) gotWays(ways); }, 30e3); // the Mac only says when something changes
 async function otherWay() {
@@ -941,7 +967,11 @@ else if (ASLEEP) asleep();
 else if (!TOKEN) feed('no token — open the URL printed by `npm start`', 'error', undefined, '*');
 else { connect(); if (!NATIVE && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch((e) => diag('sw-error', { msg: String(e).slice(0, 120) })); }
 function connect() {
-  const es = new EventSource('/api/stream?t=' + encodeURIComponent(TOKEN) + (linkedOnce ? '' : '&backlog=150'));
+  const es = new EventSource('/api/stream?t=' + encodeURIComponent(TOKEN) + (linkedOnce ? '' : '&backlog=150') + (SEAL ? '&seal=1' : ''));
+  // Sealed events open asynchronously: one after another, so they're handled in the order they came.
+  let order = Promise.resolve();
+  const on = es.addEventListener.bind(es);
+  es.addEventListener = (name, fn) => on(name, (e) => { order = order.then(async () => fn({ data: e.data && JSON.stringify(await opened(JSON.parse(e.data))) })).catch((err) => diag('sealed-event', { name, msg: String(err).slice(0, 120) })); });
   es.addEventListener('state', (e) => { const st = JSON.parse(e.data); applyState(st); remember(); keep(st); });
   es.addEventListener('feed', (e) => { const f = JSON.parse(e.data); feed(f.line, f.kind, f.project, f.session, f); keep(null, f); });
   es.addEventListener('bubble', (e) => showBubble(JSON.parse(e.data)));
@@ -1009,10 +1039,10 @@ function saveSettings(patch) {
 }
 async function openLife() {
   lifeEl.classList.add('open'); showAll.miles = showAll.episodes = false; renderLife();
-  if (!DEMO) { try { memory = await fetch('/api/memory', { headers: { 'x-lax-token': TOKEN } }).then((r) => r.json()); } catch {} renderLife(); loadKnows(); }
+  if (!DEMO) { try { memory = await getJson('/api/memory'); } catch {} renderLife(); loadKnows(); }
 }
 // What Lax knows: its skills (a draft waits for your yes, with its whole text) and its newest episodes. Forget = two taps.
-async function loadKnows() { try { knows = await fetch('/api/knows', { headers: { 'x-lax-token': TOKEN } }).then((r) => r.json()); } catch {} renderKnows(); }
+async function loadKnows() { try { knows = await getJson('/api/knows'); } catch {} renderKnows(); }
 const SKILL_STATE = { new: 'draft', later: 'draft', proposed: 'asking you', installed: '' };
 function renderKnows() {
   const k = knows;

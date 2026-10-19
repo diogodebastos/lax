@@ -39,6 +39,7 @@ import { startRelay } from './lib/relay.mjs';
 import { once } from './lib/once.mjs';
 import { startWays } from './lib/ways.mjs';
 import { watchPower } from './lib/power.mjs';
+import { seal, unseal, sse } from './lib/seal.mjs';
 import { MAX_WAIT_S } from './hooks/timeouts.mjs';
 import { createBudget, LEVELS } from './lib/budget.mjs';
 
@@ -366,8 +367,7 @@ const weekCount = (k) => (kvGet('mindWeek', {})[k] || []).filter((t) => Date.now
 // A reflection or the weekly review, on its own: its dreams on the website.
 function dreamed() { const w = kvGet('mindWeek', { heard: [], spoke: [] }), now = Date.now(); w.dreamed = [...(w.dreamed || []).filter((t) => now - t < WEEK), now]; kvSet('mindWeek', w); }
 function broadcast(type, data) {
-  const msg = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
-  for (const c of clients) c.write(msg);
+  for (const c of clients) c.write(sse(type, data, c.sealed)); // sealed for a phone that asked (lib/seal.mjs)
   if (type === 'bubble' && data.speak) heardSpoke('spoke');
 }
 // Lax's own conversation, this one or the one before it: never a session of yours (no tab, no reflection).
@@ -1059,12 +1059,18 @@ function talk(text, voice = false, spelled = []) {
 
 // ---------- http ----------
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json' };
-const body = (req) => new Promise((res) => { let b = ''; req.on('data', (d) => (b += d)); req.on('end', () => { try { res(JSON.parse(b || '{}')); } catch { res({}); } }); });
-const json = (res, obj, code = 200) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
+// A sealed body ({ sealed }, lib/seal.mjs) is opened here; one that doesn't open is nothing. Answers are sealed for whoever asked.
+const body = (req) => new Promise((res) => { let b = ''; req.on('data', (d) => (b += d)); req.on('end', () => {
+  try { const j = JSON.parse(b || '{}'); res(typeof j.sealed === 'string' ? JSON.parse(unseal(j.sealed) ?? '{}') : j); } catch { res({}); } }); });
+const json = (res, obj, code = 200) => {
+  if (!res.sealed) { res.writeHead(code, { 'content-type': 'application/json' }); return res.end(JSON.stringify(obj)); }
+  res.writeHead(code, { 'content-type': 'application/json', 'x-lax-sealed': '1' }); res.end(JSON.stringify({ sealed: seal(JSON.stringify(obj)) }));
+};
 
 const onceIds = once();
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
+  res.sealed = req.headers['x-lax-seal'] === '1';
   if (url.pathname === '/pair') return pairPage(req, res, { root: ROOT, port: PORT });
   // The demo, live from the working folder (a local preview). Publicly, Cloudflare serves /demo itself from the last push
   // to main (scripts/demo.mjs), so it never reaches here. A fixed list from public/; the app runs in ?demo mode.
@@ -1093,14 +1099,15 @@ http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/stream') {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache, no-transform', connection: 'keep-alive', 'x-accel-buffering': 'no' });
+    res.sealed = url.searchParams.get('seal') === '1'; // an EventSource can't send headers
     clients.add(res); req.on('close', () => clients.delete(res));
-    res.write(`event: state\ndata: ${JSON.stringify(stateMsg())}\n\n`);
+    res.write(sse('state', stateMsg(), res.sealed));
     // ?backlog=N: the last N feed lines first (`lax watch`; the phone keeps its own).
     const n = Math.min(300, Number(url.searchParams.get('backlog')) || 0);
     // Lax's own tab always comes with its history, whatever the sessions said meanwhile.
     const backlog = n ? [...new Set([...laxFeed.slice(-200), ...recentFeed.slice(-n)])].sort((a, b) => a.ts - b.ts) : [];
-    for (const f of backlog) res.write(`event: feed\ndata: ${JSON.stringify(f)}\n\n`);
-    for (const p of pending.values()) res.write(`event: bubble\ndata: ${JSON.stringify(p.bubble)}\n\n`);
+    for (const f of backlog) res.write(sse('feed', f, res.sealed));
+    for (const p of pending.values()) res.write(sse('bubble', p.bubble, res.sealed));
     const ping = setInterval(() => res.write(': ping\n\n'), 20000); req.on('close', () => clearInterval(ping));
     return;
   }

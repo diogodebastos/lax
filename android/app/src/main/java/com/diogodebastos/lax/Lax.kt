@@ -14,6 +14,28 @@ object Lax {
         val origin: String get() = "${uri.scheme}://${uri.encodedAuthority}"
         val token: String get() = uri.getQueryParameter("t") ?: ""
         val host: String get() = uri.host ?: url
+        /** The sealing key, after the # of the pairing link (lib/seal.mjs on the Mac); null if paired before. */
+        val sealKey: ByteArray? get() = uri.fragment?.let { Uri.parse("x:?$it").getQueryParameter("k") }
+            ?.let { try { android.util.Base64.decode(it, android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP) } catch (_: Exception) { null } }
+            ?.takeIf { it.size == 32 }
+
+        /** AES-256-GCM, base64 of iv + ciphertext + tag: what only this phone and the Mac can read. */
+        fun seal(text: String): String {
+            val iv = ByteArray(12).also { java.security.SecureRandom().nextBytes(it) }
+            val c = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+            c.init(javax.crypto.Cipher.ENCRYPT_MODE, javax.crypto.spec.SecretKeySpec(sealKey, "AES"), javax.crypto.spec.GCMParameterSpec(128, iv))
+            return android.util.Base64.encodeToString(iv + c.doFinal(text.toByteArray()), android.util.Base64.NO_WRAP)
+        }
+        /** What came, opened if it's { sealed } (null if it doesn't open with this key). */
+        fun opened(j: JSONObject): JSONObject? {
+            val s = j.optString("sealed", "").ifEmpty { return j }
+            return try {
+                val b = android.util.Base64.decode(s, android.util.Base64.DEFAULT)
+                val c = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+                c.init(javax.crypto.Cipher.DECRYPT_MODE, javax.crypto.spec.SecretKeySpec(sealKey, "AES"), javax.crypto.spec.GCMParameterSpec(128, b, 0, 12))
+                JSONObject(String(c.doFinal(b, 12, b.size - 12)))
+            } catch (_: Exception) { null }
+        }
 
         /** Cloudflare Access service-token headers: the background link has no browser login. */
         fun headers(): Map<String, String> =
@@ -27,7 +49,7 @@ object Lax {
     fun config(ctx: Context): Config? {
         val c = paired(ctx) ?: return null
         val way = prefs(ctx).getString("active", null)?.let { ways(ctx)?.optJSONObject(it)?.optString("url") }
-        return if (way.isNullOrBlank()) c else c.copy(url = way.trimEnd('/') + "/?t=" + Uri.encode(c.token))
+        return if (way.isNullOrBlank()) c else c.copy(url = way.trimEnd('/') + "/?t=" + Uri.encode(c.token) + (Uri.parse(c.url).encodedFragment?.let { "#$it" } ?: ""))
     }
 
     /** The address you paired with: the way in you chose. */
@@ -72,6 +94,7 @@ object Lax {
     fun open(c: Config, path: String): HttpURLConnection {
         val conn = URL(c.origin + path).openConnection() as HttpURLConnection
         conn.setRequestProperty("x-lax-token", c.token)
+        if (c.sealKey != null) conn.setRequestProperty("x-lax-seal", "1")
         for ((k, v) in c.headers()) conn.setRequestProperty(k, v)
         return conn
     }
@@ -84,7 +107,8 @@ object Lax {
         conn.readTimeout = 15_000
         conn.doOutput = true
         conn.setRequestProperty("content-type", "application/json")
-        conn.outputStream.use { it.write(body.toString().toByteArray()) }
+        val sent = if (c.sealKey != null) JSONObject().put("sealed", c.seal(body.toString())) else body
+        conn.outputStream.use { it.write(sent.toString().toByteArray()) }
         val code = conn.responseCode
         conn.inputStream.use { it.readBytes() }
         conn.disconnect()
