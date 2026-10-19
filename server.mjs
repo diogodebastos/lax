@@ -1166,7 +1166,10 @@ http.createServer(async (req, res) => {
       for (const [k, max] of [['listening', 60e3], ['speaking', 120e3]]) if (typeof b[k] === 'boolean') voiceState[k] = b[k] ? Date.now() + max : 0;
       publicMind?.changed(300); return json(res, { ok: true });
     }
-    case '/api/diag': console.log(`[phone ${new Date().toISOString().slice(11, 19)}] ${JSON.stringify(b).slice(0, 600)}`); return json(res, { ok: true });
+    case '/api/diag': // what the phone kept while the Mac slept comes in one go: a line each, at the time it happened
+      for (const d of b.event === 'while-asleep' && Array.isArray(b.events) ? b.events.slice(0, 50) : [b])
+        console.log(`[phone ${String(d.at || new Date().toISOString().slice(11, 19)).slice(0, 8)}${d.at ? ' asleep' : ''}] ${JSON.stringify(d).slice(0, 600)}`);
+      return json(res, { ok: true });
     case '/api/recall': { // a session's `recall` tool (channel/lax-channel.mjs): Lax searches its long-term memory
       if (!isLocal(req)) return json(res, { ok: false, answer: 'Only from this Mac.' }, 403);
       const q = String(b.query || '').slice(0, 1000), who = b.cwd ? proj(String(b.cwd)) : settings.name.toLowerCase();

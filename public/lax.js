@@ -49,7 +49,11 @@ document.fonts?.ready.then(fit); // the pixel font changes the hint's height, wh
 
 const VERSION = 'v0.5';
 // Diagnostics → the Mac's server log (data/server.log), so phone-only problems are visible there.
-const diag = (event, data = {}) => { if (DEMO || !TOKEN) return; try { fetch('/api/diag', { method: 'POST', keepalive: true,
+// While the Mac sleeps they can't reach it: kept (the last 50, with when) and sent once it's back (connect).
+const diagLater = [];
+const diag = (event, data = {}) => { if (DEMO || !TOKEN) return;
+  if (typeof macAsleep !== 'undefined' && macAsleep) { diagLater.push({ event, ...data, at: new Date().toISOString().slice(11, 19) }); diagLater.splice(0, diagLater.length - 50); return; }
+  try { fetch('/api/diag', { method: 'POST', keepalive: true,
   headers: { 'content-type': 'application/json', 'x-lax-token': TOKEN }, body: JSON.stringify({ event, ...data }) }); } catch {} };
 addEventListener('error', (e) => diag('js-error', { msg: e.message, at: `${e.filename}:${e.lineno}` }));
 // Each POST has its own id, the same on a retry (the network switched mid-request), so the Mac does it once (lib/once.mjs).
@@ -106,6 +110,8 @@ const wears = (t) => pet.traits.includes(t) && !settings.hideTraits?.includes(t)
 let sessions = [], voiceBusy = false, thinking = false, lastWork = 0, channels = [], voiceTarget = 'background', usage = null, budget = null;
 // The Mac is asleep or off (no link): Lax sleeps too. ASLEEP = the app's offline copy of this page (no Mac at all).
 const ASLEEP = qs.has('asleep'); let macAsleep = ASLEEP;
+// Through the relay, a sleeping Mac is its "Mac asleep" (JSON), and what you say is held for it: you can still talk.
+let relayHolds = false;
 // No key: Lax hasn't hatched. Just an egg that wobbles now and then (and when tapped).
 const EGG = !DEMO && !ASLEEP && !TOKEN; let eggTapAt = -1e9;
 // A new Lax (first life or a rebirth) is an egg too, until 1000 XP or three worked days (lib/species.mjs). You can talk to it
@@ -636,7 +642,7 @@ function routeChannel() {
   return voiceTarget === 'background' ? null : channels.find((c) => c.cid === voiceTarget) || [...channels].sort((a, b) => b.active - a.active)[0] || null;
 }
 function setTarget(v) { voiceTarget = v; updateHint(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); if (!DEMO) api('/api/target', { target: v }); }
-function updateHint() { IDLE_HINT = EGG ? 'no key yet: open the link from npm start' : macAsleep ? `zzz… ${settings.name.toLowerCase()} is asleep` : voiceBroken ? `tap ${settings.name} to type` : `tap or hold ${settings.name} to talk`; if (!listening) hint.textContent = IDLE_HINT; }
+function updateHint() { IDLE_HINT = EGG ? 'no key yet: open the link from npm start' : macAsleep ? `zzz… ${settings.name.toLowerCase()} is asleep${relayHolds ? ', tap to leave a message' : ''}` : voiceBroken ? `tap ${settings.name} to type` : `tap or hold ${settings.name} to talk`; if (!listening) hint.textContent = IDLE_HINT; }
 const MIC_ERRORS = {
   'not-allowed': 'Mic is blocked. Tap the icon left of the address → Permissions → Microphone → Allow, then reload.',
   'service-not-allowed': 'This browser has no speech recognition. Use Chrome.',
@@ -652,7 +658,8 @@ updateHint();
   diag('load', { v: VERSION, native: !!NATIVE, ua: navigator.userAgent, secure: isSecureContext, sr: !!SR, brave: isBrave, mediaDevices: !!navigator.mediaDevices, mic, w: innerWidth, h: innerHeight, dpr: devicePixelRatio }); })();
 function startListening() { if (listening || hearing) cancelListening(); else beginListening('tap'); } // tap: talk / cancel
 function beginListening(m) {
-  if (macAsleep && !relayHolds) { hop(0.5); showBubble({ id: 'asleep', kind: 'reply', text: 'Zzz… I\'m asleep right now. I\'ll wake up on my own.' }); return; }
+  if (macAsleep) diag('asleep-tap', { relayHolds, voiceBusy, voiceBroken, hearing: !!hearing });
+  if (macAsleep && !relayHolds) { hop(0.5); showBubble({ id: 'asleep', kind: 'reply', text: 'Zzz… I\'m asleep right now. I\'ll wake up on my own.' }); probeRelay(); return; }
   if (voiceBusy && !answerHook) { showBubble({ id: 'busy', kind: 'reply', text: 'Still working on the last one…' }); return; }
   if (hearing) return;
   if (voiceBroken) return typeInstead();
@@ -873,10 +880,11 @@ wakeEl.addEventListener('click', async () => {
 function applyState(s) { pet = s.pet; if (s.pet.hatched === false) shell = true; else if (shell && !hatchAt) hatch(); sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; usage = s.usage || null; budget = s.budget || null; if (s.vocab) vocab = s.vocab; whisperOn = !!s.whisper; updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
 // Remember how Lax looks, so the app's offline page can show the same Lax asleep.
 const remember = () => { try { NATIVE?.remember(JSON.stringify({ pet, settings })); } catch {} };
-// Through the relay, a sleeping Mac is its "Mac asleep" (JSON), and what you say is held for it: you can still talk.
-let relayHolds = false;
-function setAsleep(v) { if (macAsleep === v) return; macAsleep = v; updateHint();
-  if (v) fetch('/api/memory', { headers: { 'x-lax-token': TOKEN } }).then((r) => r.json()).then((j) => { relayHolds = j.error === 'Mac asleep'; }, () => { relayHolds = false; }); }
+// Asked again on every retry: right as the Mac goes, the relay may not know yet, and the first answer can be wrong.
+const probeRelay = () => fetch('/api/memory', { headers: { 'x-lax-token': TOKEN } }).then((r) => r.json())
+  .then((j) => { relayHolds = j.error === 'Mac asleep'; diag('probe', { holds: relayHolds, error: j.error }); updateHint(); },
+    (e) => { relayHolds = false; diag('probe', { holds: false, threw: String(e).slice(0, 80) }); updateHint(); });
+function setAsleep(v) { if (macAsleep === v) return; macAsleep = v; updateHint(); }
 // The first link asks the Mac for its recent lines, so a fresh page (the app moving to the cover screen, a reload)
 // still shows the conversation. Relinks don't: the page already has them.
 let linkedOnce = false;
@@ -894,11 +902,12 @@ function connect() {
   es.addEventListener('reborn', () => { [...term.children].slice(0, -1).forEach((d) => d.remove()); where.clear(); parts.length = 0; hop(1.8);
     showBubble({ id: 'born', kind: 'reply', text: `Hi! I'm ${settings.name}. Nice to meet you.`, speak: true }); });
   es.addEventListener('react', (e) => { const r = JSON.parse(e.data); if (r.state === 'thinking') voiceBusy = true; else setReact(r.state); });
-  es.onopen = () => { linkedOnce = true; if (macAsleep) { setAsleep(false); hop(1.4); } feed('linked to mac ✓', 'session', undefined, '*'); };
+  es.onopen = () => { linkedOnce = true; if (macAsleep) { setAsleep(false); hop(1.4); } if (diagLater.length) diag('while-asleep', { events: diagLater.splice(0) }); feed('linked to mac ✓', 'session', undefined, '*'); };
   es.onerror = () => {
     if (!macAsleep) feed(`${settings.name.toLowerCase()} fell asleep. zzz…`, 'session', undefined, '*');
     setAsleep(true);
     // Cloudflare answers for a sleeping Mac with an error page, which ends EventSource for good: retry by hand.
+    probeRelay();
     if (es.readyState === EventSource.CLOSED) setTimeout(connect, 10000);
   };
 }
