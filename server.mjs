@@ -37,6 +37,7 @@ import * as whisper from './lib/whisper.mjs';
 import { createPublicMind, placesOf, lastCommitFiles, filesIn } from './lib/public-mind.mjs';
 import { startRelay } from './lib/relay.mjs';
 import { once } from './lib/once.mjs';
+import { startWays } from './lib/ways.mjs';
 import { MAX_WAIT_S } from './hooks/timeouts.mjs';
 import { createBudget, LEVELS } from './lib/budget.mjs';
 
@@ -375,7 +376,7 @@ function sessionList() {
   return [...sessions.entries()].filter(([id, s]) => (s.pid || s.ts > cutoff) && !laxOwn(id)).map(([id, s]) => ({ id, ...s }));
 }
 const stateMsg = () => ({ pet: petView(), sessions: sessionList(), voiceBusy: !!voiceRun, thinking: !!channelWait, settings, budget: budget.view(),
-  channels: channelList(), voiceTarget, usage, vocab: vocabNow(), whisper: whisper.running() });
+  channels: channelList(), voiceTarget, usage, vocab: vocabNow(), whisper: whisper.running(), ways: ways?.view() || null });
 // What the phone listens for and fixes (lib/vocab.mjs): the names your words may contain, and misheard → meant.
 function vocabNow() {
   const v = readVocab(VOCAB);
@@ -1210,8 +1211,14 @@ http.createServer(async (req, res) => {
   console.log(`${APP_NAME}: ${settings.name || DEFAULT_COMPANION_NAME} is awake on ${HOST}:${PORT}.\n  Mac:   http://localhost:${PORT}/?t=${TOKEN}\n  Phone: ${phoneUrl(PORT)}\n  Pair:  http://localhost:${PORT}/pair  (QR code)`);
 });
 // The relay (lib/relay.mjs, Phase 11): the phone reaches Lax through the person's own Worker. With LAX_RELAY_URL and its key.
+// The ways in (lib/ways.mjs): which of the tunnel and the relay reach this Mac, so the phone can move to the one that does.
+var ways = null;
 { let key = process.env.LAX_RELAY_KEY; try { key ||= fs.readFileSync(secret('relay-key'), 'utf8').trim(); } catch {}
-  if (process.env.LAX_RELAY_URL && key) startRelay({ url: process.env.LAX_RELAY_URL, key, port: PORT, token: TOKEN, log: (m) => console.log(`[${m.replace(': ', '] ')}`) }); }
+  const relay = process.env.LAX_RELAY_URL && key ? startRelay({ url: process.env.LAX_RELAY_URL, key, port: PORT, token: TOKEN,
+    log: (m) => { console.log(`[${m.replace(': ', '] ')}`); if (/linked|lost/.test(m)) setTimeout(pushState, 100); } }) : null;
+  ways = startWays({ tunnel: process.env.LAX_PUBLIC_URL, relay: relay ? process.env.LAX_RELAY_URL : '', relayLinked: () => relay?.linked(),
+    headers: process.env.CF_ACCESS_CLIENT_ID ? { 'cf-access-client-id': process.env.CF_ACCESS_CLIENT_ID, 'cf-access-client-secret': process.env.CF_ACCESS_CLIENT_SECRET || '' } : {},
+    onChange: pushState }); }
 // Whisper on the Mac (lib/whisper.mjs), the port after Lax's. Not in tests (a throwaway LAX_HOME) unless asked.
 if (process.env.LAX_WHISPER === '1' || (process.env.LAX_WHISPER !== '0' && !process.env.LAX_HOME && !process.env.LAX_DATA)) {
   if (whisper.start({ port: PORT + 1, onLog: (m) => { console.log(`[whisper] ${m}`); pushState(); } })) console.log('[whisper] starting');

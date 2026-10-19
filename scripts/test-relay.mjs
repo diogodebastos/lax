@@ -89,7 +89,13 @@ mac = startRelay({ url: RELAY, key: KEY, port: ECHO, token: TOK });
 for (let i = 0; i < 40 && !mac.linked(); i++) await sleep(100);
 r = await fetch(RELAY + '/hello');
 check('…and back when it links again', r.status === 200, String(r.status)); await r.text();
+r = await fetch(`${RELAY}/_relay/up?t=${TOK}`); e = await r.json();
+check('"is the Mac there?" with the phone\'s token: yes, open to other pages (CORS)', e.mac === true && r.headers.get('access-control-allow-origin') === '*', JSON.stringify(e));
+r = await fetch(`${RELAY}/_relay/up?t=wrong`); await r.text();
+check('…not with another token', r.status === 401, String(r.status));
 mac.stop(); await sleep(500);
+r = await fetch(`${RELAY}/_relay/up?t=${TOK}`); e = await r.json();
+check('…and no, once its link is gone', e.mac === false, JSON.stringify(e));
 
 // ---------- held while the Mac sleeps ----------
 const post = (p, once, { token = TOK, queue = true } = {}) => fetch(RELAY + p, { method: 'POST', body: JSON.stringify({ text: 'hi' }),

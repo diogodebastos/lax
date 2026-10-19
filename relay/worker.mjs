@@ -4,6 +4,8 @@
 // page, the event stream, voice uploads, the token check, all as they are. Nothing is kept here, except what the phone
 // sent while the Mac slept (below).
 //   GET /_relay/mac   the Mac's WebSocket, with the relay key (secret RELAY_KEY) in x-relay-key
+//   GET /_relay/up    { mac }: is the Mac linked? With the phone's token (?t=); open to any page (CORS), so a page on the
+//                     tunnel can ask whether to move here (lax.js)
 //   anything else     passed to the Mac; "Mac asleep" (503) when it isn't there
 // Frames are JSON text. Down: { t: 'req', id, method, path, headers }, { t: 'body', id, b64 }…, { t: 'sent', id };
 // { t: 'abort', id } when the phone goes away. Up: { t: 'head', id, status, headers }, { t: 'chunk', id, b64 }…, { t: 'end', id }.
@@ -68,6 +70,13 @@ export class Relay extends DurableObject {
     const ip = req.headers.get('cf-connecting-ip') || '', now = Date.now(), m = this.misses.get(ip);
     if (m && now - m.since > WINDOW) this.misses.delete(ip);
     else if (m?.count >= LIMIT) return Response.json({ error: 'too many wrong tokens' }, { status: 429 });
+
+    if (url.pathname === '/_relay/up') {
+      const known = this.sql.exec("SELECT v FROM meta WHERE k = 'token'").toArray()[0]?.v, t = url.searchParams.get('t') || '';
+      const ok = !!known && !!t && same(await sha(t), known);
+      if (!ok && ip) { const n = this.misses.get(ip) || { since: now, count: 0 }; n.count++; this.misses.set(ip, n); } // counts as a wrong token
+      return Response.json(ok ? { mac: !!this.mac() } : { error: 'bad token' }, { status: ok ? 200 : 401, headers: { 'access-control-allow-origin': '*', 'cache-control': 'no-store' } });
+    }
 
     const headers = {};
     for (const [k, v] of req.headers) if (!DROP_REQ.test(k)) headers[k] = v;

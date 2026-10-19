@@ -877,7 +877,7 @@ wakeEl.addEventListener('click', async () => {
 });
 
 // ---------- live link ----------
-function applyState(s) { pet = s.pet; if (s.pet.hatched === false) shell = true; else if (shell && !hatchAt) hatch(); sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; usage = s.usage || null; budget = s.budget || null; if (s.vocab) vocab = s.vocab; whisperOn = !!s.whisper; updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
+function applyState(s) { pet = s.pet; if (s.pet.hatched === false) shell = true; else if (shell && !hatchAt) hatch(); sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; usage = s.usage || null; budget = s.budget || null; if (s.vocab) vocab = s.vocab; whisperOn = !!s.whisper; if (s.ways !== undefined) gotWays(s.ways); updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
 // Remember how Lax looks, so the app's offline page can show the same Lax asleep. In the browser, the last state and
 // the last 150 lines, so a reload while the Mac can't answer (the page then comes from sw.js) shows the same.
 const remember = () => { try { NATIVE?.remember(JSON.stringify({ pet, settings })); } catch {} };
@@ -900,9 +900,39 @@ function showKept() {
 }
 // Asked again on every retry: right as the Mac goes, the relay may not know yet, and the first answer can be wrong.
 const probeRelay = () => fetch('/api/memory', { headers: { 'x-lax-token': TOKEN } }).then((r) => r.json())
-  .then((j) => { relayHolds = j.error === 'Mac asleep'; diag('probe', { holds: relayHolds, error: j.error }); updateHint(); },
-    (e) => { relayHolds = false; diag('probe', { holds: false, threw: String(e).slice(0, 80) }); updateHint(); });
+  .then((j) => { probeThrew = 0; relayHolds = j.error === 'Mac asleep'; diag('probe', { holds: relayHolds, error: j.error }); updateHint(); },
+    (e) => { relayHolds = false; probeThrew++; diag('probe', { holds: false, threw: String(e).slice(0, 80) }); updateHint(); });
+let probeThrew = 0; // in a row: the relay itself didn't answer
 function setAsleep(v) { if (macAsleep === v) return; macAsleep = v; updateHint(); }
+// ---------- the other way in (lib/ways.mjs) ----------
+// The Mac says which ways reach it (the tunnel, the relay) and which you chose. When the stream keeps failing here and
+// the other way works, the page moves there; once the one you chose works again (the Mac says so), back. Never twice
+// within 3 minutes, so a bad minute can't bounce it.
+let ways = null; try { ways = JSON.parse(localStorage.lax_ways || 'null'); } catch {}
+const movedAt = Number(qs.get('moved')) || 0;
+let fellBack = !!movedAt; try { if (movedAt) localStorage.lax_fellback = '1'; else fellBack = localStorage.lax_fellback === '1'; } catch {}
+let fails = 0, moving = false;
+const wayHere = () => ['tunnel', 'relay'].find((k) => ways?.[k] && new URL(ways[k].url).origin === location.origin) || null;
+function gotWays(w) {
+  ways = w; try { localStorage.lax_ways = JSON.stringify(w); } catch {}
+  const here = wayHere();
+  if (w && fellBack && here && here !== w.prefer && w[w.prefer]?.up && Date.now() - movedAt > 3 * 6e4) {
+    try { delete localStorage.lax_fellback; } catch {} fellBack = false;
+    moveTo(w.prefer, `the ${w.prefer} works again`, true);
+  }
+}
+function moveTo(k, why, back) {
+  if (moving || DEMO || NATIVE) return; moving = true;
+  feed(`> ${why}, moving to the ${k}`, 'session', undefined, '*'); diag('move', { to: k, why });
+  setTimeout(() => location.replace(`${ways[k].url}/?t=${encodeURIComponent(TOKEN)}${back ? '' : '&moved=' + Date.now()}`), 1500);
+}
+setInterval(() => { if (fellBack && ways && !macAsleep) gotWays(ways); }, 30e3); // the Mac only says when something changes
+async function otherWay() {
+  const here = wayHere(); if (!here || fails < 2 || Date.now() - movedAt < 3 * 6e4) return;
+  if (here === 'tunnel' && ways.relay) { // the relay can say whether the Mac is there
+    try { const j = await fetch(`${ways.relay.url}/_relay/up?t=${encodeURIComponent(TOKEN)}`).then((r) => r.json()); if (j.mac) moveTo('relay', 'the tunnel isn\'t answering'); } catch {}
+  } else if (here === 'relay' && ways.tunnel && probeThrew >= 2 && navigator.onLine) moveTo('tunnel', 'the relay isn\'t answering');
+}
 // The first link asks the Mac for its recent lines, so a fresh page (the app moving to the cover screen, a reload)
 // still shows the conversation. Relinks don't: the page already has them.
 let linkedOnce = false;
@@ -922,10 +952,10 @@ function connect() {
   es.addEventListener('react', (e) => { const r = JSON.parse(e.data); if (r.state === 'thinking') voiceBusy = true; else setReact(r.state); });
   es.onopen = () => {
     if (showingKept) { showingKept = false; [...term.children].slice(0, -1).forEach((d) => d.remove()); where.clear(); parts.length = 0; keptFeed = []; } // the Mac's backlog follows
-    linkedOnce = true; if (macAsleep) { setAsleep(false); hop(1.4); } if (diagLater.length) diag('while-asleep', { events: diagLater.splice(0) }); feed('linked to mac ✓', 'session', undefined, '*'); };
+    linkedOnce = true; fails = 0; if (macAsleep) { setAsleep(false); hop(1.4); } if (diagLater.length) diag('while-asleep', { events: diagLater.splice(0) }); feed('linked to mac ✓', 'session', undefined, '*'); };
   es.onerror = () => {
     if (!macAsleep) feed(`${settings.name.toLowerCase()} fell asleep. zzz…`, 'session', undefined, '*');
-    setAsleep(true); showKept();
+    setAsleep(true); showKept(); fails++; setTimeout(otherWay, 3000); // after the probe below has answered
     // Cloudflare answers for a sleeping Mac with an error page, which ends EventSource for good: retry by hand.
     probeRelay();
     if (es.readyState === EventSource.CLOSED) setTimeout(connect, 10000);
