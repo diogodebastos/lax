@@ -9,7 +9,8 @@
 //   anything else     passed to the Mac; "Mac asleep" (503) when it isn't there
 // Frames are JSON text. Down: { t: 'req', id, method, path, headers }, { t: 'body', id, b64 }…, { t: 'sent', id };
 // { t: 'abort', id } when the phone goes away. Up: { t: 'head', id, status, headers }, { t: 'chunk', id, b64 }…, { t: 'end', id }.
-// The Mac pings ("ping" → "pong", answered without waking the object); a minute without one and the Mac counts as asleep.
+// The Mac pings ("ping" → "pong", answered without waking the object); a minute without one and the Mac counts as asleep,
+// and at once when it says { t: 'bye' } just before sleeping (until it pings again).
 // Held while it sleeps: a POST the phone marks x-lax-queue (what you said, a yes or no, a setting), with its x-lax-once id
 // and the phone's token, is kept in order and answered 202 { ok, queued }. On linking the Mac says { t: 'hello', token:
 // sha256 of the token }; only requests with that token are held, and they go to the Mac in order, before anything new,
@@ -50,8 +51,8 @@ export class Relay extends DurableObject {
   mac() {
     const now = Date.now();
     return this.ctx.getWebSockets('mac').find((ws) => {
-      const seen = Math.max(this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() || 0, ws.deserializeAttachment()?.at || 0);
-      return now - seen < ASLEEP_AFTER;
+      const a = ws.deserializeAttachment() || {}, seen = Math.max(this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() || 0, a.at || 0);
+      return now - seen < ASLEEP_AFTER && !(a.bye && seen <= a.bye); // it said bye, and hasn't pinged since
     });
   }
 
@@ -138,6 +139,7 @@ export class Relay extends DurableObject {
 
   webSocketMessage(ws, data) {
     let f; try { f = JSON.parse(data); } catch { return; }
+    if (f.t === 'bye') { ws.serializeAttachment({ ...(ws.deserializeAttachment() || {}), bye: Date.now() }); return; } // the Mac is going to sleep
     if (f.t === 'hello') { // the Mac's back, and says whose token to hold for
       if (/^[0-9a-f]{64}$/.test(f.token || '')) this.sql.exec("INSERT OR REPLACE INTO meta (k, v) VALUES ('token', ?)", f.token);
       this.flush(); return;

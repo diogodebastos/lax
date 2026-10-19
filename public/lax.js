@@ -949,6 +949,7 @@ function connect() {
   es.addEventListener('tab', (e) => { const v = JSON.parse(e.data).view, chip = $('#chips').querySelector(`[data-view="${CSS.escape(v)}"]`); if (chip) goTab(chip); });
   es.addEventListener('reborn', () => { [...term.children].slice(0, -1).forEach((d) => d.remove()); where.clear(); parts.length = 0; hop(1.8);
     showBubble({ id: 'born', kind: 'reply', text: `Hi! I'm ${settings.name}. Nice to meet you.`, speak: true }); });
+  es.addEventListener('sleeping', () => { feed(`${settings.name.toLowerCase()} fell asleep. zzz…`, 'session', undefined, '*'); setAsleep(true); probeRelay(); }); // the Mac said so first (lib/power.mjs)
   es.addEventListener('react', (e) => { const r = JSON.parse(e.data); if (r.state === 'thinking') voiceBusy = true; else setReact(r.state); });
   es.onopen = () => {
     if (showingKept) { showingKept = false; [...term.children].slice(0, -1).forEach((d) => d.remove()); where.clear(); parts.length = 0; keptFeed = []; } // the Mac's backlog follows

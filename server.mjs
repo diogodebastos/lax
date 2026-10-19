@@ -38,6 +38,7 @@ import { createPublicMind, placesOf, lastCommitFiles, filesIn } from './lib/publ
 import { startRelay } from './lib/relay.mjs';
 import { once } from './lib/once.mjs';
 import { startWays } from './lib/ways.mjs';
+import { watchPower } from './lib/power.mjs';
 import { MAX_WAIT_S } from './hooks/timeouts.mjs';
 import { createBudget, LEVELS } from './lib/budget.mjs';
 
@@ -1218,7 +1219,11 @@ var ways = null;
     log: (m) => { console.log(`[${m.replace(': ', '] ')}`); if (/linked|lost/.test(m)) setTimeout(pushState, 100); } }) : null;
   ways = startWays({ tunnel: process.env.LAX_PUBLIC_URL, relay: relay ? process.env.LAX_RELAY_URL : '', relayLinked: () => relay?.linked(),
     headers: process.env.CF_ACCESS_CLIENT_ID ? { 'cf-access-client-id': process.env.CF_ACCESS_CLIENT_ID, 'cf-access-client-secret': process.env.CF_ACCESS_CLIENT_SECRET || '' } : {},
-    onChange: pushState }); }
+    onChange: pushState });
+  // The Mac about to sleep (lib/power.mjs): the relay and the phone know now, not a minute later. Not in tests.
+  if (!process.env.LAX_HOME && !process.env.LAX_DATA) watchPower({ log: console.log,
+    onSleep: () => { console.log('[power] going to sleep'); relay?.bye(); broadcast('sleeping', {}); },
+    onWake: () => { console.log('[power] awake'); relay?.relink(); } }); }
 // Whisper on the Mac (lib/whisper.mjs), the port after Lax's. Not in tests (a throwaway LAX_HOME) unless asked.
 if (process.env.LAX_WHISPER === '1' || (process.env.LAX_WHISPER !== '0' && !process.env.LAX_HOME && !process.env.LAX_DATA)) {
   if (whisper.start({ port: PORT + 1, onLog: (m) => { console.log(`[whisper] ${m}`); pushState(); } })) console.log('[whisper] starting');

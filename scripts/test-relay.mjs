@@ -93,6 +93,14 @@ r = await fetch(`${RELAY}/_relay/up?t=${TOK}`); e = await r.json();
 check('"is the Mac there?" with the phone\'s token: yes, open to other pages (CORS)', e.mac === true && r.headers.get('access-control-allow-origin') === '*', JSON.stringify(e));
 r = await fetch(`${RELAY}/_relay/up?t=wrong`); await r.text();
 check('…not with another token', r.status === 401, String(r.status));
+mac.bye(); await sleep(300);
+r = await fetch(`${RELAY}/_relay/up?t=${TOK}`); e = await r.json();
+check('the Mac says bye before sleeping: "not there" at once', e.mac === false, JSON.stringify(e));
+r = await fetch(RELAY + '/hello'); await r.text();
+check('…and "Mac asleep" at once, no 30 s wait', r.status === 503, String(r.status));
+mac.relink(); for (let i = 0; i < 40; i++) { await sleep(100); r = await fetch(`${RELAY}/_relay/up?t=${TOK}`); if ((await r.json()).mac) break; }
+r = await fetch(RELAY + '/hello'); await r.text();
+check('…awake again: a fresh link, and through at once', r.status === 200, String(r.status));
 mac.stop(); await sleep(500);
 r = await fetch(`${RELAY}/_relay/up?t=${TOK}`); e = await r.json();
 check('…and no, once its link is gone', e.mac === false, JSON.stringify(e));
