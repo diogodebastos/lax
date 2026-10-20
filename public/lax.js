@@ -396,13 +396,13 @@ function docBox(text) {
   }
   return box;
 }
-// Lax's answers start with its face, small and grey like the old ✓: a square with two eyes. A mask, so it takes the
-// theme's grey; drawn 3x bigger than it shows so the pixels stay sharp.
+// Lax's answers start with the tiny Lax (public/mind-view.js), small and grey like the old ✓. A mask, so it takes the
+// theme's grey; drawn 6x bigger than it shows so the pixels stay sharp.
 let faceMask = null;
 function laxFace() {
   if (!faceMask) {
-    const rows = ['......', 'ffffff', 'f.ff.f', 'f.ff.f', 'ffffff', 'ffffff', '......'], k = 6;
-    const cv = document.createElement('canvas'); cv.width = 6 * k; cv.height = 7 * k; const c = cv.getContext('2d');
+    const rows = ['..fffff..', '.fffffff.', 'fffffffff', 'ff.fff.ff', 'ff.fff.ff', 'fffffffff', '.fffffff.', '..ff.ff..'], k = 6;
+    const cv = document.createElement('canvas'); cv.width = 9 * k; cv.height = 8 * k; const c = cv.getContext('2d');
     rows.forEach((r, j) => [...r].forEach((ch, i) => ch === 'f' && c.fillRect(i * k, j * k, k, k)));
     faceMask = `url(${cv.toDataURL()})`;
     document.documentElement.style.setProperty('--face', faceMask);

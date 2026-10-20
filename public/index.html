@@ -98,7 +98,8 @@
   #term > .own .mk { color:var(--blue); } #term > .own.step.run .head .mk { animation:blink 1s steps(2) infinite; }
   #term .used { color:var(--dim); margin-left:1.2em; cursor:pointer; } #term .used > .x { display:none; margin-top:3px; } #term .used.open > .x { display:block; }
   #term .used .x > div { margin-bottom:3px; } #term .used .say { color:var(--text2); }
-  #term .face { display:inline-block; width:12px; height:14px; margin-right:calc(1.2em - 12px); vertical-align:-1px; background:var(--dim);
+  /* 9 × 8, as wide as the old face; centred on the capitals, not the line, so it sits level with the text. */
+  #term .face { display:inline-block; width:.86em; height:.76em; margin-right:.34em; vertical-align:-.1em; background:var(--dim);
     -webkit-mask:var(--face) center/100% 100% no-repeat; mask:var(--face) center/100% 100% no-repeat; text-indent:0; }
   #term .yes, #term .no { margin-left:1.2em; } #term .yes { color:var(--green); } #term .no { color:var(--red); }
   /* Tall cover (no tabs): one row per step, no commands or output under it. */
@@ -318,6 +319,6 @@
 <div id="wake"><div>tap to wake <span id="wakeName">Lax</span><small>(unlocks sound + mic)</small></div></div>
 <script src="heard.js?v=3"></script>
 <script src="body.js?v=1"></script>
-<script src="lax.js?v=59"></script>
+<script src="lax.js?v=60"></script>
 </body>
 </html>
