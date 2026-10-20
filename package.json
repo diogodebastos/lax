@@ -18,6 +18,8 @@
     "remove-hooks": "node scripts/install-hooks.mjs --remove",
     "install-service": "node scripts/install-launchd.mjs",
     "remove-service": "node scripts/install-launchd.mjs --remove",
+    "install-menubar": "node scripts/install-menubar.mjs",
+    "remove-menubar": "node scripts/install-menubar.mjs --remove",
     "logs": "tail -f ~/.lax/logs/server.log ~/.lax/logs/tunnel.log",
     "install-channel": "node scripts/install-channel.mjs",
     "remove-channel": "node scripts/install-channel.mjs --remove",
