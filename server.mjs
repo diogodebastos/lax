@@ -23,7 +23,7 @@ import { createSkills } from './lib/skills.mjs';
 import { matchSession, TELL_NOTE } from './lib/tell.mjs';
 import { createLearn } from './lib/learn.mjs';
 import { createSchedule } from './lib/schedule.mjs';
-import { createImprove, ANNOYED } from './lib/improve.mjs';
+import { createImprove, ANNOYED, unheard } from './lib/improve.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus, tabCommand } from './lib/actions.mjs';
 import { readUsage, usageText } from './lib/usage.mjs';
 import { openTerminal, q, ON_MAC, closeTarget } from './lib/terminal.mjs';
@@ -536,9 +536,12 @@ function onHook(h) {
       break;
     case 'UserPromptSubmit':
       s.status = 'working'; if (!mine) youSaid(h.prompt, project, sid); else if (laxOnMac) youSaid(said(h.prompt), settings.name.toLowerCase());
-      // A terminal session Lax can't hear (not started with `lax`): friction, once a day per project (lib/improve.mjs).
-      if (!mine && s.where === 'cli' && s.pid && ![...channels.values()].some((c) => c.sessionPid === s.pid))
+      // A terminal session Lax can't hear (not started with `lax`): said in the feed once per session, and friction,
+      // once a day per project (lib/improve.mjs).
+      if (unheard(s, channels.values(), mine)) {
+        if (!s.nolaxTold) { s.nolaxTold = true; feed('  not through Lax: say /lax here to reopen it live', 'session', project, sid); }
         improve.note('without lax', `a ${project} session in the terminal without Lax: it couldn't hear you there`, `nolax:${project}`);
+      }
       logEvent(sid, project, 'prompt', short(mine ? said(h.prompt) : h.prompt, 500), repo);
       break;
     case 'PreToolUse': {
