@@ -20,7 +20,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, ms = 8000) => { for (const end = Date.now() + ms; Date.now() < end; await sleep(100)) { const v = fn(); if (v) return v; } return fn(); };
 
 process.env.LAX_HOME = HOME; delete process.env.LAX_DATA;
-const { ANNOYED } = await import('../lib/improve.mjs');
+const { ANNOYED, unheard } = await import('../lib/improve.mjs');
+{
+  const cli = { where: 'cli', pid: 42 }, chans = [{ sessionPid: 7 }];
+  check('a terminal session with no `lax` channel is unheard', unheard(cli, chans, false));
+  check('…not once its channel came (same pid), nor Lax\'s own, nor a non-terminal or pid-less one',
+    !unheard(cli, [...chans, { sessionPid: 42 }], false) && !unheard(cli, chans, true)
+    && !unheard({ where: 'app', pid: 42 }, chans, false) && !unheard({ where: 'cli' }, chans, false));
+}
 check('"Lax, that was annoying" / "that\'s so slow" / "isso foi irritante" are friction',
   ['Lax, that was annoying', "that's so slow.", 'you are really useless', 'isso foi mesmo irritante', 'estás muito lenta'].every((t) => ANNOYED.test(t)));
 check('…"that was an annoying bug, fix it" or "is it slow?" are not', !['fix that annoying bug', 'is it slow?', 'the build is broken, look'].some((t) => ANNOYED.test(t)));
