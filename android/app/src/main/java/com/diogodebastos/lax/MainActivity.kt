@@ -118,6 +118,7 @@ class MainActivity : Activity() {
             override fun onReceivedHttpError(view: WebView, req: WebResourceRequest, res: WebResourceResponse) {
                 if (req.isForMainFrame && res.statusCode >= 500) sleep()
             }
+            override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? = checked(req)
         }
         load()
         getSharedPreferences("lax", MODE_PRIVATE).registerOnSharedPreferenceChangeListener(moved)
@@ -179,6 +180,37 @@ class MainActivity : Activity() {
             }
         }, "lax-wake").start()
     }
+
+    // The page's own files (index.html, lax.js…) pass through Cloudflare, and the relay could change them: a changed lax.js
+    // could read what's sealed once it's opened. So they're fetched here and shown only when the Mac signed them
+    // (x-lax-page, lib/seal.mjs). The API is sealed itself and passes; so do other sites (the font) and the relay's own
+    // /_relay/. Paired before sealing: no key, so as before.
+    private fun checked(req: WebResourceRequest): WebResourceResponse? {
+        val u = req.url
+        if (req.method != "GET" || u.scheme != "https" && u.scheme != "http" || !Lax.isMac(this, u)) return null
+        val path = u.encodedPath?.ifEmpty { "/" } ?: "/"
+        if (path.startsWith("/api/") || path.startsWith("/_relay/")) return null
+        val cfg = Lax.config(this)?.takeIf { it.pageKey != null } ?: return null
+        val none = { code: Int, why: String, html: String -> WebResourceResponse("text/html", "utf-8", code, why, mapOf("cache-control" to "no-store"), html.byteInputStream()) }
+        return try {
+            val c = java.net.URL(u.toString()).openConnection() as java.net.HttpURLConnection
+            c.instanceFollowRedirects = false; c.connectTimeout = 15_000; c.readTimeout = 20_000
+            for ((k, v) in cfg.headers()) c.setRequestProperty(k, v)
+            CookieManager.getInstance().getCookie(u.toString())?.let { c.setRequestProperty("Cookie", it) } // the Access login, if that's how
+            val code = c.responseCode
+            if (code >= 500) return none(code, "Mac asleep", "") // sleep() for the page
+            if (code != 200) return none(code, "Not here", "")
+            val bytes = c.inputStream.use { it.readBytes() }
+            if (!cfg.signedByMac(path, bytes, c.getHeaderField("x-lax-page"))) {
+                Log.w("Lax", "refused $path: not signed by your Mac")
+                return none(403, "Not from your Mac", if (req.isForMainFrame) REFUSED else "")
+            }
+            val type = (c.contentType ?: "application/octet-stream").split(";")
+            val charset = type.drop(1).firstNotNullOfOrNull { Regex("charset=(.+)").find(it.trim())?.groupValues?.get(1) }
+            WebResourceResponse(type[0].trim(), charset, 200, "OK", mapOf("cache-control" to "no-store"), bytes.inputStream())
+        } catch (e: Exception) { none(502, "Can't reach the Mac", "") } // never left to the WebView, which wouldn't check
+    }
+    private val REFUSED = "<!doctype html><meta name=viewport content='width=device-width'><body style='background:#000;color:#b7b0a4;font:16px monospace;display:grid;place-items:center;height:90vh;text-align:center;padding:16px'>This page didn't come from your Mac, so Lax won't open it.</body>"
 
     /** The service moved to the other way in (or back): the page follows. */
     private val moved = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->

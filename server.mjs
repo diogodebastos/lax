@@ -39,7 +39,7 @@ import { startRelay } from './lib/relay.mjs';
 import { once } from './lib/once.mjs';
 import { startWays } from './lib/ways.mjs';
 import { watchPower } from './lib/power.mjs';
-import { seal, unseal, sse } from './lib/seal.mjs';
+import { seal, unseal, sse, signPage } from './lib/seal.mjs';
 import { MAX_WAIT_S } from './hooks/timeouts.mjs';
 import { createBudget, LEVELS } from './lib/budget.mjs';
 
@@ -1089,10 +1089,13 @@ http.createServer(async (req, res) => {
   }
   if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
     const f = path.join(ROOT, 'public', url.pathname === '/' ? 'index.html' : path.normalize(url.pathname));
-    if (!f.startsWith(path.join(ROOT, 'public')) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
+    if (!f.startsWith(path.join(ROOT, 'public')) || !fs.statSync(f, { throwIfNoEntry: false })?.isFile()) { res.writeHead(404); return res.end(); }
     // no-store: Cloudflare would otherwise cache .js/.css at the edge and serve stale bodies to the phone.
-    res.writeHead(200, { 'content-type': MIME[path.extname(f)] || 'application/octet-stream', 'cache-control': 'no-store' });
-    return fs.createReadStream(f).pipe(res);
+    // x-lax-page: signed, so the app knows it's from this Mac and not changed on the way (lib/seal.mjs). no-transform:
+    // or Cloudflare adds its own script to the page (its bot detection), and the app rightly refuses it.
+    const bytes = fs.readFileSync(f);
+    res.writeHead(200, { 'content-type': MIME[path.extname(f)] || 'application/octet-stream', 'cache-control': 'no-store, no-transform', 'x-lax-page': signPage(url.pathname, bytes) });
+    return res.end(bytes);
   }
   if (url.pathname === '/api/health' && isLocal(req)) { // scripts/after-merge.mjs: am I back, and fine?
     let ok = false; try { ok = !!db.prepare('SELECT 1 AS x').get().x && fs.existsSync(MIND); } catch {}

@@ -1,6 +1,6 @@
 // Sealed (lib/seal.mjs) on a throwaway Lax: the key is made once and kept only for you, the pairing link carries it after
 // the #, a sealed request is opened and answered sealed, the stream is sealed for a phone that asks, plain for one that
-// doesn't, and a body sealed with another key is nothing.
+// doesn't, a body sealed with another key is nothing, and the page's own files are signed (so the app can tell them).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -39,6 +39,14 @@ let b = await stream('&seal=1'), d = JSON.parse(b.match(/data: (.*)/)[1]);
 check('the stream, sealed for a phone that asks', typeof d.sealed === 'string' && !/"pet"/.test(b) && JSON.parse(open(d.sealed)).pet);
 b = await stream('');
 check('…and plain for one that doesn\'t', /"pet"/.test(b));
+
+const pageKey = crypto.createHmac('sha256', key).update('lax page').digest(); // as Lax.kt makes it
+const sig = (p, bytes) => crypto.createHmac('sha256', pageKey).update(p + '\n').update(bytes).digest('base64');
+for (const p of ['/', '/lax.js']) {
+  r = await fetch(LAX + p); const bytes = Buffer.from(await r.arrayBuffer());
+  check(`${p} is signed by this Mac`, r.headers.get('x-lax-page') === sig(p, bytes) && bytes.length > 100);
+}
+check('…for its own path only (a file passed off as another isn\'t)', r.headers.get('x-lax-page') !== sig('/', Buffer.from(await (await fetch(LAX + '/lax.js')).arrayBuffer())));
 
 console.log(failed ? `\n${failed} seal check(s) failed` : '\nall seal checks passed');
 process.exit(failed ? 1 : 0);

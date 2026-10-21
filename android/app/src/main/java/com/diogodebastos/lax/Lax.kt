@@ -15,7 +15,7 @@ object Lax {
         val token: String get() = uri.getQueryParameter("t") ?: ""
         val host: String get() = uri.host ?: url
         /** The sealing key, after the # of the pairing link (lib/seal.mjs on the Mac); null if paired before. */
-        val sealKey: ByteArray? get() = uri.fragment?.let { Uri.parse("x:?$it").getQueryParameter("k") }
+        val sealKey: ByteArray? get() = uri.fragment?.let { Uri.parse("x://x?$it").getQueryParameter("k") }
             ?.let { try { android.util.Base64.decode(it, android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP) } catch (_: Exception) { null } }
             ?.takeIf { it.size == 32 }
 
@@ -26,9 +26,9 @@ object Lax {
             c.init(javax.crypto.Cipher.ENCRYPT_MODE, javax.crypto.spec.SecretKeySpec(sealKey, "AES"), javax.crypto.spec.GCMParameterSpec(128, iv))
             return android.util.Base64.encodeToString(iv + c.doFinal(text.toByteArray()), android.util.Base64.NO_WRAP)
         }
-        /** What came, opened if it's { sealed } (null if it doesn't open with this key). */
+        /** What came, opened if it's { sealed }: null if it doesn't open with this key, or came plain when there is one. */
         fun opened(j: JSONObject): JSONObject? {
-            val s = j.optString("sealed", "").ifEmpty { return j }
+            val s = j.optString("sealed", "").ifEmpty { return if (sealKey == null) j else null }
             return try {
                 val b = android.util.Base64.decode(s, android.util.Base64.DEFAULT)
                 val c = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
@@ -36,6 +36,17 @@ object Lax {
                 JSONObject(String(c.doFinal(b, 12, b.size - 12)))
             } catch (_: Exception) { null }
         }
+
+        /** The key the Mac signs its page with (x-lax-page, lib/seal.mjs): made from the sealing key, so it never travelled. */
+        val pageKey: ByteArray? get() = sealKey?.let { mac(it, "lax page".toByteArray()) }
+        /** Whether one of the page's files is the Mac's, unchanged: its path, a newline, its bytes. */
+        fun signedByMac(path: String, bytes: ByteArray, sig: String?): Boolean {
+            val key = pageKey ?: return false
+            val want = try { android.util.Base64.decode(sig ?: return false, android.util.Base64.DEFAULT) } catch (_: Exception) { return false }
+            return java.security.MessageDigest.isEqual(want, mac(key, (path + "\n").toByteArray() + bytes))
+        }
+        private fun mac(key: ByteArray, data: ByteArray): ByteArray =
+            javax.crypto.Mac.getInstance("HmacSHA256").run { init(javax.crypto.spec.SecretKeySpec(key, "HmacSHA256")); doFinal(data) }
 
         /** Cloudflare Access service-token headers: the background link has no browser login. */
         fun headers(): Map<String, String> =
@@ -89,6 +100,12 @@ object Lax {
     fun validUrl(url: String): Boolean {
         val u = Uri.parse(url.trim())
         return (u.scheme == "https" || u.scheme == "http") && !u.host.isNullOrEmpty() && !u.getQueryParameter("t").isNullOrEmpty()
+    }
+
+    /** Whether a URL is one of the ways in to the Mac (the paired one, or the other the Mac said). */
+    fun isMac(ctx: Context, u: Uri): Boolean {
+        val hosts = listOfNotNull(paired(ctx)?.url) + listOf("tunnel", "relay").mapNotNull { ways(ctx)?.optJSONObject(it)?.optString("url") }
+        return hosts.any { Uri.parse(it).encodedAuthority == u.encodedAuthority }
     }
 
     fun open(c: Config, path: String): HttpURLConnection {

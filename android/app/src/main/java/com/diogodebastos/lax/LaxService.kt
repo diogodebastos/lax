@@ -219,7 +219,8 @@ class LaxService : Service() {
     @Volatile private var seal: Lax.Config? = null // the config the stream was opened with: its key opens the events
     private fun dispatch(event: String, data: String) {
         val raw = try { JSONObject(data) } catch (_: Exception) { return }
-        val j = seal?.takeIf { it.sealKey != null }?.opened(raw) ?: if (raw.has("sealed")) return else raw
+        val c = seal?.takeIf { it.sealKey != null } // sealed: a plain event was made on the way, and is nothing
+        val j = if (c != null) c.opened(raw) ?: return else if (raw.has("sealed")) return else raw
         main.post {
             when (event) {
                 "bubble" -> onBubble(j)

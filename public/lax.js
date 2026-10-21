@@ -72,9 +72,12 @@ async function sealed(obj) {
   const iv = crypto.getRandomValues(new Uint8Array(12)), c = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(obj))));
   const all = new Uint8Array(12 + c.length); all.set(iv); all.set(c, 12); return JSON.stringify({ sealed: b64(all) });
 }
+// With a key, a plain answer can only be the relay's word about itself ({ queued }, { error: 'Mac asleep' }, { mac }): it
+// can't seal, and anything else plain was made on the way, so it's nothing (it could put its own words on the screen).
+const fromRelay = (j) => j && typeof j === 'object' && Object.entries(j).every(([k, v]) => typeof v === 'boolean' || (k === 'error' && /^(Mac asleep|too many wrong tokens|bad token)$/.test(v)));
 /** What came: opened if it's { sealed }. */
 async function opened(j) {
-  if (typeof j?.sealed !== 'string') return j;
+  if (typeof j?.sealed !== 'string') { if ((await SEAL) && !fromRelay(j)) throw new Error('plain, and this page is sealed'); return j; }
   const key = await SEAL; if (!key) throw new Error('sealed, and no key: pair again');
   const b = Uint8Array.from(atob(j.sealed), (c) => c.charCodeAt(0));
   return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b.subarray(0, 12) }, key, b.subarray(12))));
