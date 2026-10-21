@@ -331,11 +331,19 @@ const clients = new Set();
 // however long it's quiet, for as long as its claude process lives. Without a pid (older hooks), 6 hours of quiet.
 const sessions = new Map(kvGet('sessions', []));
 const SESSION_QUIET = 6 * 36e5;
+// A session in the Mac app stays open in its sidebar for days: once it has sat quiet a while its tab rests (hidden,
+// not forgotten) and comes back the moment it does something. One waiting on you stays. "working" doesn't count:
+// a turn stopped with Esc never sends its Stop, and real work sends hooks far more often than this.
+const MAC_REST = 30 * 6e4;
+const resting = (s) => s.where === 'mac' && s.status !== 'waiting' && s.ts < Date.now() - MAC_REST;
+let shown = '';
 function pruneSessions() {
   const alive = claudeAlive([...sessions.values()].map((s) => s.pid));
   let gone = 0;
   for (const [id, s] of sessions) if (s.pid ? !alive.has(s.pid) : s.ts < Date.now() - SESSION_QUIET) { sessions.delete(id); gone++; }
-  if (gone) { save(); pushState(); }
+  const now = sessionList().map((s) => s.id).join();
+  if (gone) save();
+  if (gone || now !== shown) { shown = now; pushState(); }
 }
 // Claude Code keeps a file per running session (~/.claude/sessions/<pid>.json). A start missed while the server was
 // down or stuck would hide that terminal's tab until it next did something: on start, take the ones still running.
@@ -374,7 +382,7 @@ function broadcast(type, data) {
 const laxOwn = (sid) => !!sid && (sid === voiceSessions[ASSISTANT] || sid === laxTalk.prev);
 function sessionList() {
   const cutoff = Date.now() - SESSION_QUIET;
-  return [...sessions.entries()].filter(([id, s]) => (s.pid || s.ts > cutoff) && !laxOwn(id)).map(([id, s]) => ({ id, ...s }));
+  return [...sessions.entries()].filter(([id, s]) => (s.pid || s.ts > cutoff) && !resting(s) && !laxOwn(id)).map(([id, s]) => ({ id, ...s }));
 }
 const stateMsg = () => ({ pet: petView(), sessions: sessionList(), voiceBusy: !!voiceRun, thinking: !!channelWait, settings, budget: budget.view(),
   channels: channelList(), voiceTarget, usage, vocab: vocabNow(), whisper: whisper.running(), ways: ways?.view() || null });
