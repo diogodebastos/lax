@@ -1176,6 +1176,18 @@ $('#wipeKnows').addEventListener('click', (e) => e.currentTarget.classList.toggl
 $('#sWait').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ askTimeout: +e.target.dataset.v }));
 $('#sListen').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ listen: e.target.dataset.v }));
 $('#sBudget').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ budget: e.target.dataset.v }));
+// A share card (/api/card, lib/card.mjs): made now, frozen, then to the share sheet (the app's, or the browser's); the link
+// stays here to copy.
+$('#sCard').addEventListener('click', async () => {
+  const b = $('#sCard button'), say = $('#cardSays'); if (DEMO || b.disabled) return;
+  b.disabled = true; say.textContent = 'making it…';
+  try {
+    const r = await api('/api/card'); if (!r?.url) throw new Error(r?.error || 'no card');
+    say.innerHTML = `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url)}</a>`;
+    if (NATIVE?.share) NATIVE.share(r.url); else navigator.share?.({ url: r.url }).catch(() => {});
+  } catch (e) { say.textContent = `couldn't: ${e.message || e}`; }
+  b.disabled = false;
+});
 $('#sTheme').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ theme: e.target.dataset.v }));
 // Rebirth needs a 2-second hold so it can't happen by accident.
 { const btn = $('#rebirth'), fill = btn.querySelector('i'); let t0, raf;

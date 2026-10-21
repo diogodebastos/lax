@@ -40,6 +40,7 @@ import { once } from './lib/once.mjs';
 import { startWays } from './lib/ways.mjs';
 import { watchPower } from './lib/power.mjs';
 import { seal, unseal, sse, signPage } from './lib/seal.mjs';
+import { cardOf, cardPng } from './lib/card.mjs';
 import { MAX_WAIT_S } from './hooks/timeouts.mjs';
 import { createBudget, LEVELS } from './lib/budget.mjs';
 
@@ -1148,6 +1149,14 @@ http.createServer(async (req, res) => {
   if (url.pathname === '/api/self') return json(res, self(petView(), settings, roles.view())); // the `self` tool: how Lax looks today (lib/self.mjs)
   if (url.pathname === '/api/memory') return json(res, { pet: petView(), raw: pet, voiceProject: pickChannel() ? channels.get(pickChannel()).project : 'assistant',
     milestones: db.prepare('SELECT ts,text FROM milestones ORDER BY id DESC').all() });
+  // A share card (lib/card.mjs), when you ask: Lax as it is now and a few counts, kept by its public face (the same
+  // Worker as its mind on the website), at an address only whoever you send it to will know.
+  if (url.pathname === '/api/card' && req.method === 'POST') {
+    const view = petView(), c = cardOf({ ...view, traits: view.traits.filter((t) => !(settings.hideTraits || []).includes(t)) }, publicMind.snapshot());
+    const link = await publicMind.card({ ...c, look: undefined }, cardPng(c));
+    if (link) diary(`shared a card: ${link}`);
+    return link ? json(res, { ok: true, url: link }) : json(res, { error: 'no public face: its mind key or address is missing, or it refused' }, 502);
+  }
   // What Lax knows (the life menu): counts of its notes, its skills, its newest episodes.
   if (url.pathname === '/api/knows' && req.method === 'GET') {
     let projects = 0; try { projects = fs.readdirSync(PROJECTS).filter((f) => f.endsWith('.md')).length; } catch {}

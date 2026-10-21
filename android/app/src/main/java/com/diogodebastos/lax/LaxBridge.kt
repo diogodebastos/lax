@@ -281,6 +281,13 @@ class LaxBridge(private val act: MainActivity, private val web: WebView) {
 
     // ---------- memory for the offline page ----------
     /** How Lax looks (pet + settings JSON), so the asleep page can draw the same Lax when the Mac is unreachable. */
+    /** Android's share sheet, for a link (a share card): WhatsApp, Messages, X… The page has no navigator.share here. */
+    @JavascriptInterface fun share(text: String?) = main.post {
+        if (text.isNullOrBlank()) return@post
+        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+        act.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
     @JavascriptInterface fun remember(json: String?) {
         if (json != null && json.length < 20_000) act.getSharedPreferences("lax", 0).edit().putString("look", json).apply()
     }

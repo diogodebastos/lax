@@ -141,6 +141,7 @@
   .seg { display:flex; } .seg button { font:inherit; font-size:15px; background:var(--field); color:var(--dim); border:1px solid var(--line2); padding:1px 6px; cursor:pointer; }
   .seg button.on { background:var(--coral); color:#000; }
   #stats { display:grid; grid-template-columns:1fr 1fr; gap:2px 10px; color:var(--text2); }
+  #sCard { margin-top:8px; } #cardSays { color:var(--text2); word-break:break-all; margin-top:4px; } #cardSays a { color:inherit; }
   #stats b { color:var(--fg); font-weight:400; }
   .bar { display:grid; grid-template-columns:minmax(0,1fr) 90px 32px; align-items:center; gap:8px; font-size:15px; color:var(--text2); margin:2px 0; }
   .bar span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .bar b { font-weight:400; text-align:right; }
@@ -297,6 +298,8 @@
     <h2 class="group">♥ <span id="lifeName">LAX</span>'s life</h2>
     <h3>stats</h3>
     <div id="stats"></div>
+    <div class="seg" id="sCard"><button>share a card</button></div>
+    <div id="cardSays"></div>
     <h3>traits</h3>
     <div id="sTraits"></div>
     <h3>tools</h3>
@@ -319,6 +322,6 @@
 <div id="wake"><div>tap to wake <span id="wakeName">Lax</span><small>(unlocks sound + mic)</small></div></div>
 <script src="heard.js?v=3"></script>
 <script src="body.js?v=1"></script>
-<script src="lax.js?v=62"></script>
+<script src="lax.js?v=63"></script>
 </body>
 </html>

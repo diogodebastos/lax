@@ -56,6 +56,26 @@ r = await fetch(RELAY + '/demo/mind/api/push', { method: 'POST', headers: { auth
 check('its mind takes pushes only with the Mac\'s mind key', r.status === 401);
 r = await fetch(RELAY + '/demo/mind/api/snap');
 check('…and shows what it has to anyone', r.status === 200 && 'snap' in (await r.json()));
+{ // share cards (lib/card.mjs), kept by the same face
+  const { cardOf, cardPng } = await import('../lib/card.mjs');
+  const card = cardOf({ name: 'Lax', born: Date.now() - 3 * 864e5, level: 12, stage: 'sprout', species: { name: 'fire' }, look: { color: '#d97757' }, traits: [] }, { total: { heard: 5, changes: 2 }, episodes: { total: 1 } });
+  const make = (body, key = MKEY) => fetch(RELAY + '/demo/card/api/make', { method: 'POST', headers: { authorization: 'Bearer ' + key }, body: JSON.stringify(body) });
+  const good = { card: { ...card, look: undefined }, png: cardPng(card).toString('base64') };
+  r = await make(good, 'wrong');
+  check('a card is made only with the Mac\'s mind key', r.status === 401);
+  r = await make({ ...good, card: { ...good.card, note: 'what you said' } });
+  check('…and only a card: names and counts, nothing more', r.status === 422);
+  r = await make({ ...good, png: Buffer.from('<svg/>').toString('base64') });
+  check('…with a PNG for its picture', r.status === 422);
+  r = await make(good); const id = (await r.json()).id;
+  check('made: an address nobody can guess', r.status === 200 && /^[0-9a-f]{16}$/.test(id), id);
+  r = await fetch(`${RELAY}/demo/card/${id}`); const page = await r.text();
+  check('its page has what WhatsApp and X read for the preview', r.status === 200 && page.includes(`og:image" content="${RELAY}/demo/card/${id}.png"`) && /summary_large_image/.test(page) && /level 12 fire sprout/.test(page));
+  r = await fetch(`${RELAY}/demo/card/${id}.png`);
+  check('…and its picture', r.status === 200 && r.headers.get('content-type') === 'image/png' && Buffer.from(await r.arrayBuffer()).equals(cardPng(card)));
+  r = await fetch(RELAY + '/demo/card/api/forget', { method: 'POST', headers: { authorization: 'Bearer ' + MKEY }, body: JSON.stringify({ id }) });
+  check('forgotten when the Mac says so', r.ok && (await fetch(`${RELAY}/demo/card/${id}`)).status === 404);
+}
 r = await fetch(RELAY + '/', { headers: { accept: 'text/html', cookie: 'x=1; lax_paired=1' }, redirect: 'manual' });
 check('a paired browser (its flag) gets Lax: "Mac asleep" (503) with no Mac yet', r.status === 503 && /asleep/.test(await r.text()), String(r.status));
 r = await fetch(RELAY + '/?t=' + TOK, { headers: { accept: 'text/html' }, redirect: 'manual' });

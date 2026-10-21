@@ -9,7 +9,7 @@
   "compatibility_date": "2026-06-24",
   "assets": { "directory": "../demo/dist", "binding": "ASSETS", "html_handling": "auto-trailing-slash", "not_found_handling": "none",
     "run_worker_first": true },
-  "durable_objects": { "bindings": [{ "name": "RELAY", "class_name": "Relay" }, { "name": "MIND", "class_name": "Mind" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Relay"] }, { "tag": "v2", "new_sqlite_classes": ["Mind"] }],
+  "durable_objects": { "bindings": [{ "name": "RELAY", "class_name": "Relay" }, { "name": "MIND", "class_name": "Mind" }, { "name": "CARDS", "class_name": "Cards" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Relay"] }, { "tag": "v2", "new_sqlite_classes": ["Mind"] }, { "tag": "v3", "new_sqlite_classes": ["Cards"] }],
   "workers_dev": true
 }
