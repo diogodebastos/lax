@@ -151,5 +151,27 @@ console.log(JSON.stringify({ result: 'Looked.\\n' + JSON.stringify({ fix: { none
   check('…and then the night is done', runs() === 2);
 }
 
+// A night the Mac was off: caught up later that day, once nobody has used it for a while.
+{
+  const { createImprove, NIGHT_HOUR } = await import('../lib/improve.mjs');
+  const CALM = path.join(HOME, 'calm-claude.mjs'), RUNS = path.join(HOME, 'calm-runs');
+  write(CALM, `#!${process.execPath}
+import fs from 'node:fs'; fs.appendFileSync(${JSON.stringify(RUNS)}, 'x');
+console.log(JSON.stringify({ result: 'Looked.\\n' + JSON.stringify({ fix: { saw: 'A question went unanswered.', title: 'Ask again', slug: 'ask-again', proposal: 'x' } }) }));
+`, 0o755);
+  const day = new Date(); day.setHours(NIGHT_HOUR + 10, 0, 0, 0);
+  let t = day.getTime(), idle = false; const fixes = [];
+  fs.writeFileSync(path.join(HOME, 'friction.json'), JSON.stringify({ items: [{ ts: t - 20 * 3600e3, kind: 'unanswered', text: 'a question' }], lastNight: t - 36 * 3600e3 }));
+  const imp = createImprove({ settings: () => ({ name: 'Lax', learns: true }), feed: () => {}, learn: { wishes: () => [], selfFix: (f) => fixes.push(f) },
+    body: BODY, claude: CALM, now: () => t, online: async () => true, idle: () => idle });
+  const runs = () => (fs.existsSync(RUNS) ? fs.readFileSync(RUNS, 'utf8').length : 0);
+  await imp.night();
+  check('the night was missed, but you\'re using the Mac → it waits', runs() === 0);
+  idle = true; await imp.night();
+  check('…left idle → it catches up on the night, and its fix is told as "earlier", not "last night"', runs() === 1 && fixes[0]?.caughtUp === true, JSON.stringify(fixes));
+  t += 60 * 60e3; await imp.night();
+  check('…once a day, still', runs() === 1);
+}
+
 console.log(failed ? `\n${failed} check(s) failed` : '\nall good');
 process.exit(failed ? 1 : 0);

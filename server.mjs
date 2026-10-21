@@ -782,9 +782,12 @@ const learn = createLearn({ budget, settings: () => settings, feed, diary: (t) =
   say: (text, kind = 'reply') => broadcast('bubble', { id: 'learn' + Date.now(), kind, text, speak: true }),
   record: (kind, text) => record(kind, text),
   log: (...a) => console.log('[learn]', ...a) });
-// ---------- what it notices by itself: friction, and one fix a night, told in the morning (lib/improve.mjs) ----------
+// ---------- what it notices by itself: friction, and one fix a night (or once idle, if the night was missed) (lib/improve.mjs) ----------
+// Idle, for a missed night's catch-up: nothing waiting on you and no session touched in half an hour (the phone needn't be there).
+const IDLE = Number(process.env.LAX_IDLE || 30 * 60) * 1000;
+const idle = () => !voiceRun && !channelWait && !laxOnMac && pending.size === 0 && ![...sessions.values()].some((s) => Date.now() - s.ts < IDLE);
 const improve = createImprove({ budget, settings: () => settings, feed, learn, body: process.env.LAX_BODY || ROOT, claude: process.env.LAX_CLAUDE,
-  log: (...a) => console.log('[improve]', ...a) });
+  idle, log: (...a) => console.log('[improve]', ...a) });
 // ---------- know-how: workflows you repeat become skills, installed on your yes (lib/skills.mjs) ----------
 const skills = createSkills({ settings: () => settings, feed, mind: mindEvent, diary: (t) => diary(t), broadcast, pending, quiet,
   gainXp: (n) => { gainXp(n); save(); pushState(); }, milestone: (t) => { milestone(t); pushState(); }, record: (kind, text) => record(kind, text),
