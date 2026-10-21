@@ -32,8 +32,20 @@ async function restart() {
   try { execFileSync('/bin/sh', ['-c', RESTART], { stdio: 'ignore', timeout: 20000 }); } catch (e) { log(`restart failed: ${e.message}`); }
   return healthy(since);
 }
-const tell = (body) => fetch(`${LAX}/api/learn/merged`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-lax-token': readToken() || '' },
-  body: JSON.stringify({ id: WISH, ...body }), signal: AbortSignal.timeout(5000) }).catch((e) => log(`couldn't tell Lax: ${e.message}`));
+// A few tries: the server that just came back can still drop the first one (2026-10-20, "fetch failed" left it 'merging').
+async function tell(body) {
+  for (let i = 1; ; i++) {
+    try {
+      const r = await fetch(`${LAX}/api/learn/merged`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-lax-token': readToken() || '' },
+        body: JSON.stringify({ id: WISH, ...body }), signal: AbortSignal.timeout(5000) });
+      if (r.ok) return;
+      throw new Error(`HTTP ${r.status}`);
+    } catch (e) {
+      if (i >= 5) return log(`couldn't tell Lax: ${e.message}`);
+      await sleep(3000);
+    }
+  }
+}
 
 await sleep(1500); // let Lax say "merging…" first
 if (await restart()) {

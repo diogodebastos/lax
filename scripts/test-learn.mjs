@@ -194,6 +194,25 @@ check('…and it says so in its log', /rolled back/.test(fs.readFileSync(path.jo
 const merged = await post('/api/learn/merged', { id: wish('Timers').id, ok: true });
 check('"merged and healthy" → the wish is learned', merged.ok && wish('Timers').status === 'merged');
 
+// A merge after-merge never reported on (it couldn't reach the new server): git settles it, so it isn't 'merging' forever.
+{
+  const H2 = path.join(HOME, 'stuck'), B2 = path.join(H2, 'body');
+  write(path.join(B2, 'a.txt'), 'a\n'); sh(H2, 'init', '-q', '-b', 'main', B2); sh(B2, 'add', '-A'); sh(B2, 'commit', '-qm', 'body');
+  for (const b of ['in', 'out']) { sh(B2, 'checkout', '-q', '-b', `lax/learn-${b}`); sh(B2, 'commit', '-q', '--allow-empty', '-m', b); sh(B2, 'checkout', '-q', 'main'); }
+  sh(B2, 'merge', '-q', '--no-ff', '-m', 'merge in', 'lax/learn-in');
+  const stuck = (id) => ({ id, title: id, slug: id, status: 'merging', branch: `lax/learn-${id}`, worktree: path.join(H2, 'gone') });
+  write(path.join(H2, 'wishes.json'), JSON.stringify({ wishes: [stuck('in'), stuck('out')], lastOffer: Date.now() }));
+  const out = execFileSync(process.execPath, ['--input-type=module', '-e', `
+    const { createLearn } = await import(${JSON.stringify(path.join(ROOT, 'lib', 'learn.mjs'))});
+    const nop = () => {};
+    createLearn({ body: ${JSON.stringify(B2)}, settings: () => ({ name: 'Lax', learns: true }), quiet: () => false, pending: new Map(),
+      feed: nop, diary: nop, say: nop, broadcast: nop, gainXp: nop, record: nop, log: nop });
+    setTimeout(nop, 1500);`], { env: { ...ENV, LAX_HOME: H2, LAX_WISH_TICK: '0.2', LAX_MERGE_STUCK: '0' }, encoding: 'utf8' });
+  const w2 = JSON.parse(fs.readFileSync(path.join(H2, 'wishes.json'), 'utf8')).wishes;
+  check('stuck merging, its branch in main → merged', w2[0].status === 'merged', out + JSON.stringify(w2[0]));
+  check('stuck merging, rolled back → back to review', w2[1].status === 'review' && /rolled back/.test(w2[1].failed || ''), JSON.stringify(w2[1]));
+}
+
 // Whose origin (lib/upstream.mjs): gh's permission decides; no gh, or an error, is never "theirs".
 {
   const { ownsOrigin } = await import(path.join(ROOT, 'lib', 'upstream.mjs'));
