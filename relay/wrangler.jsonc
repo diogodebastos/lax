@@ -1,11 +1,15 @@
 // The relay (worker.mjs): one per Lax, on its person's own Cloudflare account, at lax-relay.<account>.workers.dev.
 // The Mac's key: `npx wrangler secret put RELAY_KEY --config relay/wrangler.jsonc`, the same as ~/.lax/secrets/relay-key.
+// Its public face (/demo) is demo/'s: the pages from demo/dist (`node scripts/demo.mjs` builds them), the mind's room, and
+// the Mac's mind key as MIND_KEY (~/.lax/secrets/mind-key). With your own domain, PUBLIC_HOME sends /demo there instead.
 {
   "$schema": "../node_modules/wrangler/config-schema.json",
   "name": "lax-relay",
   "main": "./worker.mjs",
   "compatibility_date": "2026-06-24",
-  "durable_objects": { "bindings": [{ "name": "RELAY", "class_name": "Relay" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Relay"] }],
+  "assets": { "directory": "../demo/dist", "binding": "ASSETS", "html_handling": "auto-trailing-slash", "not_found_handling": "none",
+    "run_worker_first": true },
+  "durable_objects": { "bindings": [{ "name": "RELAY", "class_name": "Relay" }, { "name": "MIND", "class_name": "Mind" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Relay"] }, { "tag": "v2", "new_sqlite_classes": ["Mind"] }],
   "workers_dev": true
 }

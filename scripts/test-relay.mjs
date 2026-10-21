@@ -1,14 +1,15 @@
 // The relay (Phase 11), locally: the real Worker under `wrangler dev`, the Mac's client (lib/relay.mjs), first against an
 // echo server (requests, a 2 MB body, a stream, the phone going away, wrong tokens, the Mac's link going and coming back),
 // what the phone sent while the Mac slept (held, then handed over in order, once), then a throwaway Lax end to end (its
-// event stream through the relay, nothing relayed counts as "this Mac", a repeated request done once).
+// event stream through the relay, nothing relayed counts as "this Mac", a repeated request done once). And its public
+// face: the landing for whoever isn't paired, Lax for whoever is, and the mind's room.
 //   node --no-warnings scripts/test-relay.mjs     (needs wrangler: npx fetches it the first time)
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import crypto from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { startRelay } from '../lib/relay.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -37,18 +38,30 @@ http.createServer((req, res) => {
   req.on('end', () => { res.writeHead(200, { 'content-type': 'application/json', 'x-echo': 'yes' }); res.end(JSON.stringify({ method: req.method, path: req.url, relay: req.headers['x-lax-relay'], cf: Object.keys(req.headers).filter((k) => k.startsWith('cf-')), len, sha: h.digest('hex') })); });
 }).listen(ECHO, '127.0.0.1');
 
+execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'demo.mjs')], { cwd: ROOT, stdio: 'ignore' }); // its pages (demo/dist)
+const MKEY = 'mind-key-' + crypto.randomBytes(4).toString('hex');
 const wr = spawn('npx', ['-y', 'wrangler@4', 'dev', '--config', path.join(ROOT, 'relay', 'wrangler.jsonc'), '--port', String(W), '--ip', '127.0.0.1',
-  '--var', `RELAY_KEY:${KEY}`, '--persist-to', path.join(TMP, 'state'), '--show-interactive-dev-session=false'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'], detached: true, env: { ...process.env, WRANGLER_SEND_METRICS: 'false' } });
+  '--var', `RELAY_KEY:${KEY}`, '--var', `MIND_KEY:${MKEY}`, '--persist-to', path.join(TMP, 'state'), '--show-interactive-dev-session=false'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'], detached: true, env: { ...process.env, WRANGLER_SEND_METRICS: 'false' } });
 procs.push(wr); let wlog = ''; wr.stdout.on('data', (d) => (wlog += d)); wr.stderr.on('data', (d) => (wlog += d));
 let ready = false;
 for (let i = 0; i < 120 && !ready; i++) { try { await fetch(RELAY + '/'); ready = true; } catch { await sleep(500); } }
 if (!ready) { console.log('✗ wrangler dev did not start\n' + wlog.slice(-2000)); process.exit(1); }
 
 // ---------- before the Mac links ----------
-let r = await fetch(RELAY + '/', { headers: { accept: 'text/html' } });
-check('no Mac yet: "Mac asleep" (503), a page for a browser', r.status === 503 && /asleep/.test(await r.text()), String(r.status));
+let r = await fetch(RELAY + '/', { headers: { accept: 'text/html' }, redirect: 'manual' });
+check('someone who isn\'t paired, at the front door: sent to the landing', r.status === 302 && new URL(r.headers.get('location')).pathname === '/demo', `${r.status} ${r.headers.get('location')}`);
+r = await fetch(RELAY + '/demo');
+check('…which the relay serves itself, Mac or not: Lax in a phone, as on the demo', r.status === 200 && /\/demo\/app\?demo/.test(await r.text()));
+r = await fetch(RELAY + '/demo/mind/api/push', { method: 'POST', headers: { authorization: 'Bearer wrong' }, body: '{}' });
+check('its mind takes pushes only with the Mac\'s mind key', r.status === 401);
+r = await fetch(RELAY + '/demo/mind/api/snap');
+check('…and shows what it has to anyone', r.status === 200 && 'snap' in (await r.json()));
+r = await fetch(RELAY + '/', { headers: { accept: 'text/html', cookie: 'x=1; lax_paired=1' }, redirect: 'manual' });
+check('a paired browser (its flag) gets Lax: "Mac asleep" (503) with no Mac yet', r.status === 503 && /asleep/.test(await r.text()), String(r.status));
+r = await fetch(RELAY + '/?t=' + TOK, { headers: { accept: 'text/html' }, redirect: 'manual' });
+check('…and so does a pairing link', r.status === 503);
 r = await fetch(RELAY + '/api/state');
-check('…and JSON for the app', r.status === 503 && (await r.json()).error === 'Mac asleep');
+check('no Mac yet: JSON for the app', r.status === 503 && (await r.json()).error === 'Mac asleep');
 const wrong = startRelay({ url: RELAY, key: 'not-the-key', port: ECHO });
 await sleep(1500);
 check('a wrong relay key never links', !wrong.linked()); wrong.stop();

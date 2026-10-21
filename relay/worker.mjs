@@ -6,6 +6,11 @@
 //   GET /_relay/mac   the Mac's WebSocket, with the relay key (secret RELAY_KEY) in x-relay-key
 //   GET /_relay/up    { mac }: is the Mac linked? With the phone's token (?t=); open to any page (CORS), so a page on the
 //                     tunnel can ask whether to move here (lax.js)
+//   /demo, /demo/*    Lax's public face: the landing (the demo in a phone, how to make your own) and its mind, live
+//                     (demo/worker.mjs, its pages built by scripts/demo.mjs); on a Lax with its own domain (secret
+//                     PUBLIC_HOME, e.g. https://lax.example.com), sent there, so there's one mind page, not two
+//   GET /             someone who isn't paired (no ?t=, no lax_paired cookie, a flag the paired page sets, never the
+//                     token) is sent to the landing
 //   anything else     passed to the Mac; "Mac asleep" (503) when it isn't there
 // Frames are JSON text. Down: { t: 'req', id, method, path, headers }, { t: 'body', id, b64 }…, { t: 'sent', id };
 // { t: 'abort', id } when the phone goes away. Up: { t: 'head', id, status, headers }, { t: 'chunk', id, b64 }…, { t: 'end', id }.
@@ -16,6 +21,8 @@
 // sha256 of the token }; only requests with that token are held, and they go to the Mac in order, before anything new,
 // each once (a repeat of an id is answered by the Mac with the first answer, lib/once.mjs). Kept 12 hours at most.
 import { DurableObject } from 'cloudflare:workers';
+import { demo, Mind } from '../demo/worker.mjs';
+export { Mind };
 
 const CHUNK = 256 * 1024; // bytes per body frame: WebSocket messages stay well under their 1 MiB limit
 const ASLEEP_AFTER = 60e3;
@@ -172,5 +179,12 @@ export class Relay extends DurableObject {
 }
 
 export default {
-  fetch: (req, env) => env.RELAY.get(env.RELAY.idFromName('lax')).fetch(req),
+  fetch(req, env, ctx) {
+    const url = new URL(req.url);
+    if (url.pathname === '/demo' || url.pathname.startsWith('/demo/'))
+      return env.PUBLIC_HOME ? Response.redirect(env.PUBLIC_HOME.replace(/\/$/, '') + url.pathname + url.search, 302) : demo(req, env, ctx);
+    if (url.pathname === '/' && req.method === 'GET' && !url.searchParams.has('t') && !/(^|;\s*)lax_paired=1(;|$)/.test(req.headers.get('cookie') || ''))
+      return Response.redirect(url.origin + '/demo', 302);
+    return env.RELAY.get(env.RELAY.idFromName('lax')).fetch(req);
+  },
 };

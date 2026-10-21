@@ -9,6 +9,8 @@ const HASH_K = new URLSearchParams(location.hash.slice(1)).get('k'); // the seal
 if (qs.get('t') || HASH_K) history.replaceState(null, '', location.pathname);
 // Demo mode only under /demo (the public demo and its local preview); a plain /?demo is the real app.
 const DEMO = qs.has('demo') && location.pathname.startsWith('/demo');
+// Paired: the relay's front door opens Lax for this browser, not the landing (relay/worker.mjs). A flag, never the token.
+if (TOKEN && !DEMO) try { document.cookie = 'lax_paired=1; path=/; max-age=315360000; secure; samesite=lax'; } catch {}
 // Inside the Lax Android app: Android's own speech recognition, TTS and vibration (see android/…/LaxBridge.kt).
 const NATIVE = (() => { try { return window.LaxNative?.isNative() ? window.LaxNative : null; } catch { return null; } })();
 const buzz = (pattern) => (NATIVE ? NATIVE.vibrate(pattern.join(',')) : navigator.vibrate?.(pattern));

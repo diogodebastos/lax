@@ -42,8 +42,8 @@ async function sameKey(given, key) {
   return crypto.subtle.timingSafeEqual(a, b);
 }
 
-export default {
-  async fetch(req, env, ctx) {
+/** The public face's requests: the pages (assets) and the mind's API. Also served by the relay (relay/worker.mjs). */
+export async function demo(req, env, ctx) {
     const url = new URL(req.url);
     if (!url.pathname.startsWith('/demo/mind/api/')) return env.ASSETS.fetch(req);
     const route = url.pathname.slice('/demo/mind/api/'.length);
@@ -57,8 +57,8 @@ export default {
       return room(env).fetch(new Request(req.url, { method: 'POST', body: JSON.stringify({ snap, events: cleanEvents(body.events) }) }));
     } else if (!['live', 'snap'].includes(route) || req.method !== 'GET') return new Response('not found', { status: 404 });
     return room(env).fetch(req);
-  },
-};
+}
+export default { fetch: demo };
 // The one room everyone watches. The old ones ('lax' ran the shape check itself and outlived a deploy; 'mind' kept the
 // last events) are told to forget everything on each push, once they run this code.
 const room = (env) => env.MIND.get(env.MIND.idFromName('now'));

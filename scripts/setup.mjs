@@ -123,6 +123,7 @@ const STEPS = {
     let who = ''; try { who = wrangler(['whoami']); } catch (e) { who = String(e.stdout || ''); }
     if (/not authenticated|not logged in/i.test(who)) { say('relay: logging in to Cloudflare in your browser…'); run('npx', ['-y', 'wrangler@4', 'login']); }
     say('relay: deploying the Worker…');
+    node('demo.mjs'); // its public face's pages (demo/dist), from this clone's last commit
     let out = '';
     try { out = wrangler(['deploy', '--config', path.join(ROOT, 'relay', 'wrangler.jsonc')]); }
     catch (e) {
@@ -135,7 +136,14 @@ const STEPS = {
     if (!url) throw new Error('deployed, but its workers.dev address was not in wrangler\'s output:\n' + out.slice(-500));
     if (!read(secret('relay-key'))) { ensureDirs(); fs.writeFileSync(secret('relay-key'), execFileSync('openssl', ['rand', '-hex', '24'], { encoding: 'utf8' }).trim(), { mode: 0o600 }); }
     wrangler(['secret', 'put', 'RELAY_KEY', '--config', path.join(ROOT, 'relay', 'wrangler.jsonc')], { input: read(secret('relay-key')), stdio: ['pipe', 'pipe', 'pipe'] });
-    const env = readEnv();
+    const env = readEnv(), put = (name, value) => wrangler(['secret', 'put', name, '--config', path.join(ROOT, 'relay', 'wrangler.jsonc')], { input: value, stdio: ['pipe', 'pipe', 'pipe'] });
+    // Its public face: with your own domain's demo (LAX_DEMO_ROUTE), the relay's /demo goes there; without, the relay
+    // keeps Lax's mind itself, pushed by the Mac with its mind key.
+    if (env.LAX_DEMO_ROUTE && env.LAX_PUBLIC_URL) put('PUBLIC_HOME', new URL(env.LAX_PUBLIC_URL).origin);
+    else {
+      if (!read(secret('mind-key'))) { ensureDirs(); fs.writeFileSync(secret('mind-key'), execFileSync('openssl', ['rand', '-hex', '24'], { encoding: 'utf8' }).trim(), { mode: 0o600 }); }
+      put('MIND_KEY', read(secret('mind-key')));
+    }
     setEnv({ LAX_RELAY_URL: url, LAX_PUBLIC_URL: env.LAX_PUBLIC_URL || url }); // a Lax with its own domain keeps pairing there
     say(`relay: ${url}`);
     if (!restart()) return say('relay: start Lax (`node scripts/setup.mjs service`) and it links');

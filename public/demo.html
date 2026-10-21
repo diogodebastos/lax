@@ -13,9 +13,9 @@
      Flip 3 drawn at its real proportions and scaled to fit the visitor's screen. Served by server.mjs. */
   :root { --bg:#121110; --fg:#e8e2d6; --dim:#8a8378; --coral:#D97757; --shell:#1b1e21; --edge:#4a4f55; }
   * { box-sizing:border-box; margin:0; }
-  html, body { height:100%; }
-  body { background:var(--bg); color:var(--fg); font-family:'VT323',ui-monospace,monospace; display:flex; flex-direction:column; align-items:center;
-    padding:18px 16px 16px; gap:12px; overflow-x:hidden; }
+  body { background:var(--bg); color:var(--fg); font-family:'VT323',ui-monospace,monospace; overflow-x:hidden; }
+  /* The first screen is the phone; below it, how to make your own. */
+  .hero { height:100vh; height:100svh; display:flex; flex-direction:column; align-items:center; padding:18px 16px 16px; gap:12px; }
   header { text-align:center; flex:none; }
   h1 { color:var(--coral); font-weight:400; font-size:34px; line-height:1; }
   .sub { color:var(--dim); font-size:19px; margin-top:4px; max-width:560px; }
@@ -46,9 +46,21 @@
   .cover .cam { position:absolute; right:26px; width:62px; height:62px; border-radius:50%; background:radial-gradient(circle at 40% 40%,#334 0 20%,#000 45%); box-shadow:0 0 0 5px #1a1a1a, 0 0 0 8px #333; }
   .cover .cam.a { top:46px; } .cover .cam.b { bottom:46px; }
   .cover .screen { border-radius:8px; overflow:hidden; } .cover iframe { width:512px; height:260px; }
+  .more { color:var(--dim); font-size:18px; flex:none; text-decoration:none; } .more:hover { color:var(--fg); }
+
+  .own { max-width:560px; margin:0 auto; padding:48px 16px 64px; font-size:21px; line-height:1.15; }
+  .own h2 { color:var(--coral); font-weight:400; font-size:30px; margin-bottom:14px; }
+  .own p { margin:0 0 14px; } .own .dim { color:var(--dim); }
+  .own ul { list-style:none; padding:0; margin:0 0 18px; } .own li { padding-left:18px; position:relative; margin-bottom:6px; }
+  .own li::before { content:'>'; color:var(--coral); position:absolute; left:0; }
+  .own pre { background:#0a0908; border:2px solid #2c2824; padding:12px 14px; margin:0 0 18px; font:inherit; font-size:20px; overflow-x:auto; color:var(--fg); }
+  .own pre .p { color:var(--dim); user-select:none; }
+  .own a { color:var(--fg); } .own a:hover { color:var(--coral); }
+  @media (max-width:460px) { .own pre { font-size:16px; padding:10px; } }
 </style>
 </head>
 <body>
+<section class="hero">
 <header>
   <h1>Lax</h1>
   <p class="sub">A pixel companion that lives on an old phone.<br>You talk, it answers, and it grows with you.</p>
@@ -56,6 +68,23 @@
 </header>
 <div id="fit"><div id="device"></div></div>
 <p class="note">Tap Lax to talk · <a href="demo/mind">its mind, live</a> · <a href="https://github.com/diogodebastos/lax">github</a></p>
+<a class="more" href="#own">make your own ↓</a>
+</section>
+<section class="own" id="own">
+  <h2>Make your own Lax</h2>
+  <p>Lax lives on your Mac and talks through your Claude Code. No API credits: when it thinks, it runs on your own Claude plan. Its memory, history and code stay on the Mac; Cloudflare only carries what you say to each other, sealed so that only your phone and your Mac can read it.</p>
+  <p class="dim">You need:</p>
+  <ul>
+    <li>a Mac with <a href="https://nodejs.org">Node</a> 22.13 or newer, git, and <a href="https://claude.com/claude-code">Claude Code</a>, logged in</li>
+    <li>a free Cloudflare account (no domain needed)</li>
+    <li>an Android phone with the Lax app, or Chrome on any phone</li>
+  </ul>
+  <pre><span class="p">$ </span>git clone https://github.com/diogodebastos/lax.git
+<span class="p">$ </span>cd lax
+<span class="p">$ </span>npm run setup</pre>
+  <p>Setup is a conversation: Lax sets itself up with you, one step at a time, and ends by showing a QR code for your phone. From then on it learns from your sessions, and grows.</p>
+  <p class="dim">Early days: one Lax exists so far. <a href="https://github.com/diogodebastos/lax">Read more on GitHub</a>.</p>
+</section>
 <script>
   const POSES = {
     portrait: { layout: 'big', cls: 'open portrait' },
