@@ -1252,7 +1252,9 @@ http.createServer(async (req, res) => {
     default: return json(res, { error: 'not found' }, 404);
   }
 }).listen(PORT, HOST, () => {
-  console.log(`${APP_NAME}: ${settings.name || DEFAULT_COMPANION_NAME} is awake on ${HOST}:${PORT}.\n  Mac:   http://localhost:${PORT}/?t=${TOKEN}\n  Phone: ${phoneUrl(PORT)}\n  Pair:  http://localhost:${PORT}/pair  (QR code)`);
+  // Without a way in from anywhere (the relay or a tunnel), a phone can't reach it: say so, and how.
+  const phone = process.env.LAX_PUBLIC_URL ? phoneUrl(PORT) : 'not yet: a phone needs a way in (node scripts/setup.mjs relay)';
+  console.log(`${APP_NAME}: ${settings.name || DEFAULT_COMPANION_NAME} is awake on ${HOST}:${PORT}.\n  Mac:   http://localhost:${PORT}/?t=${TOKEN}\n  Phone: ${phone}\n  Pair:  http://localhost:${PORT}/pair  (QR code)`);
 });
 // The relay (lib/relay.mjs, Phase 11): the phone reaches Lax through the person's own Worker. With LAX_RELAY_URL and its key.
 // The ways in (lib/ways.mjs): which of the tunnel and the relay reach this Mac, so the phone can move to the one that does.
