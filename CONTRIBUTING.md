@@ -13,6 +13,23 @@ from, so a change here is a change to every new Lax. Thanks for helping.
 - **Comments say why**, in plain words, at the top of each file and where something isn't obvious. Match the file you're in.
 - **What Lax says** is read aloud: short, plain sentences, no markdown, no emoji. Feed markers are plain text (`> clear`).
 
+## Development
+
+```bash
+npm start              # Lax in the foreground: prints the Mac and phone URLs (with the token)
+npm test               # everything, on a throwaway Lax (never your own ~/.lax)
+npm run test-relay     # the relay, under wrangler dev
+node scripts/setup.mjs status   # what setup did, step by step (each step runs on its own: hooks, channel, service, relay…)
+```
+
+- `http://localhost:7777/pair`: the pairing page (only from the Mac itself)
+- `http://localhost:7777/demo/app?demo`: every state, without Claude Code
+- `http://localhost:7777/demo`: the shareable demo (portrait / landscape / cover), live from the working folder. Optionally a public one on Cloudflare that works with the Mac off: set `LAX_DEMO_ROUTE` (e.g. `"lax.example.com/demo*"`) in `~/.lax/secrets/env.json`, and `git config core.hooksPath scripts/git-hooks` redeploys it on every push to main (by hand: `node scripts/demo.mjs --deploy`). Without it, nothing is deployed.
+- `http://localhost:7777/preview.html`: a Flip 3 mockup (closed cover screen, open, Flex mode)
+
+
+How each part works: [docs/how-it-works.md](docs/how-it-works.md).
+
 ## Before a pull request
 
 ```bash

@@ -15,7 +15,9 @@ vulnerability**).
 - **The phone reaches it in one of two ways**, both over HTTPS:
   - **The relay** (`relay/`): a Worker on your own Cloudflare account. The Mac holds one WebSocket out to it,
     authenticated with a relay key (`~/.lax/secrets/relay-key`, also the Worker's secret `RELAY_KEY`). Every request
-    from the phone is passed down and replayed against Lax on `127.0.0.1`. Nothing is stored on Cloudflare.
+    from the phone is passed down and replayed against Lax on `127.0.0.1`. While the Mac sleeps, what you said, a yes or
+    no and settings are held there (up to 12 hours), sealed: what the phone and the Mac say is AES-256-GCM with a key
+    that never reaches Cloudflare (it travels after the `#` of the pairing link). Nothing else is stored on Cloudflare.
   - **A tunnel on your own domain** (`cloudflared`), behind Cloudflare Access (an email PIN for the browser, a service
     token for the Android app).
 - **The Lax token** is checked on every API call, whichever way the request came in. It lives in `~/.lax/secrets/token`
