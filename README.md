@@ -18,7 +18,7 @@ digi-lax is the app; Lax is the companion it hatches. Yours can have any name: s
 
 **It remembers.** Notes about you and your projects, episodes of what happened, and every transcript, kept past Claude Code's 30 days. Ask "how did we fix the tunnel?" and it finds out, with grep. All of it is plain markdown in `~/.lax`, in its own git history.
 
-<img src="docs/timelapse.gif" width="220" align="right" alt="A timelapse of Lax growing, from its first form to a brown fox at level 26">
+<img src="docs/timelapse.gif" width="220" align="right" alt="A timelapse of Lax growing: its first forms, a brown fox for three hours, then fire, at level 26 today">
 
 **It grows.** It starts as an egg and hatches into a species read from how you work, then evolves through its stages. Rules, not a model. "timelapse" in its menu shows its life so far.
 

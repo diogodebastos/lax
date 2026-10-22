@@ -41,7 +41,7 @@ import { startWays } from './lib/ways.mjs';
 import { watchPower } from './lib/power.mjs';
 import { seal, unseal, sse, signPage } from './lib/seal.mjs';
 import { cardOf, cardPng } from './lib/card.mjs';
-import { story, timelapseGif } from './lib/timelapse.mjs';
+import { story, timelapseGif, mindChanges } from './lib/timelapse.mjs';
 import { MAX_WAIT_S } from './hooks/timeouts.mjs';
 import { createBudget, LEVELS } from './lib/budget.mjs';
 
@@ -1074,7 +1074,7 @@ function talk(text, voice = false, spelled = []) {
 }
 
 // ---------- http ----------
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.gif': 'image/gif', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json' };
 // A sealed body ({ sealed }, lib/seal.mjs) is opened here; one that doesn't open is nothing. Answers are sealed for whoever asked.
 const body = (req) => new Promise((res) => { let b = ''; req.on('data', (d) => (b += d)); req.on('end', () => {
   try { const j = JSON.parse(b || '{}'); res(typeof j.sealed === 'string' ? JSON.parse(unseal(j.sealed) ?? '{}') : j); } catch { res({}); } }); });
@@ -1093,8 +1093,10 @@ http.createServer(async (req, res) => {
   if (req.method === 'GET' && (url.pathname === '/demo' || url.pathname.startsWith('/demo/'))) {
     if (url.pathname === '/demo/mind/api/snap') return json(res, publicMind.view()); // as the Worker serves it publicly
     const DEMO_FILES = { '/demo': 'demo.html', '/demo/app': 'index.html', '/demo/lax.js': 'lax.js', '/demo/heard.js': 'heard.js', '/demo/chip.js': 'chip.js', '/demo/body.js': 'body.js',
-      '/demo/mind': 'mind.html', '/demo/mind-view.js': 'mind-view.js', '/demo/net.js': 'net.js', '/demo/favicon.svg': 'favicon.svg' };
+      '/demo/mind': 'mind.html', '/demo/mind-view.js': 'mind-view.js', '/demo/net.js': 'net.js', '/demo/favicon.svg': 'favicon.svg',
+      '/demo/blog': 'blog.html', '/demo/blog-img/cover-screen.jpg': 'blog-img/cover-screen.jpg', '/demo/blog-img/timelapse.gif': 'blog-img/timelapse.gif' };
     const f = DEMO_FILES[url.pathname]; if (!f) { res.writeHead(404); return res.end(); }
+    if (f.startsWith('blog-img/')) { res.writeHead(200, { 'content-type': MIME[path.extname(f)] || 'application/octet-stream', 'cache-control': 'no-store' }); return res.end(fs.readFileSync(path.join(ROOT, 'public', f))); }
     let text = fs.readFileSync(path.join(ROOT, 'public', f), 'utf8');
     if (f === 'index.html') text = text.replace('src="lax.js', 'src="/demo/lax.js').replace('src="heard.js', 'src="/demo/heard.js').replace('src="chip.js', 'src="/demo/chip.js').replace('src="body.js', 'src="/demo/body.js');
     res.writeHead(200, { 'content-type': MIME[path.extname(f)], 'cache-control': 'no-store' });
@@ -1164,7 +1166,7 @@ http.createServer(async (req, res) => {
   // Its timelapse (lib/timelapse.mjs), when you ask: from its egg to today, from its milestones, as a GIF to share.
   if (url.pathname === '/api/timelapse' && req.method === 'POST') {
     const view = petView(), now = { ...view, traits: view.traits.filter((t) => !(settings.hideTraits || []).includes(t)) };
-    const frames = story(db.prepare('SELECT ts,text FROM milestones ORDER BY id').all(), activeSpecies(), now);
+    const frames = story(db.prepare('SELECT ts,text FROM milestones ORDER BY id').all(), pet.species || activeSpecies(), now, mindChanges());
     const gif = timelapseGif(frames, { name: settings.name, color: view.look.color });
     diary('made its timelapse');
     return json(res, { ok: true, gif: gif.toString('base64'), frames: frames.length });

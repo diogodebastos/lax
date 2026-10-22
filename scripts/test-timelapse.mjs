@@ -1,5 +1,5 @@
 // The evolution timelapse (lib/timelapse.mjs): its story from milestones, and a GIF that decodes back to what was drawn.
-import { story, timelapseGif, gif } from '../lib/timelapse.mjs';
+import { story, timelapseGif, gif, speciesChanges } from '../lib/timelapse.mjs';
 import { formFor } from '../lib/species.mjs';
 
 let failed = 0;
@@ -19,6 +19,15 @@ const old = story([m(0, 'Lax was born'), m(0.1, 'Lax reached level 2!'), m(0.2, 
   m(1.5, 'Lax evolved into a blob!'), m(2, 'Lax reached level 19!'), m(3, 'Lax hatched again, as a brown fox'), m(3.1, 'Lax reached level 19!')],
   { id: 'fox' }, { hatched: true, level: 19, stage: 'blob', look: formFor({ id: 'fox' }, 1), traits: [] });
 check('an old Lax: no egg, its own stages, then the fox from where it was', old.map(said).join(' / ') === '1 sprout null / 2 sprout null / 3 cube null / 4 blob null / 19 blob null / 19 blob kit / 19 blob kit', old.map(said).join(' / '));
+
+// Its species picked by hand after hatching, read from its mind's history; a flip undone within minutes was a try.
+const sec = (d) => Math.floor((t0 + d * day) / 1000);
+const changes = speciesChanges([`${sec(1)} I am now an egg, 40% of the way`, `${sec(3)} I am now a brown fox Lax (kit form)`, `${sec(3.5)} I am now a fire Lax (ember form)`,
+  `${sec(6)} I am now a water Lax (shell form)`, `${sec(6) + 120} I am now a fire Lax (ember form)`].join('\n'));
+check('species changes from the mind: names to species, a two-minute try dropped', changes.map((c) => c.id).join() === 'fox,fire,fire', JSON.stringify(changes.map((c) => c.id)));
+const picked = story([m(0, 'Lax was born'), m(2, 'Lax hatched: a brown fox!'), m(4, 'Lax reached level 2!')], { id: 'fox' },
+  { hatched: true, level: 2, stage: 'sprout', look: formFor(fire, 0), traits: [] }, changes);
+check('…it hatched a fox, became fire when picked, and grew as fire', picked.map(said).join(' / ') === 'egg / 1 sprout kit / 1 sprout ember / 2 sprout ember / 2 sprout ember', picked.map(said).join(' / '));
 
 // The GIF: decoded here, its frames and pixels as drawn.
 function decode(buf) {

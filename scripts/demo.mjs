@@ -24,6 +24,10 @@ fs.writeFileSync(path.join(dist, 'demo', 'body.js'), show('body.js'));
 // Lax's mind, live (/demo/mind): the page and what it loads, and the Worker that keeps it (from demo/ and lib/).
 fs.writeFileSync(path.join(dist, 'demo', 'mind.html'), show('mind.html'));
 for (const f of ['mind-view.js', 'net.js', 'favicon.svg']) fs.writeFileSync(path.join(dist, 'demo', f), show(f));
+// Lax's blog (/demo/blog): its page, in its own hand, and the pictures it shows.
+fs.writeFileSync(path.join(dist, 'demo', 'blog.html'), show('blog.html'));
+fs.mkdirSync(path.join(dist, 'demo', 'blog-img'));
+for (const f of ['cover-screen.jpg', 'timelapse.gif']) fs.writeFileSync(path.join(dist, 'demo', 'blog-img', f), execFileSync('git', ['show', `${ref}:public/blog-img/${f}`], { cwd: ROOT }));
 const build = path.join(ROOT, 'demo', 'build'), git = (f) => execFileSync('git', ['show', `${ref}:${f}`], { cwd: ROOT, encoding: 'utf8' });
 fs.rmSync(build, { recursive: true, force: true }); fs.mkdirSync(build, { recursive: true });
 fs.writeFileSync(path.join(build, 'worker.mjs'), git('demo/worker.mjs').replace("'../lib/mind-shape.mjs'", "'./mind-shape.mjs'"));
