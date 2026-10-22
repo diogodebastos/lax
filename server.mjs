@@ -41,6 +41,7 @@ import { startWays } from './lib/ways.mjs';
 import { watchPower } from './lib/power.mjs';
 import { seal, unseal, sse, signPage } from './lib/seal.mjs';
 import { cardOf, cardPng } from './lib/card.mjs';
+import { story, timelapseGif } from './lib/timelapse.mjs';
 import { MAX_WAIT_S } from './hooks/timeouts.mjs';
 import { createBudget, LEVELS } from './lib/budget.mjs';
 
@@ -88,7 +89,7 @@ if (!kvGet('pet', null)) { milestone(`${DEFAULT_COMPANION_NAME} was born`); }
 if (!kvGet('newPath', false)) { if (kvGet('pet', null)) milestone(`${readSettings().name || DEFAULT_COMPANION_NAME} started over on a new path`); kvSet('newPath', true); }
 
 // Life menu settings — live on the Mac, edited from the phone.
-const DEFAULTS = { name: DEFAULT_COMPANION_NAME, voice: true, pitch: 1.6, speakDone: false, captions: false,
+const DEFAULTS = { name: DEFAULT_COMPANION_NAME, voice: true, sounds: true, pitch: 1.6, speakDone: false, captions: false,
   phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system', learns: true, listen: 'phone',
   budget: 'light', // what Lax may spend of your plan by itself (lib/budget.mjs): light or normal
   speciesPick: false, speciesOverride: null, // while the species bars get tuned: pick one by hand
@@ -104,7 +105,7 @@ syncMindName(settings.name);
 function updateSettings(b) {
   const clean = {};
   if (typeof b.name === 'string' && b.name.trim()) clean.name = b.name.trim().slice(0, 12);
-  for (const k of ['voice', 'speakDone', 'captions', 'phoneApprovals', 'learns', 'speciesPick']) if (typeof b[k] === 'boolean') clean[k] = b[k];
+  for (const k of ['voice', 'sounds', 'speakDone', 'captions', 'phoneApprovals', 'learns', 'speciesPick']) if (typeof b[k] === 'boolean') clean[k] = b[k];
   const o = b.speciesOverride;
   if (o === null) clean.speciesOverride = null;
   else if (o && o.id === 'plain' && /^#[0-9a-f]{6}$/i.test(o.color || '')) clean.speciesOverride = { id: 'plain', color: o.color, branch: null, rare: false };
@@ -1091,11 +1092,11 @@ http.createServer(async (req, res) => {
   // to main (scripts/demo.mjs), so it never reaches here. A fixed list from public/; the app runs in ?demo mode.
   if (req.method === 'GET' && (url.pathname === '/demo' || url.pathname.startsWith('/demo/'))) {
     if (url.pathname === '/demo/mind/api/snap') return json(res, publicMind.view()); // as the Worker serves it publicly
-    const DEMO_FILES = { '/demo': 'demo.html', '/demo/app': 'index.html', '/demo/lax.js': 'lax.js', '/demo/heard.js': 'heard.js', '/demo/body.js': 'body.js',
+    const DEMO_FILES = { '/demo': 'demo.html', '/demo/app': 'index.html', '/demo/lax.js': 'lax.js', '/demo/heard.js': 'heard.js', '/demo/chip.js': 'chip.js', '/demo/body.js': 'body.js',
       '/demo/mind': 'mind.html', '/demo/mind-view.js': 'mind-view.js', '/demo/net.js': 'net.js', '/demo/favicon.svg': 'favicon.svg' };
     const f = DEMO_FILES[url.pathname]; if (!f) { res.writeHead(404); return res.end(); }
     let text = fs.readFileSync(path.join(ROOT, 'public', f), 'utf8');
-    if (f === 'index.html') text = text.replace('src="lax.js', 'src="/demo/lax.js').replace('src="heard.js', 'src="/demo/heard.js').replace('src="body.js', 'src="/demo/body.js');
+    if (f === 'index.html') text = text.replace('src="lax.js', 'src="/demo/lax.js').replace('src="heard.js', 'src="/demo/heard.js').replace('src="chip.js', 'src="/demo/chip.js').replace('src="body.js', 'src="/demo/body.js');
     res.writeHead(200, { 'content-type': MIME[path.extname(f)], 'cache-control': 'no-store' });
     return res.end(text);
   }
@@ -1159,6 +1160,14 @@ http.createServer(async (req, res) => {
     const link = await publicMind.card({ ...c, look: undefined }, cardPng(c));
     if (link) diary(`shared a card: ${link}`);
     return link ? json(res, { ok: true, url: link }) : json(res, { error: 'no public face: its mind key or address is missing, or it refused' }, 502);
+  }
+  // Its timelapse (lib/timelapse.mjs), when you ask: from its egg to today, from its milestones, as a GIF to share.
+  if (url.pathname === '/api/timelapse' && req.method === 'POST') {
+    const view = petView(), now = { ...view, traits: view.traits.filter((t) => !(settings.hideTraits || []).includes(t)) };
+    const frames = story(db.prepare('SELECT ts,text FROM milestones ORDER BY id').all(), activeSpecies(), now);
+    const gif = timelapseGif(frames, { name: settings.name, color: view.look.color });
+    diary('made its timelapse');
+    return json(res, { ok: true, gif: gif.toString('base64'), frames: frames.length });
   }
   // What Lax knows (the life menu): counts of its notes, its skills, its newest episodes.
   if (url.pathname === '/api/knows' && req.method === 'GET') {

@@ -65,6 +65,13 @@
                 android:value="Holds a live link to the user's own Mac so Claude Code permission prompts reach the phone while it sleeps." />
         </service>
 
+        <!-- Its timelapse, handed to the app you share it with (SharedFiles). -->
+        <provider
+            android:name=".SharedFiles"
+            android:authorities="com.diogodebastos.lax.share"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
         <receiver android:name=".DecisionReceiver" android:exported="false" />
 
         <receiver android:name=".BootReceiver" android:exported="true">

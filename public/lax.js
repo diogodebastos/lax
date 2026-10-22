@@ -108,7 +108,7 @@ const C = { bg: '#000', shadow: '#2a2521', ink: '#000', out: '#120c0a', body: '#
 // What speech gets wrong (lib/vocab.mjs, from the Mac): the names you use, and misheard → meant (fixed by heard.js).
 let vocab = { words: [], heard: {} };
 let whisperOn = false, hearing = null; // Whisper on the Mac is up (lib/whisper.mjs); while it writes down what you said: how to drop it
-let settings = { name: 'Lax', color: '#D97757', voice: true, pitch: 1.6, speakDone: false, captions: false, phoneApprovals: true, askTimeout: 30, theme: 'system' };
+let settings = { name: 'Lax', color: '#D97757', voice: true, sounds: true, pitch: 1.6, speakDone: false, captions: false, phoneApprovals: true, askTimeout: 30, theme: 'system' };
 const shade = (hex, amt) => { const n = parseInt(hex.slice(1), 16), t = amt < 0 ? 0 : 255, a = Math.abs(amt);
   return '#' + [16, 8, 0].map((sh) => Math.round(((n >> sh) & 255) * (1 - a) + t * a).toString(16).padStart(2, '0')).join(''); };
 // Theme: system (the phone's or computer's dark mode), light or dark. Remembered per device so the page starts right.
@@ -151,7 +151,7 @@ let shell = false, hatchAt = 0;
 function hatch() {
   if (EGG || !shell || hatchAt) return;
   hatchAt = performance.now(); sfx([392, 523]);
-  setTimeout(() => { shell = false; hatchAt = 0; updateHint(); sfx([523, 659, 784]); hop(1.8);
+  setTimeout(() => { shell = false; hatchAt = 0; updateHint(); playTune('hatch'); hop(1.8);
     for (let i = 0; i < 16; i++) spark(CX, GROUND - 8, i % 3 ? '#f3e6cf' : '#cdbb9c', 1.3, 45); }, 550);
 }
 let listening = false, speaking = false, react = null, reactUntil = 0;
@@ -491,14 +491,14 @@ function showBubble(b) {
   if (!b.sticky) b.expires = performance.now() + (b.kind === 'reply' ? 15000 : 9000);
   renderBubble();
   if (elsewhere(b)) { // another tab's: a short buzz if it needs you, otherwise just a mark on its tab
-    if (needsYou(b)) { sfx([660]); buzz([60]); } else { unseen.add(b.session); if (b.speak) unheard.set(b.session, b.say || b.text); }
+    if (needsYou(b)) { playTune('nudge'); buzz([60]); } else { unseen.add(b.session); if (b.speak) unheard.set(b.session, b.say || b.text); }
     return renderHud();
   }
-  if (b.kind === 'permission' || b.kind === 'question') { sfx([660, 880, 660]); buzz([80, 60, 80]); }
-  else if (b.kind === 'levelup') { sfx([523, 659, 784, 1046]); setReact('happy', 2500); }
-  else if (b.kind === 'done') { sfx([784, 1046]); setReact('happy'); }
-  else if (b.kind === 'learned') { sfx([659, 988]); setReact('happy', 1200); }
-  else if (b.kind === 'error') { sfx([220, 160]); setReact('error'); }
+  if (b.kind === 'permission' || b.kind === 'question') { playTune('needs'); buzz([80, 60, 80]); }
+  else if (b.kind === 'levelup') { playTune('levelup'); setReact('happy', 2500); }
+  else if (b.kind === 'done') { playTune('done'); setReact('happy'); }
+  else if (b.kind === 'learned') { playTune('learned'); setReact('happy', 1200); }
+  else if (b.kind === 'error') { playTune('error'); setReact('error'); }
   if (b.speak || (b.kind === 'done' && settings.speakDone)) speak(b.kind === 'permission' ? 'I need you. ' + (b.say || b.text) : b.kind === 'question' ? 'Question. ' + b.questions[0].question : b.say || b.text);
 }
 function clearBubble(id) { const had = bubbles.find((x) => x.id === id); bubbles = bubbles.filter((x) => x.id !== id); renderBubble(); if (had?.session) renderHud(); }
@@ -572,7 +572,7 @@ function answerQuestion(b, answer) {
   const q = b.questions[b.qi];
   b.answers[q.question] = answer; b.picked = []; b.qi++;
   if (b.qi < b.questions.length) { elB.dataset.key = ''; renderBubble(); speak(b.questions[b.qi].question); return; }
-  clearBubble(b.id); sfx([880, 1175]); setReact('happy');
+  clearBubble(b.id); playTune('yes'); setReact('happy');
   if (!DEMO) api('/api/decide', { id: b.id, decision: 'answer', answers: b.answers });
 }
 setInterval(renderBubble, 1000);
@@ -611,7 +611,7 @@ elB.addEventListener('click', (e) => {
   if (b.kind === 'listening') return cancelListening();
   if (e.target.matches('.more')) { b.showDetails = !b.showDetails; renderBubble(); return; }
   if (e.target.matches('.yes, .no')) { const decision = e.target.matches('.yes') ? 'allow' : 'deny';
-    clearBubble(id); sfx(decision === 'allow' ? [880, 1175] : [300, 200]); if (decision === 'allow') setReact('happy'); if (!DEMO) api('/api/decide', { id, decision }); }
+    clearBubble(id); playTune(decision === 'allow' ? 'yes' : 'no'); if (decision === 'allow') setReact('happy'); if (!DEMO) api('/api/decide', { id, decision }); }
   else if (b.kind === 'question') {
     const q = b.questions[b.qi], t = e.target.closest('button'); if (!t) return;
     if (t.matches('.opt')) {
@@ -628,9 +628,13 @@ elB.addEventListener('click', (e) => {
 });
 
 // ---------- sound ----------
+// Off with "chiptune sounds" in settings (its voice is separate: "speaks out loud").
 let ac;
+const audio = () => { if (settings.sounds === false) return null; try { return (ac ||= new AudioContext()); } catch { return null; } };
+// Its tunes (chip.js): one per state, in its species' key, and a "done" jingle that grows with it.
+const playTune = (name) => { const a = audio(); if (a) LaxChip.play(a, LaxChip.tune(name, pet)); };
 function sfx(notes) {
-  try { ac ||= new AudioContext(); } catch { return; }
+  const ac = audio(); if (!ac) return;
   notes.forEach((f, i) => { const o = ac.createOscillator(), v = ac.createGain(), t0 = ac.currentTime + i * 0.07;
     o.type = 'square'; o.frequency.value = f; v.gain.setValueAtTime(0.06, t0); v.gain.exponentialRampToValueAtTime(0.001, t0 + 0.08);
     o.connect(v).connect(ac.destination); o.start(t0); o.stop(t0 + 0.09); });
@@ -694,7 +698,7 @@ function beginListening(m) {
   if (voiceBusy && !answerHook) { showBubble({ id: 'busy', kind: 'reply', text: 'Still working on the last one…' }); return; }
   if (hearing) return;
   if (voiceBroken) return typeInstead();
-  said = ''; heard = ''; releasing = false; talkMode = m; listening = true; sfx([440]);
+  said = ''; heard = ''; releasing = false; talkMode = m; listening = true; playTune('listen');
   if (m === 'hold') buzz([30]);
   NATIVE ? NATIVE.hush() : speechSynthesis.cancel();
   diag('talk-' + m, { native: !!NATIVE }); showHeard(); listenStretch();
@@ -1080,7 +1084,7 @@ $('#skills').addEventListener('click', async (e) => {
   if (what === 'forget' && !sure(btn)) return;
   if (DEMO) return;
   const r = await api('/api/knows', { skill: name, do: what });
-  if (r.ok && what === 'install') { sfx([659, 988]); setReact('happy', 1200); }
+  if (r.ok && what === 'install') { playTune('learned'); setReact('happy', 1200); }
   loadKnows();
 });
 $('#roles').addEventListener('click', async (e) => {
@@ -1090,7 +1094,7 @@ $('#roles').addEventListener('click', async (e) => {
   if (what === 'forget' && !sure(btn)) return;
   if (DEMO) return;
   const r = await api('/api/knows', { role: row.dataset.role, do: what });
-  if (r.ok && what === 'take') { sfx([659, 988]); setReact('happy', 1200); }
+  if (r.ok && what === 'take') { playTune('learned'); setReact('happy', 1200); }
   loadKnows();
 });
 lifeEl.addEventListener('click', (e) => { const m = e.target.closest('[data-more]'); if (!m) return;
@@ -1178,7 +1182,8 @@ $('#sListen').addEventListener('click', (e) => e.target.dataset.v && saveSetting
 $('#sBudget').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ budget: e.target.dataset.v }));
 // A share card (/api/card, lib/card.mjs): made now, frozen, then to the share sheet (the app's, or the browser's); the link
 // stays here to copy.
-$('#sCard').addEventListener('click', async () => {
+$('#sCard').addEventListener('click', async (e) => {
+  if (e.target.id === 'sLapse') return timelapse(e.target);
   const b = $('#sCard button'), say = $('#cardSays'); if (DEMO || b.disabled) return;
   b.disabled = true; say.textContent = 'making it…';
   try {
@@ -1188,6 +1193,22 @@ $('#sCard').addEventListener('click', async () => {
   } catch (e) { say.textContent = `couldn't: ${e.message || e}`; }
   b.disabled = false;
 });
+// Its timelapse (/api/timelapse, lib/timelapse.mjs): from its egg to today, made now, shown here, then to the share
+// sheet as a file (the app's; the browser's where it takes files, or saved from the link).
+async function timelapse(b) {
+  const say = $('#cardSays'); if (DEMO || b.disabled) return;
+  b.disabled = true; say.textContent = 'making it…';
+  try {
+    const r = await api('/api/timelapse'); if (!r?.gif) throw new Error(r?.error || 'no timelapse');
+    const name = 'lax-timelapse.gif', bytes = Uint8Array.from(atob(r.gif), (c) => c.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'image/gif' }));
+    say.innerHTML = `<img src="${url}" alt="${esc(settings.name)}'s timelapse"><a href="${url}" download="${name}">save it</a>`;
+    const file = new File([bytes], name, { type: 'image/gif' });
+    if (NATIVE?.shareFile) NATIVE.shareFile(r.gif, 'image/gif', name);
+    else if (navigator.canShare?.({ files: [file] })) navigator.share({ files: [file] }).catch(() => {});
+  } catch (e) { say.textContent = `couldn't: ${e.message || e}`; }
+  b.disabled = false;
+}
 $('#sTheme').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ theme: e.target.dataset.v }));
 // Rebirth needs a 2-second hold so it can't happen by accident.
 { const btn = $('#rebirth'), fill = btn.querySelector('i'); let t0, raf;

@@ -6,7 +6,7 @@ const CACHE = 'lax-page-v1';
 const PAGE = /^\/(|index\.html|lax\.js|heard\.js|body\.js|favicon\.svg|demo\/favicon\.svg)$/;
 
 // Kept from the start, not only from the second load (the first one's files came before this worker was there).
-const FILES = ['/', '/lax.js', '/heard.js', '/body.js'];
+const FILES = ['/', '/lax.js', '/heard.js', '/chip.js', '/body.js'];
 self.addEventListener('install', (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).catch(() => {}).then(() => self.skipWaiting())));
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 

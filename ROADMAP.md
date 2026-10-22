@@ -239,9 +239,9 @@ The Mac stays the brain; Cloudflare becomes the always-on link and Lax's public 
 ### Phase 10: viral release [diogodebastos/lax#9](https://github.com/diogodebastos/lax/issues/9)
 The best possible Lax, built to be shared. Phase 9 makes the repo presentable; this makes it spread.
 - Filmable moments: Lax waking on the closed phone and fixing failing tests by voice; the morning it changed itself; an evolution timelapse; "how did we fix that?"
-- A share card (stage, level, traits, skills learned, problems solved) and a timelapse export.
+- A share card (stage, level, traits, skills learned, problems solved) and a timelapse export. **Built** (2026-10-22; `lib/timelapse.mjs`): "timelapse" in the Life menu replays Lax's milestones from `life.db`, one frame per level, evolution and hatching, drawn by the phone's own renderer with a white flicker at each change of form, and today held at the end, as a 600 × 600 looping GIF written in plain JS (no browser, nothing to install). It plays in the menu and goes to the share sheet as a file (the app hands it over itself, `SharedFiles`). A Lax from before species replays as it was: its own stages, starting over, then hatching.
 - `git clone` + `npm run setup`: zero to talking in under 5 minutes, on any Android phone or browser, with the Flip 3 as the hero.
-- Hand-drawn sprites and chiptune sound, promoted from *Later*.
+- Chiptune sound, promoted from *Later*. **Built** (2026-10-22; `public/chip.js`): a short tune per state (needs you, level up, hatching, learned, uh oh, yes and no, listening) in its species' key, with a lead, a triangle bass and a noise drum; the "done" jingle grows with it: two notes as a sprout, a phrase and a bass at blob, a harmony at cube, drums at brick, a fanfare at legend. "chiptune sounds" in settings turns them off. (Hand-drawn sprites: not doing; the pixel Lax stays.)
 - Write-ups: how Lax uses every Claude Code extension point; Lax on Cloudflare; an agent that rewrites itself for one person. Then Show HN, r/ClaudeAI and the clips.
 - **The LinkedIn post:** the launch's main moment, so it has to be a good one. For Diogo's network: Cloudflare people, the Claude Code crowd, tech people deep into AI.
   - **The video:** Diogo talks to Lax on the closed phone's cover screen, then opens the phone and the same conversation carries on.

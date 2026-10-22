@@ -288,6 +288,21 @@ class LaxBridge(private val act: MainActivity, private val web: WebView) {
         act.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
+    // A file to share (its timelapse): written to cache/share, then to the share sheet, readable only by the app picked.
+    @JavascriptInterface fun shareFile(b64: String?, mime: String?, name: String?) {
+        if (b64.isNullOrBlank() || name == null || b64.length > 8_000_000) return
+        val bytes = try { Base64.decode(b64, Base64.DEFAULT) } catch (e: IllegalArgumentException) { return }
+        val f = java.io.File(SharedFiles.dir(act), name)
+        if (f.parentFile != SharedFiles.dir(act)) return
+        f.writeBytes(bytes)
+        main.post {
+            val uri = SharedFiles.uri(name)
+            val send = Intent(Intent.ACTION_SEND).setType(mime ?: "image/gif").putExtra(Intent.EXTRA_STREAM, uri)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION).apply { clipData = android.content.ClipData.newRawUri(name, uri) }
+            act.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION))
+        }
+    }
+
     @JavascriptInterface fun remember(json: String?) {
         if (json != null && json.length < 20_000) act.getSharedPreferences("lax", 0).edit().putString("look", json).apply()
     }
