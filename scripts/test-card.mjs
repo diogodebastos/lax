@@ -16,6 +16,8 @@ check('…and nothing about your projects', !JSON.stringify(c).includes('secret-
 const kept = cleanCard({ ...c, look: undefined });
 check('the Worker keeps it as it is', JSON.stringify(kept) === JSON.stringify({ ...c, look: undefined }));
 check('…but not with anything more', cleanCard({ ...c, look: undefined, note: 'hi' }) === null && cleanCard(c) === null);
+const egg = cardOf({ name: 'Lax', born: Date.now(), level: 1, stage: 'sprout', hatched: false }, {});
+check('a Lax not hatched yet is an egg on its card, and the Worker keeps it', egg.stage === 'egg' && cleanCard({ ...egg, look: undefined })?.stage === 'egg');
 check('…nor odd values', [{ level: -1 }, { days: 1.5 }, { name: '<script>' }, { color: 'red' }, { stage: 'god' }, { heard: '9' }].every((x) => cleanCard({ ...c, look: undefined, ...x }) === null));
 
 const png = cardPng(c);

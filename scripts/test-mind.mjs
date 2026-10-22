@@ -21,7 +21,12 @@ put(path.join(MIND, 'learning.md'), 'LEARNING_TEXT');
 put(path.join(HOME, 'skills.json'), JSON.stringify({ skills: [{ name: 'SKILL_NAME', why: 'SKILL_WHY', status: 'installed' }, { name: 'draft-x', status: 'new' }] }));
 put(path.join(HOME, 'archive', 'state.json'), JSON.stringify({ files: { 'a/SECRET_SESSION.jsonl': {}, 'b/c.jsonl': {} } }));
 execFileSync('git', ['-C', MIND, 'init', '-q']);
-for (const m of ['learned from lax: a', 'kept an episode']) execFileSync('git', ['-C', MIND, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', m]);
+// Born an hour ago with its seed notes and as an egg (none of them a change to itself), then two changes.
+const commit = (m, at) => execFileSync('git', ['-C', MIND, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', m],
+  { env: { ...process.env, GIT_AUTHOR_DATE: at, GIT_COMMITTER_DATE: at } });
+const ago = (s) => `${Math.floor(Date.now() / 1000) - s} +0000`;
+commit('Lax was born', ago(3600)); commit('I keep what happened as episodes', ago(3600)); commit('I am now an egg', ago(3000));
+for (const m of ['learned from lax: a', 'kept an episode']) commit(m, ago(60 * 5));
 const NEVER = ['NOTE_ABOUT_YOU', 'NOTE_TWO', 'Lisbon', 'PROJECT_NOTE', 'hidden-thing', 'HIDDEN_NOTE', 'EPISODE', 'tunnel', 'OLD_TITLE', 'LEARNING_TEXT', 'SKILL_NAME', 'SKILL_WHY', 'draft-x', 'SECRET_SESSION', 'some/folder'];
 const leaks = (x) => NEVER.filter((w) => JSON.stringify(x).includes(w));
 

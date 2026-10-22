@@ -2,7 +2,7 @@
 // clone that sets Lax up with you, step by step (scripts/setup.md is what it's told). The steps are here, each one safe
 // to run again:
 //   node scripts/setup.mjs status         what's done, what's left (--json for the conversation)
-//   node scripts/setup.mjs <step>         deps, workdir [<folder>], hooks, channel, service, whisper, relay, android, domain, pair
+//   node scripts/setup.mjs <step>         deps, workdir [<folder>], hooks, channel, service, whisper, relay [<name>], android, domain, pair
 //   node scripts/setup.mjs --all          every step but whisper, in order, without the conversation
 //   node scripts/setup.mjs doctor [--fix] npm run doctor: is it all working? (--fix: secrets' permissions)
 import fs from 'node:fs';
@@ -37,7 +37,8 @@ async function healthy(wait = 20e3) {
   }
   return false;
 }
-const restart = () => { try { sh('launchctl', ['kickstart', '-k', `gui/${process.getuid()}/${SERVICE}`]); return true; } catch { return false; } };
+// Only this clone's service: a second clone on the same Mac never restarts the first's Lax.
+const restart = () => { if (!read(path.join(AGENTS, `${SERVICE}.plist`)).includes(`${ROOT}/`)) return false; try { sh('launchctl', ['kickstart', '-k', `gui/${process.getuid()}/${SERVICE}`]); return true; } catch { return false; } };
 
 // ---------- what's done ----------
 // Lax's hooks in ~/.claude/settings.json: this clone's, on every event, with today's timeouts (hooks/timeouts.mjs).
@@ -118,25 +119,29 @@ const STEPS = {
   whisper() { node('whisper.mjs'); if (restart()) say('whisper: Lax restarted to use it'); },
   android(...a) { node('android-tools.mjs', ...a); }, // --accept-licenses: Google's SDK licenses, once you've said yes
   domain(...a) { node('domain.mjs', ...a); }, // link | <host> <email> [--token-from-clipboard]: your own domain, behind Access
-  async relay() {
+  async relay(name) {
     // Logged in to Cloudflare (a browser window, once), the Worker deployed on workers.dev, its key on both ends.
+    // Its name is lax-relay unless given (a second Lax on the same account needs its own, or it takes over the first's).
+    name = name || process.env.LAX_RELAY_NAME || readEnv().LAX_RELAY_NAME || 'lax-relay';
+    if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(name)) throw new Error(`${name} can't be a Worker's name (lowercase letters, digits and -)`);
+    const config = ['--config', path.join(ROOT, 'relay', 'wrangler.jsonc'), '--name', name];
     let who = ''; try { who = wrangler(['whoami']); } catch (e) { who = String(e.stdout || ''); }
     if (/not authenticated|not logged in/i.test(who)) { say('relay: logging in to Cloudflare in your browser…'); run('npx', ['-y', 'wrangler@4', 'login']); }
     say('relay: deploying the Worker…');
     node('demo.mjs'); // its public face's pages (demo/dist), from this clone's last commit
     let out = '';
-    try { out = wrangler(['deploy', '--config', path.join(ROOT, 'relay', 'wrangler.jsonc')]); }
+    try { out = wrangler(['deploy', ...config]); }
     catch (e) {
       out = `${e.stdout || ''}${e.stderr || ''}`;
       if (/workers\.dev subdomain/i.test(out)) throw new Error('your account has no workers.dev subdomain yet: Cloudflare dashboard → Workers & Pages → pick one, then run this again');
       if (/more than one account|multiple accounts/i.test(out)) throw new Error('several Cloudflare accounts: run again with CLOUDFLARE_ACCOUNT_ID=<the one> (see `npx wrangler whoami`)');
       throw new Error(out.trim().split('\n').slice(-5).join('\n'));
     }
-    const url = /https:\/\/lax-relay\.[a-z0-9-]+\.workers\.dev/i.exec(out)?.[0];
+    const url = new RegExp(`https://${name}\\.[a-z0-9-]+\\.workers\\.dev`, 'i').exec(out)?.[0];
     if (!url) throw new Error('deployed, but its workers.dev address was not in wrangler\'s output:\n' + out.slice(-500));
     if (!read(secret('relay-key'))) { ensureDirs(); fs.writeFileSync(secret('relay-key'), execFileSync('openssl', ['rand', '-hex', '24'], { encoding: 'utf8' }).trim(), { mode: 0o600 }); }
-    wrangler(['secret', 'put', 'RELAY_KEY', '--config', path.join(ROOT, 'relay', 'wrangler.jsonc')], { input: read(secret('relay-key')), stdio: ['pipe', 'pipe', 'pipe'] });
-    const env = readEnv(), put = (name, value) => wrangler(['secret', 'put', name, '--config', path.join(ROOT, 'relay', 'wrangler.jsonc')], { input: value, stdio: ['pipe', 'pipe', 'pipe'] });
+    const env = readEnv(), put = (key, value) => wrangler(['secret', 'put', key, ...config], { input: value, stdio: ['pipe', 'pipe', 'pipe'] });
+    put('RELAY_KEY', read(secret('relay-key')));
     // Its public face: with your own domain's demo (LAX_DEMO_ROUTE), the relay's /demo goes there; without, the relay
     // keeps Lax's mind itself, pushed by the Mac with its mind key.
     if (env.LAX_DEMO_ROUTE && env.LAX_PUBLIC_URL) put('PUBLIC_HOME', new URL(env.LAX_PUBLIC_URL).origin);
@@ -144,7 +149,7 @@ const STEPS = {
       if (!read(secret('mind-key'))) { ensureDirs(); fs.writeFileSync(secret('mind-key'), execFileSync('openssl', ['rand', '-hex', '24'], { encoding: 'utf8' }).trim(), { mode: 0o600 }); }
       put('MIND_KEY', read(secret('mind-key')));
     }
-    setEnv({ LAX_RELAY_URL: url, LAX_PUBLIC_URL: env.LAX_PUBLIC_URL || url }); // a Lax with its own domain keeps pairing there
+    setEnv({ LAX_RELAY_URL: url, LAX_RELAY_NAME: name === 'lax-relay' ? null : name, LAX_PUBLIC_URL: env.LAX_PUBLIC_URL || url }); // a Lax with its own domain keeps pairing there
     say(`relay: ${url}`);
     if (!restart()) return say('relay: start Lax (`node scripts/setup.mjs service`) and it links');
     await healthy();

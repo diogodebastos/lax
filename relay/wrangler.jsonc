@@ -1,4 +1,5 @@
 // The relay (worker.mjs): one per Lax, on its person's own Cloudflare account, at lax-relay.<account>.workers.dev.
+// `setup relay <name>` deploys it under another name (a second Lax on the same account), kept as LAX_RELAY_NAME.
 // The Mac's key: `npx wrangler secret put RELAY_KEY --config relay/wrangler.jsonc`, the same as ~/.lax/secrets/relay-key.
 // Its public face (/demo) is demo/'s: the pages from demo/dist (`node scripts/demo.mjs` builds them), the mind's room, and
 // the Mac's mind key as MIND_KEY (~/.lax/secrets/mind-key). With your own domain, PUBLIC_HOME sends /demo there instead.
