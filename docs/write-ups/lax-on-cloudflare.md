@@ -1,6 +1,6 @@
 # Lax on Cloudflare
 
-*Draft, 2026-10-22. For the launch (Phase 10, #9).*
+*How a phone reaches a Mac that only listens on localhost: a tunnel, a Durable Object relay, sealed messages, and a page that has to prove it came from your Mac.*
 
 Lax lives on my Mac. Its memory, its history and its code never leave it, and it listens only on `127.0.0.1`. The phone is a screen, a mic and a speaker, and it has to reach the Mac from anywhere: the desk, a train, a phone hotspot with the lid closed in a bag. That link is Cloudflare. Here is how it's built, in the order we built it, and what each step was for.
 

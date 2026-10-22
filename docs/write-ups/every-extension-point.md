@@ -1,6 +1,6 @@
 # How Lax uses every Claude Code extension point
 
-*Draft, 2026-10-22. For the launch (Phase 10, #9).*
+*Hooks, an MCP server, channels, headless runs, skills and git worktrees: a tour of every place Lax plugs into Claude Code.*
 
 Lax is a pixel companion for Claude Code that lives on an old phone. It watches every session on my Mac, carries my approvals to the phone, answers me out loud, remembers how we fixed things, and changes its own code. It has no agent framework and no vector database, and it calls no API with its own key. Claude Code already is the agent loop: tools, permissions, resuming, MCP, skills and hooks. Lax plugs into every place Claude Code lets you plug in, and this is a tour of them.
 

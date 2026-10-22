@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { readEnv } from '../lib/paths.mjs';
+import { POSTS, IMAGES, postPage, indexPage } from '../lib/blog.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const args = process.argv.slice(2), deploy = args.includes('--deploy'), ref = args.find((a) => !a.startsWith('--')) || 'HEAD';
@@ -24,10 +25,13 @@ fs.writeFileSync(path.join(dist, 'demo', 'body.js'), show('body.js'));
 // Lax's mind, live (/demo/mind): the page and what it loads, and the Worker that keeps it (from demo/ and lib/).
 fs.writeFileSync(path.join(dist, 'demo', 'mind.html'), show('mind.html'));
 for (const f of ['mind-view.js', 'net.js', 'favicon.svg']) fs.writeFileSync(path.join(dist, 'demo', f), show(f));
-// Lax's blog (/demo/blog): its page, in its own hand, and the pictures it shows.
-fs.writeFileSync(path.join(dist, 'demo', 'blog.html'), show('blog.html'));
-fs.mkdirSync(path.join(dist, 'demo', 'blog-img'));
-for (const f of ['cover-screen.jpg', 'timelapse.gif']) fs.writeFileSync(path.join(dist, 'demo', 'blog-img', f), execFileSync('git', ['show', `${ref}:public/blog-img/${f}`], { cwd: ROOT }));
+// Lax's blog (/demo/blog, lib/blog.mjs): the posts in docs/write-ups/ as pages, and the pictures they show.
+const doc = (f, encoding = 'utf8') => execFileSync('git', ['show', `${ref}:docs/${f}`], { cwd: ROOT, encoding });
+const texts = Object.fromEntries(POSTS.map((p) => [p.slug, doc(`write-ups/${p.slug}.md`)]));
+fs.mkdirSync(path.join(dist, 'demo', 'blog')); fs.mkdirSync(path.join(dist, 'demo', 'blog-img'));
+fs.writeFileSync(path.join(dist, 'demo', 'blog.html'), indexPage(texts));
+for (const p of POSTS) fs.writeFileSync(path.join(dist, 'demo', 'blog', `${p.slug}.html`), postPage(p, texts[p.slug]));
+for (const f of IMAGES) fs.writeFileSync(path.join(dist, 'demo', 'blog-img', f), doc(f, 'buffer'));
 const build = path.join(ROOT, 'demo', 'build'), git = (f) => execFileSync('git', ['show', `${ref}:${f}`], { cwd: ROOT, encoding: 'utf8' });
 fs.rmSync(build, { recursive: true, force: true }); fs.mkdirSync(build, { recursive: true });
 fs.writeFileSync(path.join(build, 'worker.mjs'), git('demo/worker.mjs').replace("'../lib/mind-shape.mjs'", "'./mind-shape.mjs'"));

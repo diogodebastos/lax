@@ -42,6 +42,7 @@ import { watchPower } from './lib/power.mjs';
 import { seal, unseal, sse, signPage } from './lib/seal.mjs';
 import { cardOf, cardPng } from './lib/card.mjs';
 import { story, timelapseGif, mindChanges } from './lib/timelapse.mjs';
+import { POSTS, IMAGES, postPage, indexPage } from './lib/blog.mjs';
 import { MAX_WAIT_S } from './hooks/timeouts.mjs';
 import { createBudget, LEVELS } from './lib/budget.mjs';
 
@@ -1093,10 +1094,17 @@ http.createServer(async (req, res) => {
   if (req.method === 'GET' && (url.pathname === '/demo' || url.pathname.startsWith('/demo/'))) {
     if (url.pathname === '/demo/mind/api/snap') return json(res, publicMind.view()); // as the Worker serves it publicly
     const DEMO_FILES = { '/demo': 'demo.html', '/demo/app': 'index.html', '/demo/lax.js': 'lax.js', '/demo/heard.js': 'heard.js', '/demo/chip.js': 'chip.js', '/demo/body.js': 'body.js',
-      '/demo/mind': 'mind.html', '/demo/mind-view.js': 'mind-view.js', '/demo/net.js': 'net.js', '/demo/favicon.svg': 'favicon.svg',
-      '/demo/blog': 'blog.html', '/demo/blog-img/cover-screen.jpg': 'blog-img/cover-screen.jpg', '/demo/blog-img/timelapse.gif': 'blog-img/timelapse.gif' };
+      '/demo/mind': 'mind.html', '/demo/mind-view.js': 'mind-view.js', '/demo/net.js': 'net.js', '/demo/favicon.svg': 'favicon.svg' };
+    // Lax's blog (lib/blog.mjs), live from the working folder: the posts in docs/write-ups/ and their pictures in docs/.
+    const blog = /^\/demo\/blog(?:\/([a-z0-9-]+))?$/.exec(url.pathname), pic = /^\/demo\/blog-img\/([a-z0-9-]+\.[a-z]+)$/.exec(url.pathname);
+    if (pic && IMAGES.includes(pic[1])) { res.writeHead(200, { 'content-type': MIME[path.extname(pic[1])], 'cache-control': 'no-store' }); return res.end(fs.readFileSync(path.join(ROOT, 'docs', pic[1]))); }
+    if (blog) {
+      const read = (slug) => fs.readFileSync(path.join(ROOT, 'docs', 'write-ups', `${slug}.md`), 'utf8'), post = POSTS.find((p) => p.slug === blog[1]);
+      if (blog[1] && !post) { res.writeHead(404); return res.end(); }
+      res.writeHead(200, { 'content-type': MIME['.html'], 'cache-control': 'no-store' });
+      return res.end(post ? postPage(post, read(post.slug)) : indexPage(Object.fromEntries(POSTS.map((p) => [p.slug, read(p.slug)]))));
+    }
     const f = DEMO_FILES[url.pathname]; if (!f) { res.writeHead(404); return res.end(); }
-    if (f.startsWith('blog-img/')) { res.writeHead(200, { 'content-type': MIME[path.extname(f)] || 'application/octet-stream', 'cache-control': 'no-store' }); return res.end(fs.readFileSync(path.join(ROOT, 'public', f))); }
     let text = fs.readFileSync(path.join(ROOT, 'public', f), 'utf8');
     if (f === 'index.html') text = text.replace('src="lax.js', 'src="/demo/lax.js').replace('src="heard.js', 'src="/demo/heard.js').replace('src="chip.js', 'src="/demo/chip.js').replace('src="body.js', 'src="/demo/body.js');
     res.writeHead(200, { 'content-type': MIME[path.extname(f)], 'cache-control': 'no-store' });

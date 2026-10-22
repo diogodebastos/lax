@@ -1,6 +1,6 @@
 # An agent that rewrites itself for one person
 
-*Draft, 2026-10-22. For the launch (Phase 10, #9).*
+*Three loops and two weeks of real records: what Lax couldn't do yet, what got in the way, and how it learns to learn.*
 
 Most agents improve when their makers ship a new version. Lax improves for one person, in that person's own copy of its code, from what happens between the two of them. It has three loops: what it can't do yet, what got in your way, and how it learns. All three end the same way: a change on a branch, tested, and nothing reaches `main` without a yes.
 
@@ -50,6 +50,8 @@ It noticed the gap between when it learned something and when I found out. It mo
 The night loop also had to learn to be robust. It once got stuck on a merge nobody heard about. So after-merge retries were added, and git settles a stuck merge by itself. A night the Mac was off is now caught up later that day, once it has sat idle for half an hour.
 
 ## Loop 3: learning how to learn
+
+![Lax's mind, live: what it keeps, as spheres; "learning" counts every change to its mind, "dreams" every reflection and weekly review](../mind.png)
 
 How Lax learns, remembers, wishes and sees itself isn't code. It's four plain files in its mind that it may rewrite: `learning.md`, `remembering.md`, `wishing.md` and `self.md`. Once a week, a review reads its own record (declined wishes, corrected notes, reverted merges) and changes them.
 
