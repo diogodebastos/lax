@@ -6,9 +6,10 @@
 //   node scripts/setup.mjs --all          every step but whisper, in order, without the conversation
 //   node scripts/setup.mjs doctor [--fix] npm run doctor: is it all working? (--fix: secrets' permissions)
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { HOME, MIND, SECRETS, secret, readEnv, readToken, ensureDirs } from '../lib/paths.mjs';
 import { BIN as WHISPER, MODEL as WHISPER_MODEL } from '../lib/whisper.mjs';
 import { SDK, jdkHome } from './android-tools.mjs';
@@ -103,8 +104,21 @@ async function doctor(fix) {
 }
 
 // ---------- the steps ----------
+// node-pty has no Linux prebuild, so npm install compiles it; without these it fails and the whole install with it.
+// A PATH scan, not `which`: minimal Fedora has none.
+function toolchain() {
+  if (process.platform !== 'linux') return;
+  const need = ['make', 'g++', 'python3'].filter((t) => !(process.env.PATH || '').split(':').some((d) => d && fs.existsSync(path.join(d, t))));
+  if (!need.length) return;
+  const rel = (read('/etc/os-release').match(/^(ID|ID_LIKE)=.*$/gm) || []).join(' ');
+  const apt = 'sudo apt install build-essential python3', dnf = 'sudo dnf install gcc-c++ make python3';
+  const cmd = /fedora|rhel|centos/.test(rel) ? dnf : /debian|ubuntu/.test(rel) ? apt : `${apt}   (or: ${dnf})`;
+  console.error(`Lax compiles one part of itself (node-pty) and needs ${need.join(', ')} for it. Install them, then run this again:\n  ${cmd}`);
+  process.exit(1);
+}
+
 const STEPS = {
-  deps() { if (!fs.existsSync(path.join(ROOT, 'node_modules', 'node-pty'))) run('npm', ['install']); say('deps: installed'); },
+  deps() { if (!fs.existsSync(path.join(ROOT, 'node_modules', 'node-pty'))) { toolchain(); run('npm', ['install']); } say('deps: installed'); },
   workdir(dir) {
     const d = path.resolve(dir ? dir.replace(/^~(?=$|\/)/, os.homedir()) : path.dirname(ROOT));
     if (!fs.existsSync(d) || !fs.statSync(d).isDirectory()) throw new Error(`${d} is not a folder`);
@@ -139,14 +153,14 @@ const STEPS = {
     }
     const url = new RegExp(`https://${name}\\.[a-z0-9-]+\\.workers\\.dev`, 'i').exec(out)?.[0];
     if (!url) throw new Error('deployed, but its workers.dev address was not in wrangler\'s output:\n' + out.slice(-500));
-    if (!read(secret('relay-key'))) { ensureDirs(); fs.writeFileSync(secret('relay-key'), execFileSync('openssl', ['rand', '-hex', '24'], { encoding: 'utf8' }).trim(), { mode: 0o600 }); }
+    if (!read(secret('relay-key'))) { ensureDirs(); fs.writeFileSync(secret('relay-key'), crypto.randomBytes(24).toString('hex'), { mode: 0o600 }); }
     const env = readEnv(), put = (key, value) => wrangler(['secret', 'put', key, ...config], { input: value, stdio: ['pipe', 'pipe', 'pipe'] });
     put('RELAY_KEY', read(secret('relay-key')));
     // Its public face: with your own domain's demo (LAX_DEMO_ROUTE), the relay's /demo goes there; without, the relay
     // keeps Lax's mind itself, pushed by the Mac with its mind key.
     if (env.LAX_DEMO_ROUTE && env.LAX_PUBLIC_URL) put('PUBLIC_HOME', new URL(env.LAX_PUBLIC_URL).origin);
     else {
-      if (!read(secret('mind-key'))) { ensureDirs(); fs.writeFileSync(secret('mind-key'), execFileSync('openssl', ['rand', '-hex', '24'], { encoding: 'utf8' }).trim(), { mode: 0o600 }); }
+      if (!read(secret('mind-key'))) { ensureDirs(); fs.writeFileSync(secret('mind-key'), crypto.randomBytes(24).toString('hex'), { mode: 0o600 }); }
       put('MIND_KEY', read(secret('mind-key')));
     }
     setEnv({ LAX_RELAY_URL: url, LAX_RELAY_NAME: name === 'lax-relay' ? null : name, LAX_PUBLIC_URL: env.LAX_PUBLIC_URL || url }); // a Lax with its own domain keeps pairing there
@@ -161,7 +175,9 @@ const STEPS = {
   },
   pair() {
     const url = `http://localhost:${PORT}/pair`;
-    try { sh('open', [url]); } catch {}
+    // xdg-open detached and without pipes: the browser it starts inherits them, and setup would wait on it.
+    if (process.platform === 'linux') spawn('xdg-open', [url], { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
+    else try { sh('open', [url]); } catch {}
     say(`pair: ${url} (opened in your browser). Scan the QR with the phone, or open Lax right here: http://localhost:${PORT}/?t=…`);
   },
 };
