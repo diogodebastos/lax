@@ -13,10 +13,10 @@ import { HOME, MIND, SECRETS, secret, readEnv, readToken, ensureDirs } from '../
 import { BIN as WHISPER, MODEL as WHISPER_MODEL } from '../lib/whisper.mjs';
 import { SDK, jdkHome } from './android-tools.mjs';
 import { EVENTS } from '../hooks/timeouts.mjs';
+import { SERVER, serviceFile, restartArgs } from '../lib/service.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const PORT = Number(process.env.LAX_PORT || 7777), LAX = `http://127.0.0.1:${PORT}`;
-const AGENTS = path.join(os.homedir(), 'Library', 'LaunchAgents'), SERVICE = 'digi-lax.server';
 const read = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return ''; } };
 const sh = (cmd, args, opts = {}) => execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...opts });
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: 'inherit', cwd: ROOT, ...opts });
@@ -38,7 +38,7 @@ async function healthy(wait = 20e3) {
   return false;
 }
 // Only this clone's service: a second clone on the same Mac never restarts the first's Lax.
-const restart = () => { if (!read(path.join(AGENTS, `${SERVICE}.plist`)).includes(`${ROOT}/`)) return false; try { sh('launchctl', ['kickstart', '-k', `gui/${process.getuid()}/${SERVICE}`]); return true; } catch { return false; } };
+const restart = () => { if (!read(serviceFile(SERVER)).includes(`${ROOT}/`)) return false; try { const [c, ...a] = restartArgs(); sh(c, a); return true; } catch { return false; } };
 
 // ---------- what's done ----------
 // Lax's hooks in ~/.claude/settings.json: this clone's, on every event, with today's timeouts (hooks/timeouts.mjs).
@@ -63,7 +63,7 @@ async function status() {
     workdir: { ok: !!env.LAX_WORKDIR, detail: env.LAX_WORKDIR || `not chosen (would be ${path.dirname(ROOT)})` },
     hooks: hooksState(settings),
     channel: { ok: read(path.join(os.homedir(), '.local', 'bin', 'lax')).includes(ROOT), detail: '`lax`, `/lax`, and the channel that lets you talk into a session' },
-    service: { ok: read(path.join(AGENTS, `${SERVICE}.plist`)).includes(ROOT) && await healthy(1500), detail: 'Lax runs in the background, from login' },
+    service: { ok: read(serviceFile(SERVER)).includes(ROOT) && await healthy(1500), detail: 'Lax runs in the background, from login' },
     home: { ok: fs.existsSync(path.join(MIND, 'CLAUDE.md')), detail: HOME },
     whisper: { ok: fs.existsSync(WHISPER) && fs.existsSync(WHISPER_MODEL), detail: 'optional: better hearing, on the Mac (~600 MB)' },
     android: { ok: !!jdkHome() && fs.existsSync(path.join(SDK, 'platform-tools')), detail: 'optional: what building the Android app needs (~1 GB, no Homebrew)' },

@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { secret, ensureDirs } from '../lib/paths.mjs';
+import { restartArgs } from '../lib/service.mjs';
 
 ensureDirs();
 const file = secret('token');
@@ -15,7 +16,7 @@ fs.renameSync(file + '.new', file); // never half written
 console.log('New token written. Old links now get 401.');
 const PORT = Number(process.env.LAX_PORT || 7777);
 if (!process.argv.includes('--no-restart')) {
-  try { execFileSync('launchctl', ['kickstart', '-k', `gui/${process.getuid()}/digi-lax.server`], { stdio: 'ignore' }); console.log('Lax restarted with it.'); }
+  try { const [c, ...a] = restartArgs(); execFileSync(c, a, { stdio: 'ignore' }); console.log('Lax restarted with it.'); }
   catch { console.log('Restart Lax to use it (it reads the token when it starts).'); }
 }
 console.log(`Pair the phone again: http://localhost:${PORT}/pair (the app: scan its QR, or npm run android -- --pair).`);
