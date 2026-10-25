@@ -14,7 +14,8 @@ import { execFileSync, spawnSync } from 'node:child_process';
 
 export const TOOLS = process.env.LAX_TOOLS || path.join(os.homedir(), '.lax-tools');
 export const SDK = path.join(TOOLS, 'android-sdk');
-export const jdkHome = () => { const d = fs.existsSync(TOOLS) && fs.readdirSync(TOOLS).find((x) => x.startsWith('jdk-17')); return d ? path.join(TOOLS, d, 'Contents', 'Home') : null; };
+const darwin = process.platform === 'darwin'; // else Linux: the same tools, its own builds
+export const jdkHome = () => { const d = fs.existsSync(TOOLS) && fs.readdirSync(TOOLS).find((x) => x.startsWith('jdk-17')); return d ? path.join(TOOLS, d, ...(darwin ? ['Contents', 'Home'] : [])) : null; };
 const SDK_PARTS = ['platform-tools', 'platforms;android-34', 'build-tools;34.0.0'];
 const CMDLINE = 'cmdline-tools;19.0';
 const say = (s) => console.log(s);
@@ -29,8 +30,8 @@ async function download(url, file, algo, want) {
 async function jdk() {
   if (jdkHome()) return say(`JDK 17: ${jdkHome()}`);
   const arch = process.arch === 'arm64' ? 'aarch64' : 'x64';
-  const [a] = await (await fetch(`https://api.adoptium.net/v3/assets/latest/17/hotspot?os=mac&architecture=${arch}&image_type=jdk&vendor=eclipse`)).json();
-  const pkg = a?.binary?.package; if (!pkg?.link) throw new Error('no Temurin 17 build found for this Mac');
+  const [a] = await (await fetch(`https://api.adoptium.net/v3/assets/latest/17/hotspot?os=${darwin ? 'mac' : 'linux'}&architecture=${arch}&image_type=jdk&vendor=eclipse`)).json();
+  const pkg = a?.binary?.package; if (!pkg?.link) throw new Error(`no Temurin 17 build found for this ${darwin ? 'Mac' : 'computer'}`);
   say(`JDK 17: downloading ${pkg.name} (${Math.round(pkg.size / 1e6)} MB)…`);
   const tgz = path.join(TOOLS, pkg.name); await download(pkg.link, tgz, 'sha256', pkg.checksum);
   execFileSync('tar', ['xzf', tgz, '-C', TOOLS]); fs.rmSync(tgz);
@@ -44,8 +45,8 @@ async function sdk(accept) {
     const pkg = xml.split('<remotePackage ').find((p) => p.startsWith(`path="${CMDLINE}"`)) || '';
     const zip = [...pkg.matchAll(/<archive>([\s\S]*?)<\/archive>/g)].map((m) => m[1])
       .map((a) => ({ url: /<url>(.*?)<\/url>/.exec(a)?.[1], sha1: /<checksum type="sha1">(.*?)<\/checksum>/.exec(a)?.[1] }))
-      .find((a) => a.url?.startsWith('commandlinetools-mac-')) || {};
-    if (!zip.url) throw new Error(`no ${CMDLINE} for macOS in Google's repository`);
+      .find((a) => a.url?.startsWith(`commandlinetools-${darwin ? 'mac' : 'linux'}-`)) || {};
+    if (!zip.url) throw new Error(`no ${CMDLINE} for ${darwin ? 'macOS' : 'Linux'} in Google's repository`);
     say(`Android command-line tools: downloading ${zip.url}…`);
     const file = path.join(TOOLS, zip.url); await download(`https://dl.google.com/android/repository/${zip.url}`, file, 'sha1', zip.sha1);
     const tmp = path.join(TOOLS, 'cmdline-tools-tmp'); fs.rmSync(tmp, { recursive: true, force: true });

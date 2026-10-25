@@ -30,11 +30,13 @@ const PERMISSIONS = [
 export const tokenLink = () => 'https://dash.cloudflare.com/profile/api-tokens?' + new URLSearchParams({
   permissionGroupKeys: JSON.stringify(PERMISSIONS), accountId: '*', zoneId: 'all', name: 'Lax setup (delete after)' });
 
-/** cloudflared for this Mac, from Cloudflare's latest GitHub release: the archive checked against GitHub's digest of it,
- *  and the binary inside against the SHA-256 the release notes list (they're of the binary, not the archive). */
+/** cloudflared for this computer, from Cloudflare's latest GitHub release: the archive checked against GitHub's digest of
+ *  it, and the binary inside against the SHA-256 the release notes list (they're of the binary, not the archive). On
+ *  Linux the asset is the binary itself, checked against both. */
 export async function installCloudflared() {
   if (fs.existsSync(CLOUDFLARED)) return CLOUDFLARED;
-  const asset = `cloudflared-darwin-${process.arch === 'arm64' ? 'arm64' : 'amd64'}.tgz`;
+  const darwin = process.platform === 'darwin', arch = process.arch === 'arm64' ? 'arm64' : 'amd64';
+  const asset = darwin ? `cloudflared-darwin-${arch}.tgz` : `cloudflared-linux-${arch}`;
   const rel = await (await fetch('https://api.github.com/repos/cloudflare/cloudflared/releases/latest', { headers: { accept: 'application/vnd.github+json' } })).json();
   const a = rel.assets?.find((x) => x.name === asset), archive = /^sha256:([0-9a-f]{64})$/.exec(a?.digest || '')?.[1];
   const binary = new RegExp(`${asset.replace(/\./g, '\\.')}\\s*:\\s*([0-9a-f]{64})`, 'i').exec(rel.body || '')?.[1];
@@ -43,6 +45,11 @@ export async function installCloudflared() {
   const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
   const buf = Buffer.from(await (await fetch(a.browser_download_url)).arrayBuffer());
   if (sha(buf) !== archive) throw new Error(`${asset}: checksum ${sha(buf)}, GitHub says ${archive}`);
+  if (!darwin) {
+    if (sha(buf) !== binary) throw new Error(`cloudflared: checksum ${sha(buf)}, the release notes say ${binary}`);
+    fs.mkdirSync(TOOLS, { recursive: true }); fs.writeFileSync(CLOUDFLARED, buf); fs.chmodSync(CLOUDFLARED, 0o755);
+    return CLOUDFLARED;
+  }
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-cloudflared-'));
   try {
     fs.writeFileSync(path.join(tmp, asset), buf); execFileSync('tar', ['xzf', path.join(tmp, asset), '-C', tmp]);
@@ -53,14 +60,25 @@ export async function installCloudflared() {
   return CLOUDFLARED;
 }
 
+// The clipboard's commands: macOS's own; on Linux Wayland's wl-clipboard, else X11's xclip.
+const CLIP = process.platform === 'darwin' ? { paste: ['pbpaste'], clear: ['pbcopy'] }
+  : process.env.WAYLAND_DISPLAY ? { paste: ['wl-paste', '--no-newline'], clear: ['wl-copy', '--clear'], pkg: 'wl-clipboard' }
+  : { paste: ['xclip', '-selection', 'clipboard', '-o'], clear: ['xclip', '-selection', 'clipboard', '-i', '/dev/null'], pkg: 'xclip' };
+
 /** A Cloudflare API token from the clipboard into secrets/cf-setup-token, checked, then the clipboard cleared. */
 export async function tokenFromClipboard() {
-  const t = execFileSync('pbpaste', { encoding: 'utf8' }).trim();
+  const [paste, ...pasteArgs] = CLIP.paste;
+  let t = '';
+  try { t = execFileSync(paste, pasteArgs, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
+  catch (e) { // an empty clipboard is an error to xclip and wl-paste: then it just holds no token
+    if (e.code === 'ENOENT') throw new Error(`no ${paste} here: install ${CLIP.pkg} (sudo apt install ${CLIP.pkg}, or sudo dnf install ${CLIP.pkg}), or put the token in ~/.lax/secrets/cf-setup-token (chmod 600) and run without --token-from-clipboard`);
+  }
   if (!/^[A-Za-z0-9_-]{30,80}$/.test(t)) throw new Error("the clipboard doesn't hold an API token: copy it from the dashboard and run this again");
   const ok = (await (await fetch('https://api.cloudflare.com/client/v4/user/tokens/verify', { headers: { authorization: `Bearer ${t}` } })).json()).success;
   if (!ok) throw new Error('Cloudflare says that token is not valid (or not active yet)');
   ensureDirs(); fs.writeFileSync(secret('cf-setup-token'), t, { mode: 0o600 }); fs.chmodSync(secret('cf-setup-token'), 0o600);
-  spawnSync('pbcopy', { input: '' });
+  // Output ignored: xclip leaves a copy running to own the clipboard, which would keep pipes open and hang here.
+  spawnSync(CLIP.clear[0], CLIP.clear.slice(1), { input: '', stdio: ['pipe', 'ignore', 'ignore'], timeout: 5000 });
   say('token: saved to ~/.lax/secrets/cf-setup-token, clipboard cleared');
 }
 

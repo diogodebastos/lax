@@ -168,7 +168,7 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
       required: ['chat_id', 'text'],
     },
-  }, {
+  }, ...(process.platform === 'darwin' ? [{ // WhatsApp Desktop, Contacts and the share menu are macOS only
     name: 'share',
     description: 'Share a file or text from this Mac. Default (app "whatsapp"): opens the contact\'s chat in WhatsApp ' +
       'Desktop with the text typed in or the file pasted in; Lax then asks the user on the phone and sends only on their yes. ' +
@@ -186,7 +186,7 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
         app: { type: 'string', enum: ['whatsapp', 'airdrop', 'messages', 'mail', 'any'], description: 'Where to share (default whatsapp)' },
       },
     },
-  }],
+  }] : [])],
 }));
 
 // A share that asked "Which Rita?" waits here for your answer from the phone.
