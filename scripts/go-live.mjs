@@ -2,12 +2,12 @@
 // Claude Code loads the Lax channel only at startup, so a running session can't switch on; instead this opens a
 // new terminal window in the same folder running `lax --resume <this conversation>`.
 //   node scripts/go-live.mjs [session-id] [--dry-run]   (id defaults to $CLAUDE_CODE_SESSION_ID, set inside Claude Code)
-// LAX_TERMINAL=Ghostty|iTerm|Terminal picks the app (lib/terminal.mjs).
+// LAX_TERMINAL picks the app (lib/terminal.mjs: Ghostty|iTerm|Terminal on macOS, the terminal's command on Linux).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { claudePid, processArgs } from '../lib/claude-pid.mjs';
-import { openTerminal, terminalApp, terminalScript, q } from '../lib/terminal.mjs';
+import { openTerminal, terminalApp, terminalArgs, terminalScript, q } from '../lib/terminal.mjs';
 
 const argv = process.argv.slice(2), dry = argv.includes('--dry-run');
 const id = argv.find((a) => !a.startsWith('--')) || process.env.CLAUDE_CODE_SESSION_ID;
@@ -25,9 +25,13 @@ if (!fs.existsSync(LAX)) fail('The `lax` command isn\'t installed: run `npm run 
 
 const app = terminalApp();
 const cmd = `exec ${q(LAX)} --resume ${id}`;
-const script = terminalScript(app, cwd, cmd);
-if (!script) fail(`Unknown LAX_TERMINAL: ${app} (use Ghostty, iTerm or Terminal).`);
-if (dry) { console.log(`would open ${app} with: ${cmd}\n--- AppleScript ---\n${script}`); process.exit(0); }
+if (process.platform === 'linux') {
+  if (dry) { console.log(`would open ${app} with: ${cmd}\n--- argv ---\n${JSON.stringify([app, ...terminalArgs(app, cwd, cmd)])}`); process.exit(0); }
+} else {
+  const script = terminalScript(app, cwd, cmd);
+  if (!script) fail(`Unknown LAX_TERMINAL: ${app} (use Ghostty, iTerm or Terminal).`);
+  if (dry) { console.log(`would open ${app} with: ${cmd}\n--- AppleScript ---\n${script}`); process.exit(0); }
+}
 try { await openTerminal(cwd, cmd, app); }
 catch (e) { fail(`${e.message}\nRun it yourself: cd ${q(cwd)} && ${cmd}`); }
 console.log(`Opened ${app}: lax --resume ${id} in ${cwd}.\nThe conversation continues there and hears you through Lax. Close this session so the two don't both write to it.`);
