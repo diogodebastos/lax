@@ -106,11 +106,11 @@ const RECALL = {
 // Phase 7 (lib/schedule.mjs): a job, or a reminder, that Lax saves only on the user's yes on the phone.
 const SCHEDULE = {
   name: 'schedule',
-  description: 'Schedule something for Lax to do by itself on this Mac, unattended: "every weekday at 8:30, brief me on open PRs", ' +
+  description: 'Schedule something for Lax to do by itself on this computer, unattended: "every weekday at 8:30, brief me on open PRs", ' +
     '"remind me in 20 minutes to call Rita". Each run is a fresh Claude Code in its own folder (cwd) with a time limit; its answer is ' +
     'read aloud on the phone. A reminder (say) is just spoken, no run. action "add" asks the user "save it?" on the phone and saves ' +
     'only on their yes; "list" shows what is scheduled (with ids); "remove" and "run" (now, to try it) take an id. Times are the ' +
-    'Mac\'s local time.',
+    'computer\'s local time.',
   inputSchema: {
     type: 'object',
     properties: {

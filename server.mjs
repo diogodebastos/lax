@@ -48,6 +48,7 @@ import { createBudget, LEVELS } from './lib/budget.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const PORT = Number(process.env.LAX_PORT || 7777);
+const MACHINE = process.platform === 'darwin' ? 'Mac' : 'computer'; // what Lax calls the computer it lives on
 const STARTED = Date.now(); // for /api/health: a restart is over when a newer server answers
 const DEFAULT_WORKDIR = process.env.LAX_WORKDIR || path.dirname(ROOT); // your projects: by default the folder Lax was cloned into
 
@@ -388,7 +389,7 @@ function sessionList() {
   return [...sessions.entries()].filter(([id, s]) => (s.pid || s.ts > cutoff) && !resting(s) && !laxOwn(id)).map(([id, s]) => ({ id, ...s }));
 }
 const stateMsg = () => ({ pet: petView(), sessions: sessionList(), voiceBusy: !!voiceRun, thinking: !!channelWait, settings, budget: budget.view(),
-  channels: channelList(), voiceTarget, usage, vocab: vocabNow(), whisper: whisper.running(), ways: ways?.view() || null });
+  channels: channelList(), voiceTarget, usage, vocab: vocabNow(), whisper: whisper.running(), ways: ways?.view() || null, host: MACHINE });
 // What the phone listens for and fixes (lib/vocab.mjs): the names your words may contain, and misheard → meant.
 function vocabNow() {
   const v = readVocab(VOCAB);
@@ -730,13 +731,13 @@ async function openOnMac() {
   const id = voiceSessions[ASSISTANT], name = settings.name;
   if (!id) return `There's nothing to continue yet. Talk to me first.`;
   if (voiceRun) return `I'm still answering. Try again when I'm done.`;
-  if (laxOnMac) return `I'm already open on the Mac.`;
+  if (laxOnMac) return `I'm already open on the ${MACHINE}.`;
   laxOnMac = true; // before the terminal's SessionStart, so a quick word from the phone can't race it
   try {
     const app = await openTerminal(MIND, `exec claude --resume ${id} --add-dir ${q(DEFAULT_WORKDIR)}`);
-    feed(`○ open on the mac (${app}): the phone waits until you quit there`, 'session', name.toLowerCase());
-    return `Opened on the Mac. Quit there to talk to me here again.`;
-  } catch (e) { laxOnMac = false; return `I couldn't open it on the Mac. ${short(e.message, 120)}`; }
+    feed(`○ open on the ${MACHINE.toLowerCase()} (${app}): the phone waits until you quit there`, 'session', name.toLowerCase());
+    return `Opened on the ${MACHINE}. Quit there to talk to me here again.`;
+  } catch (e) { laxOnMac = false; return `I couldn't open it on the ${MACHINE}. ${short(e.message, 120)}`; }
 }
 const ASSISTANT = 'assistant:' + MIND; // its key in voiceSessions (a conversation only resumes in the folder it started in)
 laxHistory(); // Lax's tab starts with your last conversation, not empty
@@ -1020,7 +1021,7 @@ function talk(text, voice = false, spelled = []) {
   if (voiceRun) return false;
   const name = settings.name.toLowerCase();
   if (ON_MAC.test(text.trim())) { youSaid(text, name); openOnMac().then((say) => broadcast('bubble', { id: 'onmac' + Date.now(), kind: 'reply', text: say, speak: true })); return true; }
-  if (laxOnMac) { broadcast('bubble', { id: 'onmac' + Date.now(), kind: 'reply', text: `I'm open on the Mac right now. Quit there and I'll hear you here again.`, speak: true }); return true; }
+  if (laxOnMac) { broadcast('bubble', { id: 'onmac' + Date.now(), kind: 'reply', text: `I'm open on the ${MACHINE} right now. Quit there and I'll hear you here again.`, speak: true }); return true; }
   // "Start fresh": a new conversation, by voice. Its notes stay; only the chat starts over.
   if (FRESH.test(text.trim())) {
     youSaid(text, name);
@@ -1226,7 +1227,7 @@ http.createServer(async (req, res) => {
         console.log(`[phone ${String(d.at || new Date().toISOString().slice(11, 19)).slice(0, 8)}${d.at ? ' asleep' : ''}] ${JSON.stringify(d).slice(0, 600)}`);
       return json(res, { ok: true });
     case '/api/recall': { // a session's `recall` tool (channel/lax-channel.mjs): Lax searches its long-term memory
-      if (!isLocal(req)) return json(res, { ok: false, answer: 'Only from this Mac.' }, 403);
+      if (!isLocal(req)) return json(res, { ok: false, answer: `Only from this ${MACHINE}.` }, 403);
       const q = String(b.query || '').slice(0, 1000), who = b.cwd ? proj(String(b.cwd)) : settings.name.toLowerCase();
       feed(`  recalling for ${who}: ${short(q, 80)}`, 'diary', settings.name.toLowerCase());
       recalling++; publicMind.changed();
@@ -1264,7 +1265,7 @@ http.createServer(async (req, res) => {
 }).listen(PORT, HOST, () => {
   // Without a way in from anywhere (the relay or a tunnel), a phone can't reach it: say so, and how.
   const phone = process.env.LAX_PUBLIC_URL ? phoneUrl(PORT) : 'not yet: a phone needs a way in (node scripts/setup.mjs relay)';
-  console.log(`${APP_NAME}: ${settings.name || DEFAULT_COMPANION_NAME} is awake on ${HOST}:${PORT}.\n  Mac:   http://localhost:${PORT}/?t=${TOKEN}\n  Phone: ${phone}\n  Pair:  http://localhost:${PORT}/pair  (QR code)`);
+  console.log(`${APP_NAME}: ${settings.name || DEFAULT_COMPANION_NAME} is awake on ${HOST}:${PORT}.\n  ${MACHINE === 'Mac' ? 'Mac:  ' : 'Here: '} http://localhost:${PORT}/?t=${TOKEN}\n  Phone: ${phone}\n  Pair:  http://localhost:${PORT}/pair  (QR code)`);
 });
 // The relay (lib/relay.mjs, Phase 11): the phone reaches Lax through the person's own Worker. With LAX_RELAY_URL and its key.
 // The ways in (lib/ways.mjs): which of the tunnel and the relay reach this Mac, so the phone can move to the one that does.

@@ -17,6 +17,7 @@ import { EVENTS } from '../hooks/timeouts.mjs';
 import { SERVER, serviceFile, restartArgs } from '../lib/service.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const MACHINE = process.platform === 'darwin' ? 'Mac' : 'computer';
 const PORT = Number(process.env.LAX_PORT || 7777), LAX = `http://127.0.0.1:${PORT}`;
 const read = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return ''; } };
 const sh = (cmd, args, opts = {}) => execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...opts });
@@ -66,10 +67,10 @@ async function status() {
     channel: { ok: read(path.join(os.homedir(), '.local', 'bin', 'lax')).includes(ROOT), detail: '`lax`, `/lax`, and the channel that lets you talk into a session' },
     service: { ok: read(serviceFile(SERVER)).includes(ROOT) && await healthy(1500), detail: 'Lax runs in the background, from login' },
     home: { ok: fs.existsSync(path.join(MIND, 'CLAUDE.md')), detail: HOME },
-    whisper: { ok: fs.existsSync(WHISPER) && fs.existsSync(WHISPER_MODEL), detail: 'optional: better hearing, on the Mac (~600 MB)' },
+    whisper: { ok: fs.existsSync(WHISPER) && fs.existsSync(WHISPER_MODEL), detail: `optional: better hearing, on the ${MACHINE} (~600 MB)` },
     android: { ok: !!jdkHome() && fs.existsSync(path.join(SDK, 'platform-tools')), detail: 'optional: what building the Android app needs (~1 GB, no Homebrew)' },
     relay: { ok: !!relayUrl && !!read(secret('relay-key')), detail: relayUrl || 'the phone reaches Lax through your own Worker (a free Cloudflare account)' },
-    phone: { ok: !!env.LAX_PUBLIC_URL, detail: env.LAX_PUBLIC_URL ? `pairs through ${env.LAX_PUBLIC_URL}` : 'on this Mac only, at localhost' },
+    phone: { ok: !!env.LAX_PUBLIC_URL, detail: env.LAX_PUBLIC_URL ? `pairs through ${env.LAX_PUBLIC_URL}` : `on this ${MACHINE} only, at localhost` },
   };
 }
 
@@ -90,13 +91,13 @@ async function doctor(fix) {
   add('secrets', fix || !loose.length, loose.length ? `${fix ? 'tightened' : 'readable by others (npm run doctor -- --fix)'}: ${loose.map((p) => path.basename(p)).join(', ')}` : 'only yours (0700, files 0600)');
   // The ways in, end to end: the page answers with the token.
   const reach = async (url, headers = {}) => { try { return (await fetch(`${url}/?t=${token}`, { headers, signal: AbortSignal.timeout(10000) })).status; } catch (e) { return e.cause?.code || e.message; } };
-  if (env.LAX_RELAY_URL) { const r = await reach(env.LAX_RELAY_URL); add('relay', r === 200, r === 200 ? env.LAX_RELAY_URL : r === 503 ? 'deployed, but the Mac is not linked (is Lax running? see its log)' : `${env.LAX_RELAY_URL}: ${r}`); }
+  if (env.LAX_RELAY_URL) { const r = await reach(env.LAX_RELAY_URL); add('relay', r === 200, r === 200 ? env.LAX_RELAY_URL : r === 503 ? `deployed, but the ${MACHINE} is not linked (is Lax running? see its log)` : `${env.LAX_RELAY_URL}: ${r}`); }
   if (env.LAX_PUBLIC_URL && env.LAX_PUBLIC_URL !== env.LAX_RELAY_URL) {
     const r = await reach(env.LAX_PUBLIC_URL, env.CF_ACCESS_CLIENT_ID ? { 'CF-Access-Client-Id': env.CF_ACCESS_CLIENT_ID, 'CF-Access-Client-Secret': env.CF_ACCESS_CLIENT_SECRET } : {});
     add('tunnel', r === 200, r === 200 ? env.LAX_PUBLIC_URL : `${env.LAX_PUBLIC_URL}: ${r}`);
   }
   if (!env.LAX_PUBLIC_URL) add('phone', false, 'no way in from a phone yet (node scripts/setup.mjs relay)', false);
-  if (s.whisper.ok) { let ok = false; try { ok = (await (await fetch(`http://127.0.0.1:${PORT + 1}/health`, { signal: AbortSignal.timeout(3000) })).json()).status === 'ok'; } catch {} add('whisper', ok, ok ? 'hearing on the Mac' : 'set up, but not answering (it starts with Lax)', false); }
+  if (s.whisper.ok) { let ok = false; try { ok = (await (await fetch(`http://127.0.0.1:${PORT + 1}/health`, { signal: AbortSignal.timeout(3000) })).json()).status === 'ok'; } catch {} add('whisper', ok, ok ? `hearing on the ${MACHINE}` : 'set up, but not answering (it starts with Lax)', false); }
   for (const c of checks) say(`${c.ok ? '✓' : c.needed ? '✗' : '·'} ${c.name.padEnd(8)} ${c.detail}`);
   const bad = checks.filter((c) => c.needed && !c.ok);
   say(bad.length ? `\n${bad.length} thing${bad.length > 1 ? 's' : ''} to fix.` : '\nAll good.');
