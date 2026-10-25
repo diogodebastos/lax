@@ -14,7 +14,7 @@ The app records you itself and feeds the same audio to Android's recognizer (And
 
 - When Whisper's words differ, they show for 1.5 s; tap or swipe to keep the phone's. Quick actions skip it.
 - The phone's words go as they are if Whisper isn't up, fails or takes over 10 s.
-- Free, and nothing leaves the Mac. `npm run whisper` builds it into `~/.lax-tools` (no Homebrew), then restart Lax. It runs next to Lax on port 7778, kept loaded (~600 MB, 1.5-2.5 s for a short message on an Intel Mac). `LAX_WHISPER_BIN` / `LAX_WHISPER_MODEL` point elsewhere.
+- Free, and nothing leaves your computer. `npm run whisper` builds it into `~/.lax-tools` (no Homebrew; on Linux it needs `curl`, `git` and a C++ toolchain, and fetches `cmake` if there's none), then restart Lax. It runs next to Lax on port 7778, kept loaded (~600 MB, 1.5-2.5 s for a short message on an Intel Mac). `LAX_WHISPER_BIN` / `LAX_WHISPER_MODEL` point elsewhere.
 
 ## Bodies
 
