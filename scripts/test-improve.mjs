@@ -35,7 +35,7 @@ check('…"that was an annoying bug, fix it" or "is it slow?" are not', !['fix t
 // A throwaway body with a passing test, the after-merge script, and an "origin" that must never see a self-fix.
 write(path.join(BODY, 'package.json'), JSON.stringify({ name: 'body', type: 'module', scripts: { test: 'node scripts/test-ok.mjs' } }, null, 2) + '\n');
 write(path.join(BODY, 'scripts', 'test-ok.mjs'), 'console.log("ok");\n');
-write(path.join(BODY, 'scripts', 'after-merge.mjs'), fs.readFileSync(path.join(ROOT, 'scripts', 'after-merge.mjs'), 'utf8').replace("'../lib/paths.mjs'", JSON.stringify(path.join(ROOT, 'lib', 'paths.mjs'))).replace("'../lib/upstream.mjs'", JSON.stringify(path.join(ROOT, 'lib', 'upstream.mjs'))));
+write(path.join(BODY, 'scripts', 'after-merge.mjs'), fs.readFileSync(path.join(ROOT, 'scripts', 'after-merge.mjs'), 'utf8').replace("'../lib/paths.mjs'", JSON.stringify(path.join(ROOT, 'lib', 'paths.mjs'))).replace("'../lib/upstream.mjs'", JSON.stringify(path.join(ROOT, 'lib', 'upstream.mjs'))).replace("'../lib/service.mjs'", JSON.stringify(path.join(ROOT, 'lib', 'service.mjs'))));
 execFileSync('git', ['init', '-q', '--bare', '-b', 'main', ORIGIN]);
 sh(HOME, 'init', '-q', '-b', 'main', BODY); sh(BODY, 'add', '-A'); sh(BODY, 'commit', '-qm', 'body'); sh(BODY, 'remote', 'add', 'origin', ORIGIN); sh(BODY, 'push', '-q', 'origin', 'main');
 const GH = path.join(HOME, 'fake-gh.mjs');
