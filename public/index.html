@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <!-- The Home Screen app (iPhone: Share, Add to Home Screen). It starts at /index.html, never /: the relay sends a bare /
@@ -18,7 +18,8 @@
 <style>
   /* Themes: dark (default look) and light (warm paper). Lax picks one from the life menu: system, light or dark. */
   :root { --coral:#D97757; --ink:#000; --fg:#e8e2d6; --dim:#6b6459; --green:#7CFC9A; --red:#ff5a4f; --amber:#ffc65a; --blue:#7fb8ff;
-    --bg:#000; --text2:#b7b0a4; --line:#1f1c19; --line2:#2c2824; --dot:#2a2521; --field:#14110f; --track:#1d1a17; --tab:#0b0a09; --tablive:#4a4239; }
+    --bg:#000; --text2:#b7b0a4; --line:#1f1c19; --line2:#2c2824; --dot:#2a2521; --field:#14110f; --track:#1d1a17; --tab:#0b0a09; --tablive:#4a4239;
+    --inset-top:env(safe-area-inset-top, 0px); } /* the notch or Dynamic Island (the Android app sets it itself) */
   :root[data-theme=light] { --fg:#1c1915; --dim:#8a8176; --green:#1f8a4c; --red:#c8352b; --amber:#b7791f; --blue:#2f6fbf;
     --bg:#f4efe6; --text2:#4f4840; --line:#d9d0c2; --line2:#cfc5b5; --dot:#c9bfae; --field:#ebe4d8; --track:#e3dbcd; --tab:#ece5d9; --tablive:#a89d8c; }
   * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
@@ -188,7 +189,7 @@
   body.big #hint { font-size:18px; bottom:10px; padding:0 10px; gap:10px; }
   body.big #hint::before, body.big #hint::after { height:4px; background:repeating-linear-gradient(90deg, var(--dot) 0 4px, transparent 4px 12px); }
   body.big #term { font-size:19px; line-height:18px; padding:10px 14px; }
-  body.big #life { font-size:22px; padding:calc(14px + var(--inset-top, 0px)) 18px 0; } body.big #life h3 { font-size:18px; } body.big #life header { font-size:28px; }
+  body.big #life { font-size:22px; padding:calc(14px + var(--inset-top, 0px)) calc(18px + env(safe-area-inset-right)) env(safe-area-inset-bottom) calc(18px + env(safe-area-inset-left)); } body.big #life h3 { font-size:18px; } body.big #life header { font-size:28px; }
   /* Session chips are tabs: they sit on the terminal's top line; the selected one opens into it ("brought to the front").
      No padding above: the open tab's top edge is exactly at 50%, on the Flip's hinge. */
   #chips { display:none; } body.big #chips { display:flex; gap:6px; flex-wrap:wrap; align-items:flex-end; padding:0 14px; font-size:18px; position:relative; z-index:1; margin-bottom:-2px; }
@@ -201,6 +202,7 @@
   /* Another tab has something: blinking amber when it needs you, a dot when there's news you haven't opened. */
   #chips .ask { border-color:var(--amber); animation:blink .5s steps(2) infinite; } #chips .new::after { content:' •'; color:var(--coral); }
   #bottom { flex:1; display:flex; flex-direction:column; min-height:0; }
+  body.big #bottom { padding-bottom:env(safe-area-inset-bottom); } /* clear of the home indicator */
 
   /* Closed phone, held upright: the Flip 3 cover screen is a 512×260 landscape strip → Lax left, bubble + terminal right. */
   body.wide #app { width:512px; height:260px; flex-direction:row; }
@@ -232,7 +234,7 @@
   body.wide #bubble .actions { gap:10px; margin-top:10px; } body.wide #bubble button { font-size:28px; padding:10px 0 12px; }
 
   /* Open phone held sideways: Lax on the left half, tabs + terminal on the right; the hinge is the seam. */
-  body.side #app { flex-direction:row; }
+  body.side #app { flex-direction:row; padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); } /* clear of the notch, sideways */
   body.side #top { width:50%; height:100%; }
   body.side #bottom { width:50%; border-left:2px solid var(--line); }
   body.side #chips { padding-top:10px; }
@@ -259,7 +261,7 @@
   body.big #bubble .det { font-size:15px; line-height:17px; max-height:220px; }
   #sRoute button { border:2px solid var(--line2); }
 
-  #wake { position:fixed; inset:0; z-index:10; background:var(--bg); display:grid; place-items:center; text-align:center; color:var(--coral); font-size:22px; cursor:pointer; }
+  #wake { position:fixed; inset:0; z-index:10; background:var(--bg); display:grid; place-items:center; text-align:center; color:var(--coral); font-size:22px; cursor:pointer; padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
   #wake small { display:block; color:var(--dim); font-size:15px; margin-top:6px; }
 </style>
 </head>
@@ -335,6 +337,6 @@
 <script src="heard.js?v=3"></script>
 <script src="chip.js?v=1"></script>
 <script src="body.js?v=1"></script>
-<script src="lax.js?v=68"></script>
+<script src="lax.js?v=69"></script>
 </body>
 </html>

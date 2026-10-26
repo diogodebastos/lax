@@ -36,8 +36,8 @@ function layoutFor() {
 }
 function fit() {
   const l = layoutFor();
-  // In the app the page runs under the camera hole: keep the top bar clear of it.
-  try { const i = JSON.parse(NATIVE?.insets() || '{}'); document.documentElement.style.setProperty('--inset-top', (i.top || 0) + 'px'); } catch {}
+  // In the app the page runs under the camera hole: keep the top bar clear of it. In a browser, CSS does (env(), index.html).
+  if (NATIVE) try { const i = JSON.parse(NATIVE.insets() || '{}'); document.documentElement.style.setProperty('--inset-top', (i.top || 0) + 'px'); } catch {}
   // 'side' is 'big' turned sideways: same sizes, two halves side by side.
   document.body.classList.toggle('big', l === 'big' || l === 'side'); document.body.classList.toggle('side', l === 'side');
   document.body.classList.toggle('wide', l === 'wide');
@@ -981,7 +981,7 @@ function gotWays(w) {
   }
 }
 function moveTo(k, why, back) {
-  if (moving || DEMO || NATIVE) return; moving = true;
+  if (moving || DEMO || NATIVE || STANDALONE) return; moving = true; // the Home Screen app would open it in Safari, without its storage
   feed(`> ${why}, moving to the ${k}`, 'session', undefined, '*'); diag('move', { to: k, why });
   setTimeout(() => location.replace(`${ways[k].url}/?t=${encodeURIComponent(TOKEN)}${back ? '' : '&moved=' + Date.now()}${SEAL_K ? '#k=' + SEAL_K : ''}`), 1500); // the key too: each way's page keeps its own
 }
