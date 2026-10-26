@@ -3,10 +3,10 @@
 // the last copy, so a reload still shows Lax asleep as it last looked. Only the page's own files: never /api/, never
 // another site's. Nothing of yours is kept here; what the page remembers is in its own storage (lax.js, lax_last).
 const CACHE = 'lax-page-v2';
-const PAGE = /^\/(|index\.html|lax\.js|heard\.js|chip\.js|body\.js|favicon\.svg|demo\/favicon\.svg)$/;
+const PAGE = /^\/(|index\.html|lax\.js|heard\.js|chip\.js|body\.js|favicon\.svg|demo\/favicon\.svg|manifest\.webmanifest|apple-touch-icon\.png)$/;
 
 // Kept from the start, not only from the second load (the first one's files came before this worker was there).
-const FILES = ['/', '/lax.js', '/heard.js', '/chip.js', '/body.js'];
+const FILES = ['/', '/lax.js', '/heard.js', '/chip.js', '/body.js', '/manifest.webmanifest', '/apple-touch-icon.png'];
 self.addEventListener('install', (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).catch(() => {}).then(() => self.skipWaiting())));
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 

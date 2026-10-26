@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="theme-color" content="#000000">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
+<!-- The Home Screen app (iPhone: Share, Add to Home Screen). It starts at /index.html, never /: the relay sends a bare /
+     without its cookie to the landing, and the installed app has a cookie jar of its own. Credentials: behind Access too. -->
+<link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Lax">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Lax</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
@@ -324,6 +331,6 @@
 <script src="heard.js?v=3"></script>
 <script src="chip.js?v=1"></script>
 <script src="body.js?v=1"></script>
-<script src="lax.js?v=65"></script>
+<script src="lax.js?v=66"></script>
 </body>
 </html>

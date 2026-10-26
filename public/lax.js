@@ -6,7 +6,8 @@ const qs = new URLSearchParams(location.search);
 let TOKEN = qs.get('t');
 try { if (TOKEN) localStorage.lax_t = TOKEN; else TOKEN = localStorage.lax_t; } catch {}
 const HASH_K = new URLSearchParams(location.hash.slice(1)).get('k'); // the sealing key (below), before the URL is cleaned
-if (qs.get('t') || HASH_K) history.replaceState(null, '', location.pathname);
+// Cleaned to /index.html, not /: that's the address an iPhone saves to the Home Screen, and the relay sends a bare / to the landing.
+if (qs.get('t') || HASH_K) history.replaceState(null, '', location.pathname === '/' ? '/index.html' : location.pathname);
 // Demo mode only under /demo (the public demo and its local preview); a plain /?demo is the real app.
 const DEMO = qs.has('demo') && location.pathname.startsWith('/demo');
 // Paired: the relay's front door opens Lax for this browser, not the landing (relay/worker.mjs). A flag, never the token.
