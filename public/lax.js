@@ -14,6 +14,11 @@ const DEMO = qs.has('demo') && location.pathname.startsWith('/demo');
 if (TOKEN && !DEMO) try { document.cookie = 'lax_paired=1; path=/; max-age=315360000; secure; samesite=lax'; } catch {}
 // Inside the Lax Android app: Android's own speech recognition, TTS and vibration (see android/…/LaxBridge.kt).
 const NATIVE = (() => { try { return window.LaxNative?.isNative() ? window.LaxNative : null; } catch { return null; } })();
+// Added to the Home Screen (iPhone: Share, Add to Home Screen): an app of its own, with storage of its own, not Safari's,
+// so it starts unpaired and pairs by pasting the link (the Life menu copies it in Safari).
+const STANDALONE = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+// An iPhone or iPad (an iPad says it's a Mac), for wording only: what it does is the same everywhere.
+const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
 const buzz = (pattern) => (NATIVE ? NATIVE.vibrate(pattern.join(',')) : navigator.vibrate?.(pattern));
 
 const $ = (s) => document.querySelector(s);
@@ -678,7 +683,8 @@ function routeChannel() {
   return voiceTarget === 'background' ? null : channels.find((c) => c.cid === voiceTarget) || [...channels].sort((a, b) => b.active - a.active)[0] || null;
 }
 function setTarget(v) { voiceTarget = v; updateHint(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); if (!DEMO) api('/api/target', { target: v }); }
-function updateHint() { IDLE_HINT = EGG ? 'no key yet: open the link from npm start' : macAsleep ? `zzz… ${settings.name.toLowerCase()} is asleep${relayHolds ? ', tap to leave a message' : ''}` : voiceBroken ? `tap ${settings.name} to type` : `tap or hold ${settings.name} to talk`; if (!listening) hint.textContent = IDLE_HINT; }
+const UNPAIRED = STANDALONE ? 'not paired: tap to paste your link' : 'not paired: scan the QR on your computer\'s /pair page';
+function updateHint() { IDLE_HINT = EGG ? UNPAIRED : macAsleep ? `zzz… ${settings.name.toLowerCase()} is asleep${relayHolds ? ', tap to leave a message' : ''}` : voiceBroken ? `tap ${settings.name} to type` : `tap or hold ${settings.name} to talk`; if (!listening) hint.textContent = IDLE_HINT; }
 const MIC_ERRORS = {
   'not-allowed': 'Mic is blocked. Tap the icon left of the address → Permissions → Microphone → Allow, then reload.',
   'service-not-allowed': 'This browser has no speech recognition. Use Chrome.',
@@ -896,7 +902,15 @@ addEventListener('keyup', (e) => { if (e.code === 'Space') releaseHold(true); })
 const wakeEl = $('#wake');
 // The app needs no wake tap: audio, full screen and keep-screen-on are native there.
 if (qs.has('awake') || NATIVE) wakeEl.remove();
+if (EGG && STANDALONE) wakeEl.firstElementChild.innerHTML = 'tap to pair<small>paste the link you copied in Safari</small>';
 wakeEl.addEventListener('click', async () => {
+  // The Home Screen app, unpaired: the link copied in Safari, pasted. Only a link to this same address, never elsewhere.
+  if (EGG && STANDALONE) {
+    const s = prompt('Paste your pairing link'); if (!s) return;
+    try { const u = new URL(s.trim()); if (u.origin === location.origin && u.searchParams.get('t')) return void (location.href = u.href); } catch {}
+    wakeEl.querySelector('small').textContent = 'that isn\'t this Lax\'s link. Copy it again in Safari';
+    return;
+  }
   wakeEl.remove(); if (shell) eggTapAt = performance.now(); else { sfx([523, 784]); hop(1.4); }
   try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch {}
   diag('wake');
@@ -974,7 +988,7 @@ async function otherWay() {
 let linkedOnce = false;
 if (DEMO) demo();
 else if (ASLEEP) asleep();
-else if (!TOKEN) feed('no token — open the URL printed by `npm start`', 'error', undefined, '*');
+else if (!TOKEN) feed(UNPAIRED, 'error', undefined, '*');
 else { connect(); if (!NATIVE && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch((e) => diag('sw-error', { msg: String(e).slice(0, 120) })); }
 function connect() {
   const es = new EventSource('/api/stream?t=' + encodeURIComponent(TOKEN) + (linkedOnce ? '' : '&backlog=150') + (SEAL ? '&seal=1' : ''));
@@ -1211,6 +1225,14 @@ async function timelapse(b) {
   b.disabled = false;
 }
 $('#sTheme').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ theme: e.target.dataset.v }));
+// iPhone, in Safari: the Home Screen app has storage of its own, so it needs the pairing link (the token and the key) too.
+// Copied here (a tap, so the clipboard is allowed), pasted there on its first tap.
+$('#homeApp').hidden = !IOS || !!NATIVE || STANDALONE || DEMO || !TOKEN;
+$('#sHome').addEventListener('click', async () => {
+  const link = `${location.origin}/index.html?t=${encodeURIComponent(TOKEN)}${SEAL_K ? '#k=' + SEAL_K : ''}`;
+  try { await navigator.clipboard.writeText(link); $('#homeSays').textContent = 'copied: open Lax from your Home Screen and paste it'; }
+  catch { prompt('Copy this link, then open Lax from your Home Screen and paste it', link); }
+});
 // Rebirth needs a 2-second hold so it can't happen by accident.
 { const btn = $('#rebirth'), fill = btn.querySelector('i'); let t0, raf;
   const tick = () => { const k = Math.min(1, (performance.now() - t0) / 2000); fill.style.width = k * 100 + '%';
