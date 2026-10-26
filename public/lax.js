@@ -684,6 +684,11 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const isBrave = !!navigator.brave;
 // Set once the browser proves it can't do speech recognition (e.g. Brave: no Google speech service). Then taps go to typing.
 let voiceBroken = !SR && !NATIVE;
+// Then, with Whisper up on the computer, Lax records you instead (the iPhone's Home Screen app has no recognition): the
+// same audio the Android app sends, so nothing changes there. Not MediaRecorder: Safari only makes AAC, which it can't read.
+const canRecord = !NATIVE && !!navigator.mediaDevices?.getUserMedia && !!window.AudioContext;
+const recordsNow = () => voiceBroken && canRecord && whisperOn && !macAsleep;
+let micAc = null, recording = null; // recording: while it records, { stop() → the audio }
 let rec, said = '', heard = '', talkMode = 'tap', releasing = false, quietTimer = 0;
 const QUIET_MS = 2000;
 const hint = $('#hint');
@@ -694,7 +699,7 @@ function routeChannel() {
 }
 function setTarget(v) { voiceTarget = v; updateHint(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); if (!DEMO) api('/api/target', { target: v }); }
 const UNPAIRED = STANDALONE ? 'not paired: tap to paste your link' : 'not paired: scan the QR on your computer\'s /pair page';
-function updateHint() { IDLE_HINT = EGG ? UNPAIRED : macAsleep ? `zzz… ${settings.name.toLowerCase()} is asleep${relayHolds ? ', tap to leave a message' : ''}` : voiceBroken ? `tap ${settings.name} to type` : `tap or hold ${settings.name} to talk`; if (!listening) hint.textContent = IDLE_HINT; }
+function updateHint() { IDLE_HINT = EGG ? UNPAIRED : macAsleep ? `zzz… ${settings.name.toLowerCase()} is asleep${relayHolds ? ', tap to leave a message' : ''}` : voiceBroken && !recordsNow() ? `tap ${settings.name} to type` : `tap or hold ${settings.name} to talk`; if (!listening) hint.textContent = IDLE_HINT; }
 const MIC_ERRORS = {
   'not-allowed': 'Mic is blocked. Tap the icon left of the address → Permissions → Microphone → Allow, then reload.',
   'service-not-allowed': 'This browser has no speech recognition. Use Chrome.',
@@ -708,23 +713,62 @@ const micError = (code) => (MIC_ERRORS[code] || 'Mic error: ' + code).replace('N
 updateHint();
 (async () => { let mic = 'unknown'; try { mic = (await navigator.permissions.query({ name: 'microphone' })).state; } catch {}
   diag('load', { v: VERSION, native: !!NATIVE, ua: navigator.userAgent, secure: isSecureContext, sr: !!SR, brave: isBrave, mediaDevices: !!navigator.mediaDevices, mic, w: innerWidth, h: innerHeight, dpr: devicePixelRatio }); })();
-function startListening() { if (listening || hearing) cancelListening(); else beginListening('tap'); } // tap: talk / cancel
+function startListening() { if (recording) finishListening(); else if (listening || hearing) cancelListening(); else beginListening('tap'); } // tap: talk / cancel (recording: send)
 function beginListening(m) {
   if (macAsleep) diag('asleep-tap', { relayHolds, voiceBusy, voiceBroken, hearing: !!hearing });
   if (macAsleep && !relayHolds) { hop(0.5); showBubble({ id: 'asleep', kind: 'reply', text: 'Zzz… I\'m asleep right now. I\'ll wake up on my own.' }); probeRelay(); return; }
   if (voiceBusy && !answerHook) { showBubble({ id: 'busy', kind: 'reply', text: 'Still working on the last one…' }); return; }
   if (hearing) return;
-  if (voiceBroken) return typeInstead();
+  if (voiceBroken && !recordsNow()) return typeInstead();
   said = ''; heard = ''; releasing = false; talkMode = m; listening = true; playTune('listen');
   if (m === 'hold') buzz([30]);
   NATIVE ? NATIVE.hush() : speechSynthesis.cancel();
+  if (voiceBroken) { diag('rec-' + m); startRecording(); return showHeard(); }
   diag('talk-' + m, { native: !!NATIVE }); showHeard(); listenStretch();
+}
+// Recording for Whisper. Started from the tap (a user gesture), so the AudioContext may start.
+function startRecording() {
+  micAc ||= new AudioContext(); micAc.resume().catch(() => {});
+  const bufs = [], r = recording = { stop() { r.done = true; r.off?.(); return LaxHeard.pcm16k(bufs, micAc.sampleRate); } };
+  setTimeout(() => recording === r && finishListening(), 60e3); // a mic left open goes by itself after a minute
+  navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).then((st) => {
+    if (r.done) return st.getTracks().forEach((t) => t.stop()); // sent or cancelled before the mic was ready
+    const src = micAc.createMediaStreamSource(st), sp = micAc.createScriptProcessor(4096, 1, 1);
+    sp.onaudioprocess = (e) => bufs.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    src.connect(sp); sp.connect(micAc.destination); // WebKit only runs a processor that's connected; its output stays silent
+    r.off = () => { sp.disconnect(); src.disconnect(); st.getTracks().forEach((t) => t.stop()); micAc.suspend().catch(() => {}); };
+  }, (err) => {
+    diag('gum-error', { name: err.name, msg: err.message });
+    if (recording === r) failListening(err.name === 'NotAllowedError' ? 'not-allowed' : 'audio-capture');
+  });
+}
+// What was recorded goes to Whisper on the computer; its words go like spoken ones (or answer the open question).
+// Tap Lax or the bubble meanwhile to drop it.
+function sendRecording() {
+  const audio = recording.stop(), h = answerHook; answerHook = null; recording = null;
+  stopListening(false);
+  if (!audio) { showBubble({ id: 'mic', kind: 'error', text: micError('no-speech') }); if (h) renderBubble(); return; } // sent before the mic was ready
+  sfx([330]);
+  let dropped = false;
+  hearing = () => { dropped = true; hearing = null; clearBubble('listen'); hint.textContent = IDLE_HINT; sfx([300, 200]); if (h) renderBubble(); };
+  showBubble({ id: 'listen', kind: 'listening', text: '…' }); hint.textContent = 'writing it down… tap me to cancel';
+  api('/api/hear', { audio, lang: listenLang(), phone: '' }).then((r) => r.ok && r.text, () => null).then((w) => {
+    if (dropped) return;
+    hearing = null; clearBubble('listen'); hint.textContent = IDLE_HINT;
+    if (!w) { // offer typing instead
+      showBubble({ id: 'mic', kind: 'error', text: 'Couldn\'t hear that. Is Whisper running on your computer (npm run whisper)?' });
+      answerHook = h; return void setTimeout(typeInstead, 300);
+    }
+    const hw = LaxHeard.hear(w, vocab), t = punctuate(hw.text);
+    diag('whisper', { phone: '', whisper: t.slice(0, 160) });
+    h ? h(t) : send(t, hw);
+  });
 }
 const raw = () => [said, heard].filter(Boolean).join(' ').trim();
 const words = () => LaxHeard.hear(raw(), vocab).text; // what you said, spelled names joined and misheard ones fixed
 function showHeard(outside = false) {
-  hint.textContent = talkMode === 'hold' ? (outside ? 'let go to cancel' : 'let go to send · slide off to cancel') : 'tap me to cancel';
-  showBubble({ id: 'listen', kind: 'listening', text: words() || '…', fixed: LaxHeard.hear(raw(), vocab).fixed, to: talkingTo() });
+  hint.textContent = talkMode === 'hold' ? (outside ? 'let go to cancel' : 'let go to send · slide off to cancel') : recording ? 'tap me to send' : 'tap me to cancel';
+  showBubble({ id: 'listen', kind: 'listening', text: recording ? (talkMode === 'hold' ? 'recording…' : 'recording… tap me to send') : words() || '…', fixed: LaxHeard.hear(raw(), vocab).fixed, to: talkingTo() });
 }
 // Lax listens in its own language (Life menu), not the phone's: a phone in pt-PT hearing English mishears a lot.
 const listenLang = () => (settings.listen && settings.listen !== 'phone' ? settings.listen : navigator.language || 'en-US');
@@ -743,7 +787,8 @@ function listenStretch() {
     if (['aborted', 'no-speech'].includes(e.error)) return;
     failListening(e.error);
     // No recognition service at all: remember it and let you type this one right away.
-    if (['network', 'service-not-allowed', 'language-not-supported'].includes(e.error)) { voiceBroken = true; updateHint(); setTimeout(typeInstead, 300); }
+    if (['network', 'service-not-allowed', 'language-not-supported'].includes(e.error)) { voiceBroken = true; updateHint();
+      if (recordsNow()) showBubble({ id: 'mic', kind: 'reply', text: 'I\'ll record you instead. Tap me again.' }); else setTimeout(typeInstead, 300); }
   };
   rec.onend = () => stretchEnded(text);
   try { rec.start(); } catch (err) { diag('sr-start-throw', { msg: err.message }); failListening(err.message); }
@@ -769,7 +814,8 @@ function stopListening(discard) {
   if (!listening) return;
   diag('sr-end', { heard: words().slice(0, 80), cancelled: discard, talkMode });
   clearTimeout(quietTimer); clearTimeout(releaseTimer); listening = false; releasing = false;
-  if (NATIVE) NATIVE.cancelListening(); else if (rec) { rec.onend = null; rec.onerror = null; try { rec.abort(); } catch {} }
+  if (recording) { recording.stop(); recording = null; }
+  else if (NATIVE) NATIVE.cancelListening(); else if (rec) { rec.onend = null; rec.onerror = null; try { rec.abort(); } catch {} }
   clearBubble('listen'); hint.textContent = IDLE_HINT;
 }
 // Speech comes without punctuation, so a question would reach Claude as a statement. Words that open a question get
@@ -783,6 +829,7 @@ const QUESTION_PT = new RegExp(`^(?:(?:o qu[eê]|quem|qual|quais|quant[oa]s?|com
 const punctuate = (t) => !t || /[.!?…]$/.test(t) || !(QUESTION.test(t) || QUESTION_PT.test(t)) ? t : t + '?';
 function finishListening() { // send what was heard
   if (!listening) return;
+  if (recording) return sendRecording();
   const audio = NATIVE?.takeAudio ? NATIVE.takeAudio() : ''; // what the app recorded meanwhile, for Whisper
   const text = punctuate(words()), heard = LaxHeard.hear(raw(), vocab), h = answerHook; answerHook = null;
   stopListening(false);
@@ -832,6 +879,7 @@ let releaseTimer = 0;
 function releaseHold(inside) {
   if (!listening || talkMode !== 'hold') return;
   if (!inside) return cancelListening();
+  if (recording) return finishListening();
   releasing = true; NATIVE ? NATIVE.stopListening() : rec?.stop();
   releaseTimer = setTimeout(finishListening, 1500); // in case the last words never come
 }
@@ -924,7 +972,7 @@ wakeEl.addEventListener('click', async () => {
   wakeEl.remove(); if (shell) eggTapAt = performance.now(); else { sfx([523, 784]); hop(1.4); }
   try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch {}
   diag('wake');
-  if (SR) {
+  if (SR || canRecord) { // the mic is asked for once, here
     if (!navigator.mediaDevices) diag('gum-missing');
     else navigator.mediaDevices.getUserMedia({ audio: true })
       .then((st) => { diag('gum-ok', { tracks: st.getTracks().length }); st.getTracks().forEach((t) => t.stop()); })

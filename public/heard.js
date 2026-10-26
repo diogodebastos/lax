@@ -1,6 +1,6 @@
 // What speech hears instead of your words, fixed (Phase 4.3). One copy for both sides: the page loads it as a plain
 // script (the live bubble shows the fixed words), the server imports it through lib/vocab.mjs. No exports, so it's
-// a global: LaxHeard.
+// a global: LaxHeard. Also what a browser records, as Whisper on the computer takes it (pcm16k).
 (() => {
   const norm = (s) => String(s || '').toLowerCase().replace(/[.,!?;:"“”]+/g, ' ').replace(/\s+/g, ' ').trim();
   const squash = (s) => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
@@ -55,5 +55,22 @@
     return b.length >= 3 && n.length > 0 && n.length < b.length && b[0] !== n[0] && (n.length < 2 || b[1] !== n[1]);
   }
 
-  globalThis.LaxHeard = { fix, pick, spell, hear, norm, squash, restarted };
+  /** What a browser recorded (Float32 chunks at the mic's rate) → what the Android app sends for Whisper: 16 kHz mono,
+   *  16-bit little-endian PCM, base64 (lib/whisper.mjs). Little-endian on every phone. */
+  // ponytail: a box-filter downsample, no proper low-pass; Whisper copes. An OfflineAudioContext resample if accuracy suffers.
+  function pcm16k(bufs, rate) {
+    const n = bufs.reduce((k, b) => k + b.length, 0), all = new Float32Array(n); let o = 0;
+    for (const b of bufs) { all.set(b, o); o += b.length; }
+    const r = rate / 16000, out = new Int16Array(Math.floor(n / r));
+    for (let i = 0; i < out.length; i++) {
+      const a = Math.floor(i * r), z = Math.max(a + 1, Math.floor((i + 1) * r)); let s = 0;
+      for (let j = a; j < z; j++) s += all[j];
+      out[i] = Math.max(-1, Math.min(1, s / (z - a))) * 0x7fff;
+    }
+    const u8 = new Uint8Array(out.buffer); let bin = '';
+    for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+
+  globalThis.LaxHeard = { fix, pick, spell, hear, norm, squash, restarted, pcm16k };
 })();
