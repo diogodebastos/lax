@@ -29,7 +29,7 @@ const W = 52, H = 51, GROUND = 46, CX = 26;
 // 'side' = phone open and held sideways (Lax on the left half, tabs + terminal on the right). ?layout= forces one.
 function layoutFor() {
   const forced = qs.get('layout'); if (forced) return forced;
-  if (innerWidth >= 340 && innerHeight >= 600) return 'big';
+  if (innerWidth >= 340 && innerHeight >= 500) return 'big'; // 500: an iPhone SE in Safari is 375×550
   // The cover screen is never 300 tall, so any landscape screen that is gets the side layout (open phone, desktop).
   if (innerHeight >= 300 && innerWidth > innerHeight) return 'side';
   return innerWidth / innerHeight > 1.3 ? 'wide' : 'tall';
@@ -637,6 +637,16 @@ elB.addEventListener('click', (e) => {
 // Off with "chiptune sounds" in settings (its voice is separate: "speaks out loud").
 let ac;
 const audio = () => { if (settings.sounds === false) return null; try { return (ac ||= new AudioContext()); } catch { return null; } };
+// iOS leaves the sound suspended after a lock, a call or the app switcher (every tune is then dropped), and takes the
+// screen's wake lock back, granting it again only from a touch. Both come back on the next touch (in capture: many
+// handlers stop it there) and on coming back to the page.
+let screenLock = null, keepAwake = false; // keepAwake: from the wake tap on
+const unlock = async () => {
+  if (ac && ac.state !== 'running') ac.resume().catch(() => {});
+  if (keepAwake && (!screenLock || screenLock.released)) try { screenLock = await navigator.wakeLock?.request('screen'); } catch {}
+};
+for (const ev of ['touchend', 'click']) addEventListener(ev, unlock, true);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) unlock(); });
 // Its tunes (chip.js): one per state, in its species' key, and a "done" jingle that grows with it.
 const playTune = (name) => { const a = audio(); if (a) LaxChip.play(a, LaxChip.tune(name, pet)); };
 function sfx(notes) {
@@ -922,8 +932,7 @@ wakeEl.addEventListener('click', async () => {
         showBubble({ id: 'mic', kind: 'error', text: err.name === 'NotAllowedError' ? micError('not-allowed') : 'Mic: ' + err.name }); });
   }
   try { await document.documentElement.requestFullscreen?.(); } catch {}
-  const lock = async () => { try { await navigator.wakeLock?.request('screen'); } catch {} };
-  lock(); document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && lock());
+  keepAwake = true; unlock(); // and again after every unlock of the phone (above)
 });
 
 // ---------- live link ----------
@@ -986,16 +995,27 @@ async function otherWay() {
 // The first link asks the Mac for its recent lines, so a fresh page (the app moving to the cover screen, a reload)
 // still shows the conversation. Relinks don't: the page already has them.
 let linkedOnce = false;
+let es = null, hiddenAt = 0, shownAt = 0; // the live link; when the page was last hidden and shown (below)
 if (DEMO) demo();
 else if (ASLEEP) asleep();
 else if (!TOKEN) feed(UNPAIRED, 'error', undefined, '*');
 else { connect(); if (!NATIVE && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch((e) => diag('sw-error', { msg: String(e).slice(0, 120) })); }
+// iOS suspends a page in the background and drops its link. Back after a while: a new link, with the lines missed meanwhile
+// (they replace what's shown, like a fresh page), and the errors right as it comes back aren't the computer asleep.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  shownAt = Date.now();
+  if (TOKEN && !DEMO && !ASLEEP && es && ((hiddenAt && Date.now() - hiddenAt > 10e3) || es.readyState === EventSource.CLOSED)) { showingKept = true; linkedOnce = false; connect(); }
+  hiddenAt = 0;
+});
 function connect() {
-  const es = new EventSource('/api/stream?t=' + encodeURIComponent(TOKEN) + (linkedOnce ? '' : '&backlog=150') + (SEAL ? '&seal=1' : ''));
-  // Sealed events open asynchronously: one after another, so they're handled in the order they came.
+  es?.close();
+  const me = es = new EventSource('/api/stream?t=' + encodeURIComponent(TOKEN) + (linkedOnce ? '' : '&backlog=150') + (SEAL ? '&seal=1' : ''));
+  // Sealed events open asynchronously: one after another, so they're handled in the order they came. A link that was
+  // replaced (above) says nothing more.
   let order = Promise.resolve();
   const on = es.addEventListener.bind(es);
-  es.addEventListener = (name, fn) => on(name, (e) => { order = order.then(async () => fn({ data: e.data && JSON.stringify(await opened(JSON.parse(e.data))) })).catch((err) => diag('sealed-event', { name, msg: String(err).slice(0, 120) })); });
+  es.addEventListener = (name, fn) => on(name, (e) => { if (me !== es) return; order = order.then(async () => fn({ data: e.data && JSON.stringify(await opened(JSON.parse(e.data))) })).catch((err) => diag('sealed-event', { name, msg: String(err).slice(0, 120) })); });
   es.addEventListener('state', (e) => { const st = JSON.parse(e.data); applyState(st); remember(); keep(st); });
   es.addEventListener('feed', (e) => { const f = JSON.parse(e.data); feed(f.line, f.kind, f.project, f.session, f); keep(null, f); });
   es.addEventListener('bubble', (e) => showBubble(JSON.parse(e.data)));
@@ -1006,14 +1026,18 @@ function connect() {
   es.addEventListener('sleeping', () => { feed(`${settings.name.toLowerCase()} fell asleep. zzz…`, 'session', undefined, '*'); setAsleep(true); probeRelay(); }); // the Mac said so first (lib/power.mjs)
   es.addEventListener('react', (e) => { const r = JSON.parse(e.data); if (r.state === 'thinking') voiceBusy = true; else setReact(r.state); });
   es.onopen = () => {
+    if (me !== es) return;
     if (showingKept) { showingKept = false; [...term.children].slice(0, -1).forEach((d) => d.remove()); where.clear(); parts.length = 0; keptFeed = []; } // the Mac's backlog follows
     linkedOnce = true; fails = 0; if (macAsleep) { setAsleep(false); hop(1.4); } if (diagLater.length) diag('while-asleep', { events: diagLater.splice(0) }); feed('linked to mac ✓', 'session', undefined, '*'); };
   es.onerror = () => {
+    if (me !== es) return;
+    // The background dropped it: relinked when it's back (above), or here if it's closed for good.
+    if (document.hidden || Date.now() - shownAt < 3000) { if (me.readyState === EventSource.CLOSED) setTimeout(() => me === es && connect(), 10000); return; }
     if (!macAsleep) feed(`${settings.name.toLowerCase()} fell asleep. zzz…`, 'session', undefined, '*');
     setAsleep(true); showKept(); fails++; setTimeout(otherWay, 3000); // after the probe below has answered
     // Cloudflare answers for a sleeping Mac with an error page, which ends EventSource for good: retry by hand.
     probeRelay();
-    if (es.readyState === EventSource.CLOSED) setTimeout(connect, 10000);
+    if (me.readyState === EventSource.CLOSED) setTimeout(() => me === es && connect(), 10000);
   };
 }
 // The app's offline page: the Mac couldn't be reached at all. Show Lax asleep, as it last looked.
