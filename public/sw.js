@@ -2,8 +2,8 @@
 // the Mac first; when the Mac can't answer (asleep behind the relay, 503; down behind the tunnel, 5xx or no network),
 // the last copy, so a reload still shows Lax asleep as it last looked. Only the page's own files: never /api/, never
 // another site's. Nothing of yours is kept here; what the page remembers is in its own storage (lax.js, lax_last).
-const CACHE = 'lax-page-v1';
-const PAGE = /^\/(|index\.html|lax\.js|heard\.js|body\.js|favicon\.svg|demo\/favicon\.svg)$/;
+const CACHE = 'lax-page-v2';
+const PAGE = /^\/(|index\.html|lax\.js|heard\.js|chip\.js|body\.js|favicon\.svg|demo\/favicon\.svg)$/;
 
 // Kept from the start, not only from the second load (the first one's files came before this worker was there).
 const FILES = ['/', '/lax.js', '/heard.js', '/chip.js', '/body.js'];
