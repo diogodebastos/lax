@@ -4,9 +4,20 @@ Pairing, the layouts for each screen, hearing you, and the Life menu. Back to th
 
 ## Phone
 
-1. Open `http://localhost:7777/pair` on the Mac and scan the QR code with the phone. Open it in **Chrome**; Brave has no speech recognition.
+1. Open `http://localhost:7777/pair` on the Mac and scan the QR code with the phone. Open it in **Chrome** on Android, or **Safari** on an iPhone (below); Brave has no speech recognition.
 2. Tap "wake", then tap Lax to talk. (Through your own domain, Access asks for your email and a PIN the first time.)
 3. The Android app adds a background link, approvals that wake the phone, and the Flip's cover screen: [android/README.md](../android/README.md).
+
+### iPhone
+
+Safari, no app to install. It needs **iOS 16.4 or newer** (older Safari can't read Lax's page). On the pairing page, the "iPhone / browser" QR.
+
+- **Talking** in Safari works as in Chrome, with Dictation on (Settings, General, Keyboard, Enable Dictation).
+- **The Home Screen app:** Share, Add to Home Screen gives a full-screen Lax with its own icon. Worth it: Safari forgets a site's storage (the pairing) after 7 days without a visit; a Home Screen app doesn't. It has storage of its own, so it starts unpaired: in Safari, **LAX ≡**, "copy link for the Home Screen app"; open the icon, tap, paste, OK.
+- **Talking in the Home Screen app:** iOS has no speech recognition there, so Lax records you and Whisper on your computer writes it down (below): tap Lax, talk, tap again (or hold and let go). Without Whisper you type.
+- **Approvals** reach the iPhone only while Lax is on screen: iOS pauses a page in the background. Coming back, it relinks and shows what you missed, and anything still waiting for you.
+- The ringer switch on silent mutes Lax's tunes.
+- The Android app checks that its page was signed by your computer; a browser can't, so on an iPhone the page's integrity rests on TLS to your own Worker. What you and Lax say is still sealed end to end.
 
 ### Hearing: Whisper on the Mac
 

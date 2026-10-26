@@ -20,6 +20,9 @@ vulnerability**).
     that never reaches Cloudflare (it travels after the `#` of the pairing link). Nothing else is stored on Cloudflare.
   - **A tunnel on your own domain** (`cloudflared`), behind Cloudflare Access (an email PIN for the browser, a service
     token for the Android app).
+- **The page itself** comes over HTTPS from your own Worker or tunnel. The Android app also checks that it was signed by
+  your Mac (`x-lax-page`, `lib/seal.mjs`); a browser (Chrome, or Safari on an iPhone) can't, so there the page's
+  integrity rests on TLS to your own Worker. What the phone and the Mac say is still sealed end to end.
 - **The Lax token** is checked on every API call, whichever way the request came in. It lives in `~/.lax/secrets/token`
   and in the phone's pairing link. `npm run rotate-token` replaces it, and every old link then gets 401.
 - **Wrong tokens through the relay** are limited by the caller's address: after 20 in 10 minutes, that address is
