@@ -153,7 +153,7 @@
   #stats { display:grid; grid-template-columns:1fr 1fr; gap:2px 10px; color:var(--text2); }
   #sCard { margin-top:8px; } #cardSays { color:var(--text2); word-break:break-all; margin-top:4px; } #cardSays a { color:inherit; } #cardSays img { display:block; width:100%; max-width:300px; image-rendering:pixelated; margin-top:6px; }
   #stats b { color:var(--fg); font-weight:400; }
-  #homeSays { color:var(--text2); margin-top:4px; }
+  #homeSays, #pushSays { color:var(--text2); margin-top:4px; }
   .bar { display:grid; grid-template-columns:minmax(0,1fr) 90px 32px; align-items:center; gap:8px; font-size:15px; color:var(--text2); margin:2px 0; }
   .bar span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .bar b { font-weight:400; text-align:right; }
   body.big .bar { font-size:19px; grid-template-columns:minmax(0,1fr) 110px 40px; } body.big #miles { font-size:18px; }
@@ -306,6 +306,7 @@
     <label>sessions ask me on the phone too <button class="tog" data-k="phoneApprovals"></button></label>
     <label>wait before terminal <span class="seg" id="sWait"><button data-v="15">15s</button><button data-v="30">30s</button><button data-v="60">60s</button><button data-v="120">2m</button></span></label>
     <div id="homeApp" hidden><h3>home screen</h3><div class="seg" id="sHome"><button>copy link for the Home Screen app</button></div><div id="homeSays"></div></div>
+    <div id="notify" hidden><label>notifications <span class="seg" id="sPush"><button data-v="off">off</button><button data-v="away">when away</button><button data-v="always">always</button></span></label><div id="pushSays"></div></div>
     <h2 class="group">claude usage <small id="usageAge"></small></h2>
     <div id="usage"></div>
     <div id="budget"></div>

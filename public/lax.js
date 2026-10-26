@@ -1214,6 +1214,7 @@ function renderLife() {
   $('#sListen').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === (settings.listen || 'phone')));
   $('#sBudget').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === (settings.budget || 'light')));
   $('#sTheme').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === (settings.theme || 'system')));
+  showPush();
   const raw = memory?.raw || {}, p = memory?.pet || pet;
   const days = p.born ? Math.max(0, Math.floor((Date.now() - p.born) / 864e5)) : 0;
   $('#stats').innerHTML = [['level', p.level], ['stage', p.stage], ['xp', p.xp], ['streak', (p.streak || 0) + 'd'], ['age', days + 'd'], ['mood', p.mood],
@@ -1314,6 +1315,42 @@ $('#sHome').addEventListener('click', async () => {
   const link = `${location.origin}/index.html?t=${encodeURIComponent(TOKEN)}${SEAL_K ? '#k=' + SEAL_K : ''}`;
   try { await navigator.clipboard.writeText(link); $('#homeSays').textContent = 'copied: open Lax from your Home Screen and paste it'; }
   catch { prompt('Copy this link, then open Lax from your Home Screen and paste it', link); }
+});
+// Notifications (lib/push.mjs): a session that needs you reaches this phone even with Lax closed or the phone locked.
+// On an iPhone only the Home Screen app can have them; the asking has to come from a tap. "off" is this phone's;
+// "when away" or "always" is the Mac's setting, for every phone that has them.
+const PUSH = 'PushManager' in window && 'serviceWorker' in navigator && 'Notification' in window && !(IOS && !STANDALONE);
+$('#notify').hidden = !!NATIVE || DEMO || !TOKEN || !(PUSH || IOS);
+function showPush() {
+  const on = $('#sPush').dataset.sub === '1' ? settings.push || 'away' : 'off';
+  $('#sPush').querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b.dataset.v === on); b.disabled = !PUSH; });
+}
+async function pushSend(sub) {
+  const r = await api('/api/push', { subscription: sub.toJSON() }); if (!r?.ok) throw new Error(r?.why || r?.error || 'refused');
+  $('#sPush').dataset.sub = '1'; diag('push-sub', { host: new URL(sub.endpoint).host });
+}
+const pushFail = (e) => { $('#pushSays').textContent = `couldn't: ${e.message || e}`; diag('push-error', { msg: String(e.message || e).slice(0, 120) }); };
+if (!PUSH) $('#pushSays').textContent = IOS ? 'only in the Home Screen app: open Lax from your Home Screen' : 'this browser can\'t';
+else if (!NATIVE && !DEMO && TOKEN && Notification.permission === 'granted') // quietly: the subscription can change
+  navigator.serviceWorker.ready.then((reg) => reg.pushManager.getSubscription()).then((sub) => sub && pushSend(sub)).then(showPush).catch(pushFail);
+$('#sPush').addEventListener('click', async (e) => {
+  const v = e.target.dataset.v; if (!v || !PUSH || DEMO) return;
+  $('#pushSays').textContent = '';
+  try {
+    if (v === 'off') {
+      const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
+      if (sub) { await api('/api/push', { endpoint: sub.endpoint, off: true }); await sub.unsubscribe(); }
+      $('#sPush').dataset.sub = ''; diag('push-sub', { off: true });
+    } else {
+      const asked = Notification.requestPermission(); // first, while the tap still counts
+      const [perm, reg, { key }] = await Promise.all([asked, navigator.serviceWorker.ready, getJson('/api/push/key')]);
+      if (perm !== 'granted') { $('#pushSays').textContent = IOS ? 'blocked: allow them in Settings, Notifications, Lax' : 'blocked: allow them in this site\'s settings'; return; }
+      const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true,
+        applicationServerKey: Uint8Array.from(atob(key.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)) });
+      await pushSend(sub); saveSettings({ push: v });
+    }
+  } catch (err) { pushFail(err); }
+  showPush();
 });
 // Rebirth needs a 2-second hold so it can't happen by accident.
 { const btn = $('#rebirth'), fill = btn.querySelector('i'); let t0, raf;
