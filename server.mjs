@@ -40,6 +40,7 @@ import { once } from './lib/once.mjs';
 import { startWays } from './lib/ways.mjs';
 import { watchPower } from './lib/power.mjs';
 import { seal, unseal, sse, signPage } from './lib/seal.mjs';
+import * as push from './lib/push.mjs';
 import { cardOf, cardPng } from './lib/card.mjs';
 import { story, timelapseGif, mindChanges } from './lib/timelapse.mjs';
 import { POSTS, IMAGES, postPage, indexPage } from './lib/blog.mjs';
@@ -92,6 +93,7 @@ if (!kvGet('newPath', false)) { if (kvGet('pet', null)) milestone(`${readSetting
 // Life menu settings — live on the Mac, edited from the phone.
 const DEFAULTS = { name: DEFAULT_COMPANION_NAME, voice: true, sounds: true, pitch: 1.6, speakDone: false, captions: false,
   phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system', learns: true, listen: 'phone',
+  push: 'away', // notifications to a subscribed phone (lib/push.mjs): off, away (only while no page is open) or always
   budget: 'light', // what Lax may spend of your plan by itself (lib/budget.mjs): light or normal
   speciesPick: false, speciesOverride: null, // while the species bars get tuned: pick one by hand
   publicProjects: ['lax'], // the projects whose names its mind on the website may show (the others show unnamed)
@@ -115,6 +117,7 @@ function updateSettings(b) {
   if ([15, 30, 60, 120].includes(b.askTimeout)) clean.askTimeout = b.askTimeout;
   if (['system', 'light', 'dark'].includes(b.theme)) clean.theme = b.theme;
   if (['phone', 'en-US', 'pt-PT'].includes(b.listen)) clean.listen = b.listen;
+  if (['off', 'away', 'always'].includes(b.push)) clean.push = b.push;
   if (Object.hasOwn(LEVELS, b.budget)) clean.budget = b.budget;
   if (Array.isArray(b.hideTraits)) clean.hideTraits = [...new Set(b.hideTraits.filter((t) => typeof t === 'string' && /^[a-z]{1,16}$/.test(t)))];
   const renamed = clean.name && clean.name !== settings.name;
@@ -380,6 +383,14 @@ function dreamed() { const w = kvGet('mindWeek', { heard: [], spoke: [] }), now 
 function broadcast(type, data) {
   for (const c of clients) c.write(sse(type, data, c.sealed)); // sealed for a phone that asked (lib/seal.mjs)
   if (type === 'bubble' && data.speak) heardSpoke('spoke');
+  if (type === 'bubble' && (data.kind === 'permission' || data.kind === 'question')) notify(data);
+}
+// Something waits for you: a notification to the phones that subscribed (lib/push.mjs), for when the page isn't open (an
+// iPhone puts it to sleep), or always. It says only the project and the short gist: it shows on the lock screen.
+function notify(b) {
+  if (settings.push === 'off' || (settings.push !== 'always' && clients.size) || !push.subscribers()) return;
+  const body = b.kind === 'question' ? `${b.project} asks: ${b.questions?.[0]?.question || b.text}` : b.gist ? `${b.project} wants to: ${b.gist}` : b.text;
+  push.send({ id: b.id, kind: b.kind, title: settings.name, body: short(body, 120) }, { topic: b.id, urgency: 'high', ttl: pending.get(b.id)?.wait || 600 });
 }
 // Lax's own conversation, this one or the one before it: never a session of yours (no tab, no reflection).
 const laxOwn = (sid) => !!sid && (sid === voiceSessions[ASSISTANT] || sid === laxTalk.prev);
@@ -625,7 +636,7 @@ function ask(h) {
   return new Promise((resolve) => {
     // Lax's own assistant (h.lax_voice) has no terminal: its requests always come to the phone, whatever "ask me on the phone"
     // (which is about your terminal sessions) says. If it can't be asked, say why.
-    if (clients.size === 0) return resolve({ decision: 'none', why: 'no phone is connected to Lax' });
+    if (clients.size === 0 && (settings.push === 'off' || !push.subscribers())) return resolve({ decision: 'none', why: 'no phone is connected to Lax' });
     if (!settings.phoneApprovals && !h.lax_voice) return resolve({ decision: 'none', why: 'phone approvals are off' });
     // Sessions with a live lax channel relay tool approvals themselves (no duplicate bubble); questions still come here.
     if (h.tool_name !== 'AskUserQuestion' && h.lax_session_pid && [...channels.values()].some((c) => c.sessionPid === h.lax_session_pid))
@@ -637,9 +648,11 @@ function ask(h) {
       ? { id, kind: 'question', session: h.session_id, project, questions, text: `${project}: ${questions[0].question}`, speak: true }
       : { id, kind: 'permission', session: h.session_id, project, gist: h.tool_name === 'Bash' && h.tool_input?.description ? `${short(h.tool_input.description, 50)}: ${describeTool(h.tool_name, h.tool_input)}` : describeTool(h.tool_name, h.tool_input), text: `${project} wants to: ${describeTool(h.tool_name, h.tool_input, true)}`, say: `${project} wants to: ${describeTool(h.tool_name, h.tool_input)}`, speak: true, actions: true,
         ...(grant?.startsWith('edit:') && { details: `A yes also lets it edit the rest of ${path.basename(grant.slice(5))} until it finishes this answer.` }) };
-    // Questions are worth waiting longer for: they need reading.
+    // Questions are worth waiting longer for: they need reading. Reached only by a notification, a minute at least: time
+    // to unlock the phone.
+    const wait = job ? MAX_WAIT_S : Math.min(MAX_WAIT_S, Math.max(settings.askTimeout * (questions ? 4 : 1), clients.size ? 0 : 60)); // hooks/timeouts.mjs
     const timer = setTimeout(() => { // nobody answered on the phone: friction (lib/improve.mjs)
-      improve.note('unanswered', `${project} asked ${bubble.gist || bubble.text}: no answer on the phone in time`); finish('none'); }, (job ? MAX_WAIT_S : Math.min(MAX_WAIT_S, settings.askTimeout * (questions ? 4 : 1))) * 1000); // hooks/timeouts.mjs
+      improve.note('unanswered', `${project} asked ${bubble.gist || bubble.text}: no answer on the phone in time`); finish('none'); }, wait * 1000);
     function finish(decision, answers) {
       clearTimeout(timer); pending.delete(id); broadcast('clear', { id });
       const ss = sessions.get(h.session_id); if (ss?.status === 'waiting') { ss.status = 'working'; pushState(); }
@@ -649,7 +662,7 @@ function ask(h) {
       if (line) { feed(`  ${line}`, decision === 'deny' ? 'error' : 'done', project, h.session_id); save(); }
       resolve(answers ? { decision, answers } : { decision });
     }
-    pending.set(id, { finish, bubble });
+    pending.set(id, { finish, bubble, wait });
     const s = sessions.get(h.session_id); if (s) { s.status = 'waiting'; pushState(); }
     broadcast('bubble', bubble);
   });
@@ -1179,6 +1192,7 @@ http.createServer(async (req, res) => {
     diary('made its timelapse');
     return json(res, { ok: true, gif: gif.toString('base64'), frames: frames.length });
   }
+  if (url.pathname === '/api/push/key') return json(res, { key: push.vapidPublicKey() }); // the page subscribes with it (lib/push.mjs)
   // What Lax knows (the life menu): counts of its notes, its skills, its newest episodes.
   if (url.pathname === '/api/knows' && req.method === 'GET') {
     let projects = 0; try { projects = fs.readdirSync(PROJECTS).filter((f) => f.endsWith('.md')).length; } catch {}
@@ -1201,6 +1215,11 @@ http.createServer(async (req, res) => {
       return json(res, { ok: !!p });
     }
     case '/api/settings': updateSettings(b); pushState(); return json(res, { ok: true, settings });
+    case '/api/push': { // this phone's notifications (lib/push.mjs): { subscription } to have them, { endpoint, off } to stop
+      if (b.off) { push.unsubscribe(String(b.endpoint || '')); return json(res, { ok: true }); }
+      const why = push.subscribe(b.subscription); if (!why) console.log('[push] a phone subscribed');
+      return json(res, why ? { ok: false, why } : { ok: true }, why ? 400 : 200);
+    }
     case '/api/hatch': return json(res, { ok: true }); // older pages tapped to hatch; the egg hatches on its own now
     case '/api/rebirth': rebirth(!!b.knowledge); broadcast('reborn', {}); pushState(); return json(res, { ok: true });
     case '/api/knows': { // from the life menu: forget an episode, a skill or a role; install or decline a drafted skill, take on a drafted role

@@ -48,5 +48,51 @@ const claims = JSON.parse(u(c)), head = JSON.parse(u(h));
 check('…ES256, for the push service\'s origin, under 24 hours, with an https contact', head.alg === 'ES256' && claims.aud === 'https://web.push.apple.com'
   && claims.exp > now / 1000 && claims.exp <= now / 1000 + 86400 && /^https:\/\//.test(claims.sub), JSON.stringify(claims));
 
+// On a throwaway Lax, with a fake push service: a session that asks while no page is open reaches the phone as a push,
+// and its answer on the phone still goes back to the hook. A push service that says it's gone (410) loses it.
+const { spawn } = await import('node:child_process'), http = await import('node:http');
+const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..'), PORT = 7818, LAX = `http://127.0.0.1:${PORT}`, LH = path.join(HOME, 'lax');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const got2 = []; let reply = 201;
+const fake = http.createServer((req, res) => { const b = []; req.on('data', (d) => b.push(d)); req.on('end', () => { got2.push({ headers: req.headers, body: Buffer.concat(b) }); res.writeHead(reply); res.end(); }); });
+await new Promise((r) => fake.listen(0, '127.0.0.1', r));
+const ENDPOINT = `http://127.0.0.1:${fake.address().port}/push/abc`;
+const server = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server.mjs')], { stdio: ['ignore', 'pipe', 'ignore'],
+  env: { ...process.env, LAX_HOME: LH, LAX_DATA: '', LAX_PORT: String(PORT), LAX_CLAUDE: '/usr/bin/false', LAX_WHISPER: '0', LAX_PUSH_TEST: '1', LAX_ASK_TIMEOUT: '15' } });
+let out = ''; server.stdout.on('data', (d) => (out += d));
+process.on('exit', () => server.kill());
+for (let i = 0; i < 80 && !/Phone:/.test(out); i++) await sleep(100);
+const tok = fs.readFileSync(path.join(LH, 'secrets', 'token'), 'utf8').trim(), H = { 'content-type': 'application/json', 'x-lax-token': tok };
+const post = (p, body) => fetch(LAX + p, { method: 'POST', headers: H, body: JSON.stringify(body) });
+
+check('/api/push/key needs the token', (await fetch(`${LAX}/api/push/key`)).status === 401);
+const k2 = (await (await fetch(`${LAX}/api/push/key`, { headers: H })).json()).key;
+check('…and gives the key, kept only for you (0600)', u(k2).length === 65 && (fs.statSync(path.join(LH, 'secrets', 'vapid.json')).mode & 0o777) === 0o600);
+const sub = (endpoint, p256dh = phone.getPublicKey('base64url'), a2 = auth.toString('base64url')) => post('/api/push', { subscription: { endpoint, keys: { p256dh, auth: a2 } } });
+check('a page can\'t make it post anywhere but a push service', (await sub('https://evil.example.com/x')).status === 400 && (await sub('http://web.push.apple.com/x')).status === 400);
+check('…nor with keys that aren\'t keys', (await sub('https://web.push.apple.com/x', 'abc')).status === 400 && (await sub('https://web.push.apple.com/x', undefined, 'abc')).status === 400);
+let r = await (await post('/api/ask', { session_id: 's1', cwd: '/tmp/quokka', tool_name: 'Bash', tool_input: { command: 'rm x' } })).json();
+check('no page and no phone subscribed: back to the terminal at once, as before', r.decision === 'none', JSON.stringify(r));
+check('a phone subscribes', (await sub(ENDPOINT)).ok && (fs.statSync(path.join(LH, 'push.json')).mode & 0o777) === 0o600);
+
+const asked = post('/api/ask', { session_id: 's1', cwd: '/tmp/quokka', tool_name: 'Bash', tool_input: { command: 'npm test', description: 'Run the tests' } }).then((x) => x.json());
+for (let i = 0; i < 50 && !got2.length; i++) await sleep(100);
+const p1 = got2[0], m = p1 && JSON.parse(decrypt(p1.body, phone.getPrivateKey(), auth) || '{}');
+check('no page open: the phone gets one push, encrypted to it', got2.length === 1 && m.kind === 'permission' && /^quokka wants to: Run the tests/.test(m.body), JSON.stringify(m));
+check('…urgent, for as long as it waits (a minute at least), replacing an older one for the same', p1?.headers.urgency === 'high' && p1.headers.ttl === '60' && p1.headers.topic === m.id && p1.headers['content-encoding'] === 'aes128gcm', JSON.stringify(p1?.headers));
+check('…signed by this Mac', /^vapid t=[\w-]+\.[\w-]+\.[\w-]+, k=/.test(p1?.headers.authorization || '') && p1.headers.authorization.endsWith(`k=${k2}`));
+await post('/api/decide', { id: m.id, decision: 'allow' });
+check('the yes on the phone goes back to the hook', (await asked).decision === 'allow');
+
+reply = 410;
+const asked2 = post('/api/ask', { session_id: 's1', cwd: '/tmp/quokka', tool_name: 'AskUserQuestion', tool_input: { questions: [{ question: 'Which branch?', options: [] }] } }).then((x) => x.json());
+for (let i = 0; i < 50 && got2.length < 2; i++) await sleep(100);
+await sleep(200);
+const m2 = JSON.parse(decrypt(got2[1].body, phone.getPrivateKey(), auth) || '{}');
+check('a question says who asks', m2.kind === 'question' && m2.body === 'quokka asks: Which branch?', m2.body);
+check('a push service that says it\'s gone loses the subscription', JSON.parse(fs.readFileSync(path.join(LH, 'push.json'), 'utf8')).length === 0);
+await post('/api/decide', { id: m2.id, decision: 'pass' }); await asked2;
+fake.close();
+
 console.log(failed ? `\n${failed} push check(s) failed` : '\nall push checks passed');
 process.exit(failed ? 1 : 0);
