@@ -51,6 +51,9 @@ const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const PORT = Number(process.env.LAX_PORT || 7777);
 const STARTED = Date.now(); // for /api/health: a restart is over when a newer server answers
 const DEFAULT_WORKDIR = process.env.LAX_WORKDIR || path.dirname(ROOT); // your projects: by default the folder Lax was cloned into
+// The hooks run as `node …` in every claude Lax starts (its mind, reflections, jobs). Started by launchd, the PATH may have
+// no node at all (nvm's is only in your shell): the hook then fails, nothing reaches the phone, and `claude -p` refuses.
+process.env.PATH = [path.dirname(process.execPath), process.env.PATH].filter(Boolean).join(path.delimiter);
 
 // ---------- memory ----------
 // lax.db became life.db (what Lax has lived); settings moved out to settings.json. Once, before opening it.
