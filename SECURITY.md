@@ -43,6 +43,12 @@ vulnerability**).
 - **What reaches Cloudflare:** with the relay, your requests pass through your own Worker. TLS ends at Cloudflare, so
   the relay could read them; it doesn't store them. End-to-end encryption between the phone and the Mac isn't built
   yet.
+- **Notifications** (if you turn them on in the Home Screen app, `lib/push.mjs`): the Mac sends them straight to your
+  browser's push service (Apple's for an iPhone). Each carries Lax's name, the project and a short gist of what waits
+  (like `quokka wants to: Run the tests: $ npm test`), never file contents or secrets. It's encrypted to the phone
+  (RFC 8291), so the push service can't read it, but it shows on the lock screen as iOS's "Show Previews" allows. The
+  Mac signs as itself with a key in `~/.lax/secrets/vapid.json`; the phones it may send to are in `~/.lax/push.json`
+  (0600: an entry there lets anyone push to that phone), and only push services' own addresses are accepted.
 - **Optional, off by default:** a public demo and a public page with the shape of Lax's mind (counts and times, never
   what's in it), only if you set `LAX_DEMO_ROUTE` and a mind key.
 
