@@ -127,6 +127,7 @@ function applyTheme() {
   const css = getComputedStyle(document.documentElement);
   C.bg = css.getPropertyValue('--bg').trim(); C.shadow = css.getPropertyValue('--dot').trim();
   C.stick = t === 'light' ? '#6b645a' : '#d9d2c4'; // the antenna's stick: light on dark, dark on light
+  document.querySelector('meta[name=theme-color]').content = C.bg; // the browser's bars match
   try { localStorage.lax_theme = settings.theme || 'system'; } catch {}
 }
 try { if (localStorage.lax_theme) settings.theme = localStorage.lax_theme; } catch {}
@@ -457,18 +458,22 @@ function md(text) {
   return out;
 }
 // Hold a step half a second to copy its command and output (to paste it in a message from the phone), or a message of yours to copy all of it.
-{ let timer = null, held = false;
+// Copied when you let go: iOS only allows the clipboard as a touch ends, not while the finger is still down.
+{ let timer = null, held = false, toCopy = null;
   term.addEventListener('pointerdown', (e) => {
-    const s = e.target.closest('.step, .prompt.cut'); held = false; if (!s) return;
-    timer = setTimeout(async () => {
-      timer = null; held = true; s.classList.add('copied'); setTimeout(() => s.classList.remove('copied'), 900); buzz([30]);
-      try { await navigator.clipboard.writeText(s.copy || s.textContent); hint.textContent = 'copied'; }
-      catch { const r = document.createRange(); r.selectNodeContents(s); getSelection().removeAllRanges(); getSelection().addRange(r); hint.textContent = 'selected'; }
-      setTimeout(() => { if (!listening) hint.textContent = IDLE_HINT; }, 1500);
+    const s = e.target.closest('.step, .prompt.cut'); held = false; toCopy = null; if (!s) return;
+    timer = setTimeout(() => {
+      timer = null; held = true; toCopy = s; s.classList.add('copied'); setTimeout(() => s.classList.remove('copied'), 900); buzz([30]);
     }, 500);
   });
   const stop = () => { clearTimeout(timer); timer = null; };
-  term.addEventListener('pointerup', stop); term.addEventListener('pointercancel', stop);
+  term.addEventListener('pointerup', async () => {
+    stop(); const s = toCopy; toCopy = null; if (!s) return;
+    try { await navigator.clipboard.writeText(s.copy || s.textContent); hint.textContent = 'copied'; }
+    catch { const r = document.createRange(); r.selectNodeContents(s); getSelection().removeAllRanges(); getSelection().addRange(r); hint.textContent = 'selected'; }
+    setTimeout(() => { if (!listening) hint.textContent = IDLE_HINT; }, 1500);
+  });
+  term.addEventListener('pointercancel', () => { stop(); toCopy = null; });
   term.addEventListener('pointermove', (e) => Math.abs(e.movementY) > 3 && stop()); // scrolling isn't holding
   // The tap that ends a long press doesn't also open or close the output under it.
   term.addEventListener('click', (e) => { if (held) { held = false; e.stopPropagation(); } }, true);
@@ -689,7 +694,7 @@ let voiceBroken = !SR && !NATIVE;
 const canRecord = !NATIVE && !!navigator.mediaDevices?.getUserMedia && !!window.AudioContext;
 const recordsNow = () => voiceBroken && canRecord && whisperOn && !macAsleep;
 let micAc = null, recording = null; // recording: while it records, { stop() → the audio }
-let rec, said = '', heard = '', talkMode = 'tap', releasing = false, quietTimer = 0;
+let rec, said = '', heard = '', talkMode = 'tap', releasing = false, quietTimer = 0, deafTimer = 0;
 const QUIET_MS = 2000;
 const hint = $('#hint');
 let IDLE_HINT = 'tap Lax to talk'; // the character's name, from settings (updateHint)
@@ -705,6 +710,9 @@ const MIC_ERRORS = {
   'service-not-allowed': 'This browser has no speech recognition. Use Chrome.',
   'network': isBrave ? 'Brave can\'t do speech recognition, so type instead (or use Chrome for voice).' : 'Speech service unreachable. Check your connection.',
   'audio-capture': 'No microphone found.',
+  ...(IOS && { 'not-allowed': STANDALONE ? 'The mic is blocked. In Settings, find Safari, then Microphone, and allow it. Then open me again.'
+    : 'The mic is blocked. In Safari tap aA, then Website Settings, Microphone, Allow. Also check Settings, Privacy and Security, Speech Recognition. Then reload.',
+  'service-not-allowed': STANDALONE ? 'I can\'t hear you in this app. Open me in Safari to talk, or type.' : 'Speech recognition is off. Turn on Settings, General, Keyboard, Enable Dictation. Or type.' }),
   ...(NATIVE && { 'not-allowed': 'NAME needs the mic. Allow it, then tap me again.',
     'network': 'Speech service unreachable. Check your connection.', 'busy': 'The mic is busy. Try again in a sec.' }),
   'no-speech': 'I didn\'t hear anything. Tap me and talk.',
@@ -725,6 +733,8 @@ function beginListening(m) {
   NATIVE ? NATIVE.hush() : speechSynthesis.cancel();
   if (voiceBroken) { diag('rec-' + m); startRecording(); return showHeard(); }
   diag('talk-' + m, { native: !!NATIVE }); showHeard(); listenStretch();
+  // A tap and then nothing: iOS may never end the stretch, and Lax would listen forever.
+  if (m === 'tap') deafTimer = setTimeout(() => listening && !words() && failListening('no-speech'), 15000);
 }
 // Recording for Whisper. Started from the tap (a user gesture), so the AudioContext may start.
 function startRecording() {
@@ -813,7 +823,7 @@ function stretchEnded(text) {
 function stopListening(discard) {
   if (!listening) return;
   diag('sr-end', { heard: words().slice(0, 80), cancelled: discard, talkMode });
-  clearTimeout(quietTimer); clearTimeout(releaseTimer); listening = false; releasing = false;
+  clearTimeout(quietTimer); clearTimeout(releaseTimer); clearTimeout(deafTimer); listening = false; releasing = false;
   if (recording) { recording.stop(); recording = null; }
   else if (NATIVE) NATIVE.cancelListening(); else if (rec) { rec.onend = null; rec.onerror = null; try { rec.abort(); } catch {} }
   clearBubble('listen'); hint.textContent = IDLE_HINT;
