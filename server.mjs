@@ -654,8 +654,8 @@ function ask(h) {
     // Questions are worth waiting longer for: they need reading. Reached only by a notification, a minute at least: time
     // to unlock the phone.
     const wait = job ? MAX_WAIT_S : Math.min(MAX_WAIT_S, Math.max(settings.askTimeout * (questions ? 4 : 1), clients.size ? 0 : 60)); // hooks/timeouts.mjs
-    const timer = setTimeout(() => { // nobody answered on the phone: friction (lib/improve.mjs)
-      improve.note('unanswered', `${project} asked ${bubble.gist || bubble.text}: no answer on the phone in time`); finish('none'); }, wait * 1000);
+    const timer = setTimeout(() => { // a phone was open and nobody answered: friction (lib/improve.mjs); none open, the terminal takes over
+      if (clients.size) improve.note('unanswered', `${project} asked ${bubble.gist || bubble.text}: no answer on the phone in time`); finish('none'); }, wait * 1000);
     function finish(decision, answers) {
       clearTimeout(timer); pending.delete(id); broadcast('clear', { id });
       const ss = sessions.get(h.session_id); if (ss?.status === 'waiting') { ss.status = 'working'; pushState(); }
