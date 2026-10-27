@@ -8,7 +8,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { ensureHome, commitMind, mindHead, forgotSince, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice, addFreshAdvice, addEpisodesAdvice, addScheduleAdvice, addSelfAdvice } from './lib/home.mjs';
+import { ensureHome, commitMind, mindHead, forgotSince, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice, addFreshAdvice, addEpisodesAdvice, addScheduleAdvice, addSelfAdvice, addVisualsAdvice } from './lib/home.mjs';
 import { ensureSelf, self } from './lib/self.mjs';
 import { createRoles, workLog } from './lib/roles.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS, VOCAB, secret } from './lib/paths.mjs';
@@ -34,6 +34,7 @@ import { claudeAlive } from './lib/claude-pid.mjs';
 import { createArchive } from './lib/archive.mjs';
 import { recall } from './lib/recall.mjs';
 import * as whisper from './lib/whisper.mjs';
+import { createVisuals } from './lib/visuals.mjs';
 import { createPublicMind, placesOf, lastCommitFiles, filesIn } from './lib/public-mind.mjs';
 import { startRelay } from './lib/relay.mjs';
 import { once } from './lib/once.mjs';
@@ -764,7 +765,9 @@ if (voiceSessions[ASSISTANT] && !laxTalk.last) {
 }
 
 // ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
-ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addSkills(); addEpisodesToLearning(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice(); addEpisodesAdvice(); addScheduleAdvice(); ensureSelf(); addSelfAdvice(); addRoles(); addRolesToRemembering();
+ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addSkills(); addEpisodesToLearning(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice(); addEpisodesAdvice(); addScheduleAdvice(); ensureSelf(); addSelfAdvice(); addVisualsAdvice(); addRoles(); addRolesToRemembering();
+// What it makes to be seen opens on the phone as soon as it's written (lib/visuals.mjs).
+const visuals = createVisuals(MIND); visuals.watch((name) => broadcast('visual', { name }));
 // ---------- its mind on the website (lib/public-mind.mjs): the shape of what it knows and does, never what's in it ----------
 publicMind = createPublicMind({ live: () => { const v = petView(); return { color: v.look?.color, stage: v.stage, sessions: sessionList(), heard: weekCount('heard'), spoke: weekCount('spoke'), dreams: weekCount('dreamed'), heardEver: mindEver().heard, spokeEver: mindEver().spoke, busy: working(), owner: settings.publicName || '', doing: doing() }; },
   allow: () => settings.publicProjects || [], allowRoles: () => settings.publicRoles || [], log: (...a) => console.log('[mind]', ...a) });
@@ -1176,6 +1179,8 @@ http.createServer(async (req, res) => {
     return;
   }
   if (url.pathname === '/api/brief') return json(res, { text: brief(url.searchParams.get('project') || '', settings.name, roles.active()) });
+  if (url.pathname === '/api/visuals') return json(res, { visuals: visuals.list() }); // what it made to be seen (lib/visuals.mjs)
+  if (url.pathname === '/api/visual') { const html = visuals.read(url.searchParams.get('name')); return html === null ? json(res, { error: 'no such page' }, 404) : json(res, { name: url.searchParams.get('name'), html }); }
   if (url.pathname === '/api/self') return json(res, self(petView(), settings, roles.view())); // the `self` tool: how Lax looks today (lib/self.mjs)
   if (url.pathname === '/api/memory') return json(res, { pet: petView(), raw: pet, voiceProject: pickChannel() ? channels.get(pickChannel()).project : 'assistant',
     milestones: db.prepare('SELECT ts,text FROM milestones ORDER BY id DESC').all() });

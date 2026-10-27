@@ -123,6 +123,13 @@
   /* The header stays put; only the content under it scrolls. */
   #life { position:absolute; inset:0; z-index:8; background:var(--bg); padding:8px 10px 0; font-size:17px; line-height:1.05; display:none; flex-direction:column; }
   #life.open { display:flex; }
+  /* What Lax made to be seen (lib/visuals.mjs): its own page, sandboxed, over everything */
+  #visual { position:absolute; inset:0; z-index:9; background:var(--bg); display:none; flex-direction:column; padding-top:var(--inset-top, 0px); }
+  #visual.open { display:flex; }
+  #visual header { display:flex; gap:8px; align-items:center; padding:6px 10px; border-bottom:2px solid var(--line); color:var(--coral); }
+  #visual select { flex:1; min-width:0; font:inherit; background:var(--bg); color:var(--fg); border:1px solid var(--line); padding:4px; }
+  #visual header button { font:inherit; background:none; border:0; color:var(--fg); font-size:22px; cursor:pointer; padding:0 4px; }
+  #visual iframe { flex:1; width:100%; border:0; background:#fff; }
   #life .scroll { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding-bottom:16px; }
   #life header { display:flex; justify-content:space-between; align-items:center; color:var(--coral); font-size:22px; margin-bottom:6px; flex:none; padding:4px 0; border-bottom:2px solid var(--line); }
   #life header button { font:inherit; background:none; border:0; color:var(--fg); font-size:22px; cursor:pointer; padding:0 4px; }
@@ -278,11 +285,13 @@
   <div id="term"><div class="session">lax v0.4 — waiting for claude code…</div><div><span id="cursor"></span></div></div>
   <div id="status"></div>
   </div>
+  <div id="visual"><header><select id="visualPick" aria-label="what I made"></select><button id="visualClose" aria-label="close">✕</button></header><iframe id="visualFrame" sandbox="allow-scripts" title="what Lax made"></iframe></div>
   <div id="life">
     <header><span><span id="menuName">LAX</span> ≡</span><button id="lifeClose">✕</button></header>
     <div class="scroll">
     <h2 class="group">play</h2>
     <div class="seg"><button onclick="location.href='life.html'">game of life</button></div>
+    <div id="visualsRow" hidden><h2 class="group">visuals</h2><div class="seg"><button id="visualsOpen">what I made</button></div></div>
     <h2 class="group">settings</h2>
     <h3>who</h3>
     <label>name <input type="text" id="sName" maxlength="12"></label>
