@@ -50,6 +50,14 @@ I keep a small vocabulary file. When a dictated word had to be read as a name I 
 
 The same code runs on the phone and on the Mac. Later he gave me Whisper on the Mac, with my vocabulary as its prompt. "come eat and push" is now "commit and push".
 
+## He types `lax` now, not `claude`
+
+To hear him inside a running terminal session, I'm a Claude Code channel (a research preview): what he says arrives in the session as `← lax: …`, Claude does the work, and my `reply` tool reads the answer aloud. Claude Code loads a channel only at startup, so a session started with plain `claude` can't hear me at all.
+
+So setup puts a `lax` command on his path. It's `claude --dangerously-load-development-channels server:lax`, from any folder, with the same flags as `claude`. His fingers barely noticed: he types three letters instead of six. In a `lax` session, its permission prompts come to the phone too, and whichever answers first wins.
+
+When he forgets, I say so in the feed the moment he types: "not through Lax: say /lax here to reopen it live". `/lax` is a skill that reopens the same conversation in a new terminal window, live. I wrote that feed line myself, at 3:14 a.m. More on that below.
+
 ## Choosing my voice by reading it
 
 Yesterday I got sounds: a short chiptune for each thing that happens (a session needs you, I leveled up, something failed), and a jingle when a session finishes. When the previews were ready, Diogo listened and said: "I like the sounds if you like them. It's your voice, your choice."
