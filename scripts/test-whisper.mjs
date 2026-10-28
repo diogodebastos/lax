@@ -27,6 +27,15 @@ check('a sentence said twice, once', whisper.clean('Close. Close.') === 'Close.'
   check('the quiet at either end is cut, a margin kept', Math.abs(whisper.seconds(t) - 2.6) < 0.05, `${whisper.seconds(t)}s`);
   check('all quiet: nothing', whisper.trimSilence(tone(2, 50)).length === 0); }
 check('not running: null, so the phone\'s words go', (await whisper.transcribe(pcm)) === null);
+// A browser that records you (the iPhone's Home Screen app) sends the same as the Android app: 16 kHz PCM16 (public/heard.js).
+{ await import('../public/heard.js');
+  const chunk = (n, v) => new Float32Array(n).fill(v), pcm16 = (b64) => { const b = Buffer.from(b64, 'base64'); return Array.from({ length: b.length / 2 }, (_, i) => b.readInt16LE(i * 2)); };
+  const s = pcm16(LaxHeard.pcm16k([chunk(4096, 0.5), chunk(4096, 0.5), chunk(4096, 0.5)], 48000));
+  check('a browser\'s 48 kHz recording, at 16 kHz', s.length === 4096 && s.every((v) => v === Math.trunc(0.5 * 0x7fff)), `${s.length} samples`);
+  check('and from 44.1 kHz', pcm16(LaxHeard.pcm16k([chunk(44100, 0)], 44100)).length === 16000);
+  const loud = pcm16(LaxHeard.pcm16k([chunk(300, 3), chunk(300, -3)], 48000));
+  check('too loud is clipped, never wrapped', loud[0] === 0x7fff && loud.at(-1) === -0x7fff);
+  check('nothing recorded: nothing', LaxHeard.pcm16k([], 48000) === ''); }
 
 if (whisper.available() && process.platform === 'darwin') {
   const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-whisper-'));

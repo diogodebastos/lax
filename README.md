@@ -10,7 +10,7 @@ digi-lax is the app; Lax is the companion it hatches. Yours can have any name: s
 
 ## What it does
 
-**Glance, don't open.** The closed phone on your desk shows every session: working, waiting for you, done. Made on a Galaxy Z Flip 3's cover screen; it works in any modern browser and any Android phone.
+**Glance, don't open.** The closed phone on your desk shows every session: working, waiting for you, done. Made on a Galaxy Z Flip 3's cover screen; it works in any modern browser: on Android, and in Safari on an iPhone.
 
 **Approve from anywhere.** A session wants to run something, and the phone shows it with ✓ and ✗ (⋯ for the whole command). Whichever answers first wins, the phone or the terminal.
 
@@ -28,7 +28,7 @@ digi-lax is the app; Lax is the companion it hatches. Yours can have any name: s
 
 ## Get started
 
-**You need** a Mac, [Node](https://nodejs.org) 22.13 or newer, `git`, and Claude Code, logged in. For the phone: a free Cloudflare account, and Chrome or the Android app.
+**You need** a Mac, [Node](https://nodejs.org) 22.13 or newer, `git`, and Claude Code, logged in. For the phone: a free Cloudflare account, and Chrome on Android, Safari on an iPhone (iOS 16.4 or newer), or the Android app.
 
 ```bash
 git clone https://github.com/diogodebastos/lax.git

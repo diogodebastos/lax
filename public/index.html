@@ -2,20 +2,30 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
+<!-- The Home Screen app (iPhone: Share, Add to Home Screen). It starts at /index.html, never /: the relay sends a bare /
+     without its cookie to the landing, and the installed app has a cookie jar of its own. Credentials: behind Access too. -->
+<link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Lax">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Lax</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 <style>
   /* Themes: dark (default look) and light (warm paper). Lax picks one from the life menu: system, light or dark. */
   :root { --coral:#D97757; --ink:#000; --fg:#e8e2d6; --dim:#6b6459; --green:#7CFC9A; --red:#ff5a4f; --amber:#ffc65a; --blue:#7fb8ff;
-    --bg:#000; --text2:#b7b0a4; --line:#1f1c19; --line2:#2c2824; --dot:#2a2521; --field:#14110f; --track:#1d1a17; --tab:#0b0a09; --tablive:#4a4239; }
+    --bg:#000; --text2:#b7b0a4; --line:#1f1c19; --line2:#2c2824; --dot:#2a2521; --field:#14110f; --track:#1d1a17; --tab:#0b0a09; --tablive:#4a4239;
+    --inset-top:env(safe-area-inset-top, 0px); } /* the notch or Dynamic Island (the Android app sets it itself) */
   :root[data-theme=light] { --fg:#1c1915; --dim:#8a8176; --green:#1f8a4c; --red:#c8352b; --amber:#b7791f; --blue:#2f6fbf;
     --bg:#f4efe6; --text2:#4f4840; --line:#d9d0c2; --line2:#cfc5b5; --dot:#c9bfae; --field:#ebe4d8; --track:#e3dbcd; --tab:#ece5d9; --tablive:#a89d8c; }
   * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
-  html,body { background:var(--bg); color:var(--fg); height:100%; overflow:hidden; font-family:'VT323',ui-monospace,monospace; user-select:none; }
+  html,body { background:var(--bg); color:var(--fg); height:100%; overflow:hidden; font-family:'VT323',ui-monospace,monospace;
+    -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; touch-action:manipulation; } /* iOS: no loupe or callout on a hold, no double-tap zoom */
+  input, textarea { -webkit-user-select:text; user-select:text; } /* or iOS won't let you type in them */
   body { display:grid; place-items:center; }
   /* Designed at the Flip 3 cover screen's native 260×512, scaled to fit any screen. */
   #app { width:260px; height:512px; position:relative; transform-origin:center; display:flex; flex-direction:column; background:var(--bg); }
@@ -143,6 +153,7 @@
   #stats { display:grid; grid-template-columns:1fr 1fr; gap:2px 10px; color:var(--text2); }
   #sCard { margin-top:8px; } #cardSays { color:var(--text2); word-break:break-all; margin-top:4px; } #cardSays a { color:inherit; } #cardSays img { display:block; width:100%; max-width:300px; image-rendering:pixelated; margin-top:6px; }
   #stats b { color:var(--fg); font-weight:400; }
+  #homeSays, #pushSays { color:var(--text2); margin-top:4px; }
   .bar { display:grid; grid-template-columns:minmax(0,1fr) 90px 32px; align-items:center; gap:8px; font-size:15px; color:var(--text2); margin:2px 0; }
   .bar span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .bar b { font-weight:400; text-align:right; }
   body.big .bar { font-size:19px; grid-template-columns:minmax(0,1fr) 110px 40px; } body.big #miles { font-size:18px; }
@@ -164,7 +175,7 @@
   #skills .none, #episodes .none { color:var(--dim); }
   #episodes li.more, #miles li.more { display:block; color:var(--dim); cursor:pointer; text-decoration:underline; } #miles li.more::before { content:''; }
   body.big #skills .sk, body.big #roles .sk, body.big #episodes { font-size:18px; }
-  #rebirth { width:100%; font:inherit; margin-top:8px; padding:5px; background:#3a1512; color:#ffb4ad; border:2px solid #c9392f; cursor:pointer; position:relative; overflow:hidden; }
+  #rebirth { width:100%; font:inherit; margin-top:8px; padding:5px; background:#3a1512; color:#ffb4ad; border:2px solid #c9392f; cursor:pointer; position:relative; overflow:hidden; touch-action:none; }
   #rebirth i { position:absolute; left:0; top:0; bottom:0; width:0; background:rgba(255,90,79,.35); }
 
   /* Open phone (main screen / Flex mode): top half Lax, bottom half terminal — the fold sits on the seam. */
@@ -178,7 +189,7 @@
   body.big #hint { font-size:18px; bottom:10px; padding:0 10px; gap:10px; }
   body.big #hint::before, body.big #hint::after { height:4px; background:repeating-linear-gradient(90deg, var(--dot) 0 4px, transparent 4px 12px); }
   body.big #term { font-size:19px; line-height:18px; padding:10px 14px; }
-  body.big #life { font-size:22px; padding:calc(14px + var(--inset-top, 0px)) 18px 0; } body.big #life h3 { font-size:18px; } body.big #life header { font-size:28px; }
+  body.big #life { font-size:22px; padding:calc(14px + var(--inset-top, 0px)) calc(18px + env(safe-area-inset-right)) env(safe-area-inset-bottom) calc(18px + env(safe-area-inset-left)); } body.big #life h3 { font-size:18px; } body.big #life header { font-size:28px; }
   /* Session chips are tabs: they sit on the terminal's top line; the selected one opens into it ("brought to the front").
      No padding above: the open tab's top edge is exactly at 50%, on the Flip's hinge. */
   #chips { display:none; } body.big #chips { display:flex; gap:6px; flex-wrap:wrap; align-items:flex-end; padding:0 14px; font-size:18px; position:relative; z-index:1; margin-bottom:-2px; }
@@ -191,6 +202,7 @@
   /* Another tab has something: blinking amber when it needs you, a dot when there's news you haven't opened. */
   #chips .ask { border-color:var(--amber); animation:blink .5s steps(2) infinite; } #chips .new::after { content:' •'; color:var(--coral); }
   #bottom { flex:1; display:flex; flex-direction:column; min-height:0; }
+  body.big #bottom { padding-bottom:env(safe-area-inset-bottom); } /* clear of the home indicator */
 
   /* Closed phone, held upright: the Flip 3 cover screen is a 512×260 landscape strip → Lax left, bubble + terminal right. */
   body.wide #app { width:512px; height:260px; flex-direction:row; }
@@ -222,7 +234,7 @@
   body.wide #bubble .actions { gap:10px; margin-top:10px; } body.wide #bubble button { font-size:28px; padding:10px 0 12px; }
 
   /* Open phone held sideways: Lax on the left half, tabs + terminal on the right; the hinge is the seam. */
-  body.side #app { flex-direction:row; }
+  body.side #app { flex-direction:row; padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); } /* clear of the notch, sideways */
   body.side #top { width:50%; height:100%; }
   body.side #bottom { width:50%; border-left:2px solid var(--line); }
   body.side #chips { padding-top:10px; }
@@ -249,7 +261,7 @@
   body.big #bubble .det { font-size:15px; line-height:17px; max-height:220px; }
   #sRoute button { border:2px solid var(--line2); }
 
-  #wake { position:fixed; inset:0; z-index:10; background:var(--bg); display:grid; place-items:center; text-align:center; color:var(--coral); font-size:22px; cursor:pointer; }
+  #wake { position:fixed; inset:0; z-index:10; background:var(--bg); display:grid; place-items:center; text-align:center; color:var(--coral); font-size:22px; cursor:pointer; padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
   #wake small { display:block; color:var(--dim); font-size:15px; margin-top:6px; }
 </style>
 </head>
@@ -293,6 +305,8 @@
     <h3>approvals</h3>
     <label>sessions ask me on the phone too <button class="tog" data-k="phoneApprovals"></button></label>
     <label>wait before terminal <span class="seg" id="sWait"><button data-v="15">15s</button><button data-v="30">30s</button><button data-v="60">60s</button><button data-v="120">2m</button></span></label>
+    <div id="homeApp" hidden><h3>home screen</h3><div class="seg" id="sHome"><button>copy link for the Home Screen app</button></div><div id="homeSays"></div></div>
+    <div id="notify" hidden><label>notifications <span class="seg" id="sPush"><button data-v="off">off</button><button data-v="away">when away</button><button data-v="always">always</button></span></label><div id="pushSays"></div></div>
     <h2 class="group">claude usage <small id="usageAge"></small></h2>
     <div id="usage"></div>
     <div id="budget"></div>
@@ -321,9 +335,9 @@
   </div>
 </div>
 <div id="wake"><div>tap to wake <span id="wakeName">Lax</span><small>(unlocks sound + mic)</small></div></div>
-<script src="heard.js?v=3"></script>
+<script src="heard.js?v=4"></script>
 <script src="chip.js?v=1"></script>
 <script src="body.js?v=1"></script>
-<script src="lax.js?v=65"></script>
+<script src="lax.js?v=71"></script>
 </body>
 </html>

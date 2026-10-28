@@ -34,7 +34,7 @@ Each person's Lax is born fresh: it knows nothing about them yet, and that's how
 6. **whisper** (optional): better hearing, on the Mac (whisper.cpp, about 600 MB, a few minutes to build). Free, and
    nothing leaves the Mac. Ask; it can come later too.
 7. **android** (optional): only if they want the Android app (a background link, approvals that wake the phone, the
-   cover screen); Chrome on the phone works without it. It fetches what building it needs into `~/.lax-tools`
+   cover screen); Chrome on Android, or Safari on an iPhone, works without it. It fetches what building it needs into `~/.lax-tools`
    (about 1 GB, no Homebrew). Google's Android SDK licenses come with it: tell them, and on a yes run
    `node scripts/setup.mjs android --accept-licenses`. Then, with the phone plugged in (USB debugging on),
    `npm run android -- --pair` builds it from this clone and pairs it.
@@ -43,7 +43,7 @@ Each person's Lax is born fresh: it knows nothing about them yet, and that's how
    dashboard (free: pick a team name) and an API token: `node scripts/setup.mjs domain link` prints a link that pre-fills
    it. They create it, copy it, and you run `node scripts/setup.mjs domain <host> <email> --token-from-clipboard`: the
    token goes from the clipboard to `~/.lax/secrets` without you seeing it. Never ask them to paste it to you.
-9. **pair**: opens the pairing page. With the relay, they scan the QR with the phone and open it in Chrome (or the Android
+9. **pair**: opens the pairing page. With the relay, they scan the QR with the phone: Chrome on Android, Safari on an iPhone (or the Android
    app, built from this clone with `npm run android`). Without it, Lax is right there on the Mac: the page links to it.
 
 ## At the end

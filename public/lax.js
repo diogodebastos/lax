@@ -6,13 +6,19 @@ const qs = new URLSearchParams(location.search);
 let TOKEN = qs.get('t');
 try { if (TOKEN) localStorage.lax_t = TOKEN; else TOKEN = localStorage.lax_t; } catch {}
 const HASH_K = new URLSearchParams(location.hash.slice(1)).get('k'); // the sealing key (below), before the URL is cleaned
-if (qs.get('t') || HASH_K) history.replaceState(null, '', location.pathname);
+// Cleaned to /index.html, not /: that's the address an iPhone saves to the Home Screen, and the relay sends a bare / to the landing.
+if (qs.get('t') || HASH_K) history.replaceState(null, '', location.pathname === '/' ? '/index.html' : location.pathname);
 // Demo mode only under /demo (the public demo and its local preview); a plain /?demo is the real app.
 const DEMO = qs.has('demo') && location.pathname.startsWith('/demo');
 // Paired: the relay's front door opens Lax for this browser, not the landing (relay/worker.mjs). A flag, never the token.
 if (TOKEN && !DEMO) try { document.cookie = 'lax_paired=1; path=/; max-age=315360000; secure; samesite=lax'; } catch {}
 // Inside the Lax Android app: Android's own speech recognition, TTS and vibration (see android/…/LaxBridge.kt).
 const NATIVE = (() => { try { return window.LaxNative?.isNative() ? window.LaxNative : null; } catch { return null; } })();
+// Added to the Home Screen (iPhone: Share, Add to Home Screen): an app of its own, with storage of its own, not Safari's,
+// so it starts unpaired and pairs by pasting the link (the Life menu copies it in Safari).
+const STANDALONE = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+// An iPhone or iPad (an iPad says it's a Mac), for wording only: what it does is the same everywhere.
+const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
 const buzz = (pattern) => (NATIVE ? NATIVE.vibrate(pattern.join(',')) : navigator.vibrate?.(pattern));
 
 const $ = (s) => document.querySelector(s);
@@ -23,15 +29,15 @@ const W = 52, H = 51, GROUND = 46, CX = 26;
 // 'side' = phone open and held sideways (Lax on the left half, tabs + terminal on the right). ?layout= forces one.
 function layoutFor() {
   const forced = qs.get('layout'); if (forced) return forced;
-  if (innerWidth >= 340 && innerHeight >= 600) return 'big';
+  if (innerWidth >= 340 && innerHeight >= 500) return 'big'; // 500: an iPhone SE in Safari is 375×550
   // The cover screen is never 300 tall, so any landscape screen that is gets the side layout (open phone, desktop).
   if (innerHeight >= 300 && innerWidth > innerHeight) return 'side';
   return innerWidth / innerHeight > 1.3 ? 'wide' : 'tall';
 }
 function fit() {
   const l = layoutFor();
-  // In the app the page runs under the camera hole: keep the top bar clear of it.
-  try { const i = JSON.parse(NATIVE?.insets() || '{}'); document.documentElement.style.setProperty('--inset-top', (i.top || 0) + 'px'); } catch {}
+  // In the app the page runs under the camera hole: keep the top bar clear of it. In a browser, CSS does (env(), index.html).
+  if (NATIVE) try { const i = JSON.parse(NATIVE.insets() || '{}'); document.documentElement.style.setProperty('--inset-top', (i.top || 0) + 'px'); } catch {}
   // 'side' is 'big' turned sideways: same sizes, two halves side by side.
   document.body.classList.toggle('big', l === 'big' || l === 'side'); document.body.classList.toggle('side', l === 'side');
   document.body.classList.toggle('wide', l === 'wide');
@@ -121,6 +127,7 @@ function applyTheme() {
   const css = getComputedStyle(document.documentElement);
   C.bg = css.getPropertyValue('--bg').trim(); C.shadow = css.getPropertyValue('--dot').trim();
   C.stick = t === 'light' ? '#6b645a' : '#d9d2c4'; // the antenna's stick: light on dark, dark on light
+  document.querySelector('meta[name=theme-color]').content = C.bg; // the browser's bars match
   try { localStorage.lax_theme = settings.theme || 'system'; } catch {}
 }
 try { if (localStorage.lax_theme) settings.theme = localStorage.lax_theme; } catch {}
@@ -451,18 +458,22 @@ function md(text) {
   return out;
 }
 // Hold a step half a second to copy its command and output (to paste it in a message from the phone), or a message of yours to copy all of it.
-{ let timer = null, held = false;
+// Copied when you let go: iOS only allows the clipboard as a touch ends, not while the finger is still down.
+{ let timer = null, held = false, toCopy = null;
   term.addEventListener('pointerdown', (e) => {
-    const s = e.target.closest('.step, .prompt.cut'); held = false; if (!s) return;
-    timer = setTimeout(async () => {
-      timer = null; held = true; s.classList.add('copied'); setTimeout(() => s.classList.remove('copied'), 900); buzz([30]);
-      try { await navigator.clipboard.writeText(s.copy || s.textContent); hint.textContent = 'copied'; }
-      catch { const r = document.createRange(); r.selectNodeContents(s); getSelection().removeAllRanges(); getSelection().addRange(r); hint.textContent = 'selected'; }
-      setTimeout(() => { if (!listening) hint.textContent = IDLE_HINT; }, 1500);
+    const s = e.target.closest('.step, .prompt.cut'); held = false; toCopy = null; if (!s) return;
+    timer = setTimeout(() => {
+      timer = null; held = true; toCopy = s; s.classList.add('copied'); setTimeout(() => s.classList.remove('copied'), 900); buzz([30]);
     }, 500);
   });
   const stop = () => { clearTimeout(timer); timer = null; };
-  term.addEventListener('pointerup', stop); term.addEventListener('pointercancel', stop);
+  term.addEventListener('pointerup', async () => {
+    stop(); const s = toCopy; toCopy = null; if (!s) return;
+    try { await navigator.clipboard.writeText(s.copy || s.textContent); hint.textContent = 'copied'; }
+    catch { const r = document.createRange(); r.selectNodeContents(s); getSelection().removeAllRanges(); getSelection().addRange(r); hint.textContent = 'selected'; }
+    setTimeout(() => { if (!listening) hint.textContent = IDLE_HINT; }, 1500);
+  });
+  term.addEventListener('pointercancel', () => { stop(); toCopy = null; });
   term.addEventListener('pointermove', (e) => Math.abs(e.movementY) > 3 && stop()); // scrolling isn't holding
   // The tap that ends a long press doesn't also open or close the output under it.
   term.addEventListener('click', (e) => { if (held) { held = false; e.stopPropagation(); } }, true);
@@ -631,6 +642,16 @@ elB.addEventListener('click', (e) => {
 // Off with "chiptune sounds" in settings (its voice is separate: "speaks out loud").
 let ac;
 const audio = () => { if (settings.sounds === false) return null; try { return (ac ||= new AudioContext()); } catch { return null; } };
+// iOS leaves the sound suspended after a lock, a call or the app switcher (every tune is then dropped), and takes the
+// screen's wake lock back, granting it again only from a touch. Both come back on the next touch (in capture: many
+// handlers stop it there) and on coming back to the page.
+let screenLock = null, keepAwake = false; // keepAwake: from the wake tap on
+const unlock = async () => {
+  if (ac && ac.state !== 'running') ac.resume().catch(() => {});
+  if (keepAwake && (!screenLock || screenLock.released)) try { screenLock = await navigator.wakeLock?.request('screen'); } catch {}
+};
+for (const ev of ['touchend', 'click']) addEventListener(ev, unlock, true);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) unlock(); });
 // Its tunes (chip.js): one per state, in its species' key, and a "done" jingle that grows with it.
 const playTune = (name) => { const a = audio(); if (a) LaxChip.play(a, LaxChip.tune(name, pet)); };
 function sfx(notes) {
@@ -668,7 +689,12 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const isBrave = !!navigator.brave;
 // Set once the browser proves it can't do speech recognition (e.g. Brave: no Google speech service). Then taps go to typing.
 let voiceBroken = !SR && !NATIVE;
-let rec, said = '', heard = '', talkMode = 'tap', releasing = false, quietTimer = 0;
+// Then, with Whisper up on the computer, Lax records you instead (the iPhone's Home Screen app has no recognition): the
+// same audio the Android app sends, so nothing changes there. Not MediaRecorder: Safari only makes AAC, which it can't read.
+const canRecord = !NATIVE && !!navigator.mediaDevices?.getUserMedia && !!window.AudioContext;
+const recordsNow = () => voiceBroken && canRecord && whisperOn && !macAsleep;
+let micAc = null, recording = null; // recording: while it records, { stop() → the audio }
+let rec, said = '', heard = '', talkMode = 'tap', releasing = false, quietTimer = 0, deafTimer = 0;
 const QUIET_MS = 2000;
 const hint = $('#hint');
 let IDLE_HINT = 'tap Lax to talk'; // the character's name, from settings (updateHint)
@@ -677,12 +703,16 @@ function routeChannel() {
   return voiceTarget === 'background' ? null : channels.find((c) => c.cid === voiceTarget) || [...channels].sort((a, b) => b.active - a.active)[0] || null;
 }
 function setTarget(v) { voiceTarget = v; updateHint(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); if (!DEMO) api('/api/target', { target: v }); }
-function updateHint() { IDLE_HINT = EGG ? 'no key yet: open the link from npm start' : macAsleep ? `zzz… ${settings.name.toLowerCase()} is asleep${relayHolds ? ', tap to leave a message' : ''}` : voiceBroken ? `tap ${settings.name} to type` : `tap or hold ${settings.name} to talk`; if (!listening) hint.textContent = IDLE_HINT; }
+const UNPAIRED = STANDALONE ? 'not paired: tap to paste your link' : 'not paired: scan the QR on your computer\'s /pair page';
+function updateHint() { IDLE_HINT = EGG ? UNPAIRED : macAsleep ? `zzz… ${settings.name.toLowerCase()} is asleep${relayHolds ? ', tap to leave a message' : ''}` : voiceBroken && !recordsNow() ? `tap ${settings.name} to type` : `tap or hold ${settings.name} to talk`; if (!listening) hint.textContent = IDLE_HINT; }
 const MIC_ERRORS = {
   'not-allowed': 'Mic is blocked. Tap the icon left of the address → Permissions → Microphone → Allow, then reload.',
   'service-not-allowed': 'This browser has no speech recognition. Use Chrome.',
   'network': isBrave ? 'Brave can\'t do speech recognition, so type instead (or use Chrome for voice).' : 'Speech service unreachable. Check your connection.',
   'audio-capture': 'No microphone found.',
+  ...(IOS && { 'not-allowed': STANDALONE ? 'The mic is blocked. In Settings, find Safari, then Microphone, and allow it. Then open me again.'
+    : 'The mic is blocked. In Safari tap aA, then Website Settings, Microphone, Allow. Also check Settings, Privacy and Security, Speech Recognition. Then reload.',
+  'service-not-allowed': STANDALONE ? 'I can\'t hear you in this app. Open me in Safari to talk, or type.' : 'Speech recognition is off. Turn on Settings, General, Keyboard, Enable Dictation. Or type.' }),
   ...(NATIVE && { 'not-allowed': 'NAME needs the mic. Allow it, then tap me again.',
     'network': 'Speech service unreachable. Check your connection.', 'busy': 'The mic is busy. Try again in a sec.' }),
   'no-speech': 'I didn\'t hear anything. Tap me and talk.',
@@ -691,23 +721,64 @@ const micError = (code) => (MIC_ERRORS[code] || 'Mic error: ' + code).replace('N
 updateHint();
 (async () => { let mic = 'unknown'; try { mic = (await navigator.permissions.query({ name: 'microphone' })).state; } catch {}
   diag('load', { v: VERSION, native: !!NATIVE, ua: navigator.userAgent, secure: isSecureContext, sr: !!SR, brave: isBrave, mediaDevices: !!navigator.mediaDevices, mic, w: innerWidth, h: innerHeight, dpr: devicePixelRatio }); })();
-function startListening() { if (listening || hearing) cancelListening(); else beginListening('tap'); } // tap: talk / cancel
+function startListening() { if (recording) finishListening(); else if (listening || hearing) cancelListening(); else beginListening('tap'); } // tap: talk / cancel (recording: send)
 function beginListening(m) {
   if (macAsleep) diag('asleep-tap', { relayHolds, voiceBusy, voiceBroken, hearing: !!hearing });
   if (macAsleep && !relayHolds) { hop(0.5); showBubble({ id: 'asleep', kind: 'reply', text: 'Zzz… I\'m asleep right now. I\'ll wake up on my own.' }); probeRelay(); return; }
   if (voiceBusy && !answerHook) { showBubble({ id: 'busy', kind: 'reply', text: 'Still working on the last one…' }); return; }
   if (hearing) return;
-  if (voiceBroken) return typeInstead();
+  if (voiceBroken && !recordsNow()) return typeInstead();
   said = ''; heard = ''; releasing = false; talkMode = m; listening = true; playTune('listen');
   if (m === 'hold') buzz([30]);
   NATIVE ? NATIVE.hush() : speechSynthesis.cancel();
+  if (voiceBroken) { diag('rec-' + m); startRecording(); return showHeard(); }
   diag('talk-' + m, { native: !!NATIVE }); showHeard(); listenStretch();
+  // A tap and then nothing: iOS may never end the stretch, and Lax would listen forever.
+  if (m === 'tap') deafTimer = setTimeout(() => listening && !words() && failListening('no-speech'), 15000);
+}
+// Recording for Whisper. Started from the tap (a user gesture), so the AudioContext may start.
+function startRecording() {
+  micAc ||= new AudioContext(); micAc.resume().catch(() => {});
+  const bufs = [], r = recording = { stop() { r.done = true; r.off?.(); return LaxHeard.pcm16k(bufs, micAc.sampleRate); } };
+  setTimeout(() => recording === r && finishListening(), 60e3); // a mic left open goes by itself after a minute
+  navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).then((st) => {
+    if (r.done) return st.getTracks().forEach((t) => t.stop()); // sent or cancelled before the mic was ready
+    const src = micAc.createMediaStreamSource(st), sp = micAc.createScriptProcessor(4096, 1, 1);
+    sp.onaudioprocess = (e) => bufs.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    src.connect(sp); sp.connect(micAc.destination); // WebKit only runs a processor that's connected; its output stays silent
+    r.off = () => { sp.disconnect(); src.disconnect(); st.getTracks().forEach((t) => t.stop()); micAc.suspend().catch(() => {}); };
+  }, (err) => {
+    diag('gum-error', { name: err.name, msg: err.message });
+    if (recording === r) failListening(err.name === 'NotAllowedError' ? 'not-allowed' : 'audio-capture');
+  });
+}
+// What was recorded goes to Whisper on the computer; its words go like spoken ones (or answer the open question).
+// Tap Lax or the bubble meanwhile to drop it.
+function sendRecording() {
+  const audio = recording.stop(), h = answerHook; answerHook = null; recording = null;
+  stopListening(false);
+  if (!audio) { showBubble({ id: 'mic', kind: 'error', text: micError('no-speech') }); if (h) renderBubble(); return; } // sent before the mic was ready
+  sfx([330]);
+  let dropped = false;
+  hearing = () => { dropped = true; hearing = null; clearBubble('listen'); hint.textContent = IDLE_HINT; sfx([300, 200]); if (h) renderBubble(); };
+  showBubble({ id: 'listen', kind: 'listening', text: '…' }); hint.textContent = 'writing it down… tap me to cancel';
+  api('/api/hear', { audio, lang: listenLang(), phone: '' }).then((r) => r.ok && r.text, () => null).then((w) => {
+    if (dropped) return;
+    hearing = null; clearBubble('listen'); hint.textContent = IDLE_HINT;
+    if (!w) { // offer typing instead
+      showBubble({ id: 'mic', kind: 'error', text: 'Couldn\'t hear that. Is Whisper running on your computer (npm run whisper)?' });
+      answerHook = h; return void setTimeout(typeInstead, 300);
+    }
+    const hw = LaxHeard.hear(w, vocab), t = punctuate(hw.text);
+    diag('whisper', { phone: '', whisper: t.slice(0, 160) });
+    h ? h(t) : send(t, hw);
+  });
 }
 const raw = () => [said, heard].filter(Boolean).join(' ').trim();
 const words = () => LaxHeard.hear(raw(), vocab).text; // what you said, spelled names joined and misheard ones fixed
 function showHeard(outside = false) {
-  hint.textContent = talkMode === 'hold' ? (outside ? 'let go to cancel' : 'let go to send · slide off to cancel') : 'tap me to cancel';
-  showBubble({ id: 'listen', kind: 'listening', text: words() || '…', fixed: LaxHeard.hear(raw(), vocab).fixed, to: talkingTo() });
+  hint.textContent = talkMode === 'hold' ? (outside ? 'let go to cancel' : 'let go to send · slide off to cancel') : recording ? 'tap me to send' : 'tap me to cancel';
+  showBubble({ id: 'listen', kind: 'listening', text: recording ? (talkMode === 'hold' ? 'recording…' : 'recording… tap me to send') : words() || '…', fixed: LaxHeard.hear(raw(), vocab).fixed, to: talkingTo() });
 }
 // Lax listens in its own language (Life menu), not the phone's: a phone in pt-PT hearing English mishears a lot.
 const listenLang = () => (settings.listen && settings.listen !== 'phone' ? settings.listen : navigator.language || 'en-US');
@@ -726,7 +797,8 @@ function listenStretch() {
     if (['aborted', 'no-speech'].includes(e.error)) return;
     failListening(e.error);
     // No recognition service at all: remember it and let you type this one right away.
-    if (['network', 'service-not-allowed', 'language-not-supported'].includes(e.error)) { voiceBroken = true; updateHint(); setTimeout(typeInstead, 300); }
+    if (['network', 'service-not-allowed', 'language-not-supported'].includes(e.error)) { voiceBroken = true; updateHint();
+      if (recordsNow()) showBubble({ id: 'mic', kind: 'reply', text: 'I\'ll record you instead. Tap me again.' }); else setTimeout(typeInstead, 300); }
   };
   rec.onend = () => stretchEnded(text);
   try { rec.start(); } catch (err) { diag('sr-start-throw', { msg: err.message }); failListening(err.message); }
@@ -751,8 +823,9 @@ function stretchEnded(text) {
 function stopListening(discard) {
   if (!listening) return;
   diag('sr-end', { heard: words().slice(0, 80), cancelled: discard, talkMode });
-  clearTimeout(quietTimer); clearTimeout(releaseTimer); listening = false; releasing = false;
-  if (NATIVE) NATIVE.cancelListening(); else if (rec) { rec.onend = null; rec.onerror = null; try { rec.abort(); } catch {} }
+  clearTimeout(quietTimer); clearTimeout(releaseTimer); clearTimeout(deafTimer); listening = false; releasing = false;
+  if (recording) { recording.stop(); recording = null; }
+  else if (NATIVE) NATIVE.cancelListening(); else if (rec) { rec.onend = null; rec.onerror = null; try { rec.abort(); } catch {} }
   clearBubble('listen'); hint.textContent = IDLE_HINT;
 }
 // Speech comes without punctuation, so a question would reach Claude as a statement. Words that open a question get
@@ -766,6 +839,7 @@ const QUESTION_PT = new RegExp(`^(?:(?:o qu[eê]|quem|qual|quais|quant[oa]s?|com
 const punctuate = (t) => !t || /[.!?…]$/.test(t) || !(QUESTION.test(t) || QUESTION_PT.test(t)) ? t : t + '?';
 function finishListening() { // send what was heard
   if (!listening) return;
+  if (recording) return sendRecording();
   const audio = NATIVE?.takeAudio ? NATIVE.takeAudio() : ''; // what the app recorded meanwhile, for Whisper
   const text = punctuate(words()), heard = LaxHeard.hear(raw(), vocab), h = answerHook; answerHook = null;
   stopListening(false);
@@ -815,6 +889,7 @@ let releaseTimer = 0;
 function releaseHold(inside) {
   if (!listening || talkMode !== 'hold') return;
   if (!inside) return cancelListening();
+  if (recording) return finishListening();
   releasing = true; NATIVE ? NATIVE.stopListening() : rec?.stop();
   releaseTimer = setTimeout(finishListening, 1500); // in case the last words never come
 }
@@ -895,11 +970,19 @@ addEventListener('keyup', (e) => { if (e.code === 'Space') releaseHold(true); })
 const wakeEl = $('#wake');
 // The app needs no wake tap: audio, full screen and keep-screen-on are native there.
 if (qs.has('awake') || NATIVE) wakeEl.remove();
+if (EGG && STANDALONE) wakeEl.firstElementChild.innerHTML = 'tap to pair<small>paste the link you copied in Safari</small>';
 wakeEl.addEventListener('click', async () => {
+  // The Home Screen app, unpaired: the link copied in Safari, pasted. Only a link to this same address, never elsewhere.
+  if (EGG && STANDALONE) {
+    const s = prompt('Paste your pairing link'); if (!s) return;
+    try { const u = new URL(s.trim()); if (u.origin === location.origin && u.searchParams.get('t')) return void (location.href = u.href); } catch {}
+    wakeEl.querySelector('small').textContent = 'that isn\'t this Lax\'s link. Copy it again in Safari';
+    return;
+  }
   wakeEl.remove(); if (shell) eggTapAt = performance.now(); else { sfx([523, 784]); hop(1.4); }
   try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch {}
   diag('wake');
-  if (SR) {
+  if (SR || canRecord) { // the mic is asked for once, here
     if (!navigator.mediaDevices) diag('gum-missing');
     else navigator.mediaDevices.getUserMedia({ audio: true })
       .then((st) => { diag('gum-ok', { tracks: st.getTracks().length }); st.getTracks().forEach((t) => t.stop()); })
@@ -907,8 +990,7 @@ wakeEl.addEventListener('click', async () => {
         showBubble({ id: 'mic', kind: 'error', text: err.name === 'NotAllowedError' ? micError('not-allowed') : 'Mic: ' + err.name }); });
   }
   try { await document.documentElement.requestFullscreen?.(); } catch {}
-  const lock = async () => { try { await navigator.wakeLock?.request('screen'); } catch {} };
-  lock(); document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && lock());
+  keepAwake = true; unlock(); // and again after every unlock of the phone (above)
 });
 
 // ---------- live link ----------
@@ -957,7 +1039,7 @@ function gotWays(w) {
   }
 }
 function moveTo(k, why, back) {
-  if (moving || DEMO || NATIVE) return; moving = true;
+  if (moving || DEMO || NATIVE || STANDALONE) return; moving = true; // the Home Screen app would open it in Safari, without its storage
   feed(`> ${why}, moving to the ${k}`, 'session', undefined, '*'); diag('move', { to: k, why });
   setTimeout(() => location.replace(`${ways[k].url}/?t=${encodeURIComponent(TOKEN)}${back ? '' : '&moved=' + Date.now()}${SEAL_K ? '#k=' + SEAL_K : ''}`), 1500); // the key too: each way's page keeps its own
 }
@@ -971,16 +1053,27 @@ async function otherWay() {
 // The first link asks the Mac for its recent lines, so a fresh page (the app moving to the cover screen, a reload)
 // still shows the conversation. Relinks don't: the page already has them.
 let linkedOnce = false;
+let es = null, hiddenAt = 0, shownAt = 0; // the live link; when the page was last hidden and shown (below)
 if (DEMO) demo();
 else if (ASLEEP) asleep();
-else if (!TOKEN) feed('no token — open the URL printed by `npm start`', 'error', undefined, '*');
+else if (!TOKEN) feed(UNPAIRED, 'error', undefined, '*');
 else { connect(); if (!NATIVE && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch((e) => diag('sw-error', { msg: String(e).slice(0, 120) })); }
+// iOS suspends a page in the background and drops its link. Back after a while: a new link, with the lines missed meanwhile
+// (they replace what's shown, like a fresh page), and the errors right as it comes back aren't the computer asleep.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  shownAt = Date.now();
+  if (TOKEN && !DEMO && !ASLEEP && es && ((hiddenAt && Date.now() - hiddenAt > 10e3) || es.readyState === EventSource.CLOSED)) { showingKept = true; linkedOnce = false; connect(); }
+  hiddenAt = 0;
+});
 function connect() {
-  const es = new EventSource('/api/stream?t=' + encodeURIComponent(TOKEN) + (linkedOnce ? '' : '&backlog=150') + (SEAL ? '&seal=1' : ''));
-  // Sealed events open asynchronously: one after another, so they're handled in the order they came.
+  es?.close();
+  const me = es = new EventSource('/api/stream?t=' + encodeURIComponent(TOKEN) + (linkedOnce ? '' : '&backlog=150') + (SEAL ? '&seal=1' : ''));
+  // Sealed events open asynchronously: one after another, so they're handled in the order they came. A link that was
+  // replaced (above) says nothing more.
   let order = Promise.resolve();
   const on = es.addEventListener.bind(es);
-  es.addEventListener = (name, fn) => on(name, (e) => { order = order.then(async () => fn({ data: e.data && JSON.stringify(await opened(JSON.parse(e.data))) })).catch((err) => diag('sealed-event', { name, msg: String(err).slice(0, 120) })); });
+  es.addEventListener = (name, fn) => on(name, (e) => { if (me !== es) return; order = order.then(async () => fn({ data: e.data && JSON.stringify(await opened(JSON.parse(e.data))) })).catch((err) => diag('sealed-event', { name, msg: String(err).slice(0, 120) })); });
   es.addEventListener('state', (e) => { const st = JSON.parse(e.data); applyState(st); remember(); keep(st); });
   es.addEventListener('feed', (e) => { const f = JSON.parse(e.data); feed(f.line, f.kind, f.project, f.session, f); keep(null, f); });
   es.addEventListener('bubble', (e) => showBubble(JSON.parse(e.data)));
@@ -991,14 +1084,18 @@ function connect() {
   es.addEventListener('sleeping', () => { feed(`${settings.name.toLowerCase()} fell asleep. zzz…`, 'session', undefined, '*'); setAsleep(true); probeRelay(); }); // the Mac said so first (lib/power.mjs)
   es.addEventListener('react', (e) => { const r = JSON.parse(e.data); if (r.state === 'thinking') voiceBusy = true; else setReact(r.state); });
   es.onopen = () => {
+    if (me !== es) return;
     if (showingKept) { showingKept = false; [...term.children].slice(0, -1).forEach((d) => d.remove()); where.clear(); parts.length = 0; keptFeed = []; } // the Mac's backlog follows
     linkedOnce = true; fails = 0; if (macAsleep) { setAsleep(false); hop(1.4); } if (diagLater.length) diag('while-asleep', { events: diagLater.splice(0) }); feed('linked to mac ✓', 'session', undefined, '*'); };
   es.onerror = () => {
+    if (me !== es) return;
+    // The background dropped it: relinked when it's back (above), or here if it's closed for good.
+    if (document.hidden || Date.now() - shownAt < 3000) { if (me.readyState === EventSource.CLOSED) setTimeout(() => me === es && connect(), 10000); return; }
     if (!macAsleep) feed(`${settings.name.toLowerCase()} fell asleep. zzz…`, 'session', undefined, '*');
     setAsleep(true); showKept(); fails++; setTimeout(otherWay, 3000); // after the probe below has answered
     // Cloudflare answers for a sleeping Mac with an error page, which ends EventSource for good: retry by hand.
     probeRelay();
-    if (es.readyState === EventSource.CLOSED) setTimeout(connect, 10000);
+    if (me.readyState === EventSource.CLOSED) setTimeout(() => me === es && connect(), 10000);
   };
 }
 // The app's offline page: the Mac couldn't be reached at all. Show Lax asleep, as it last looked.
@@ -1117,6 +1214,7 @@ function renderLife() {
   $('#sListen').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === (settings.listen || 'phone')));
   $('#sBudget').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === (settings.budget || 'light')));
   $('#sTheme').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === (settings.theme || 'system')));
+  showPush();
   const raw = memory?.raw || {}, p = memory?.pet || pet;
   const days = p.born ? Math.max(0, Math.floor((Date.now() - p.born) / 864e5)) : 0;
   $('#stats').innerHTML = [['level', p.level], ['stage', p.stage], ['xp', p.xp], ['streak', (p.streak || 0) + 'd'], ['age', days + 'd'], ['mood', p.mood],
@@ -1210,6 +1308,50 @@ async function timelapse(b) {
   b.disabled = false;
 }
 $('#sTheme').addEventListener('click', (e) => e.target.dataset.v && saveSettings({ theme: e.target.dataset.v }));
+// iPhone, in Safari: the Home Screen app has storage of its own, so it needs the pairing link (the token and the key) too.
+// Copied here (a tap, so the clipboard is allowed), pasted there on its first tap.
+$('#homeApp').hidden = !IOS || !!NATIVE || STANDALONE || DEMO || !TOKEN;
+$('#sHome').addEventListener('click', async () => {
+  const link = `${location.origin}/index.html?t=${encodeURIComponent(TOKEN)}${SEAL_K ? '#k=' + SEAL_K : ''}`;
+  try { await navigator.clipboard.writeText(link); $('#homeSays').textContent = 'copied: open Lax from your Home Screen and paste it'; }
+  catch { prompt('Copy this link, then open Lax from your Home Screen and paste it', link); }
+});
+// Notifications (lib/push.mjs): a session that needs you reaches this phone even with Lax closed or the phone locked.
+// On an iPhone only the Home Screen app can have them; the asking has to come from a tap. "off" is this phone's;
+// "when away" or "always" is the Mac's setting, for every phone that has them.
+const PUSH = 'PushManager' in window && 'serviceWorker' in navigator && 'Notification' in window && !(IOS && !STANDALONE);
+$('#notify').hidden = !!NATIVE || DEMO || !TOKEN || !(PUSH || IOS);
+function showPush() {
+  const on = $('#sPush').dataset.sub === '1' ? settings.push || 'away' : 'off';
+  $('#sPush').querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b.dataset.v === on); b.disabled = !PUSH; });
+}
+async function pushSend(sub) {
+  const r = await api('/api/push', { subscription: sub.toJSON() }); if (!r?.ok) throw new Error(r?.why || r?.error || 'refused');
+  $('#sPush').dataset.sub = '1'; diag('push-sub', { host: new URL(sub.endpoint).host });
+}
+const pushFail = (e) => { $('#pushSays').textContent = `couldn't: ${e.message || e}`; diag('push-error', { msg: String(e.message || e).slice(0, 120) }); };
+if (!PUSH) $('#pushSays').textContent = IOS ? 'only in the Home Screen app: open Lax from your Home Screen' : 'this browser can\'t';
+else if (!NATIVE && !DEMO && TOKEN && Notification.permission === 'granted') // quietly: the subscription can change
+  navigator.serviceWorker.ready.then((reg) => reg.pushManager.getSubscription()).then((sub) => sub && pushSend(sub)).then(showPush).catch(pushFail);
+$('#sPush').addEventListener('click', async (e) => {
+  const v = e.target.dataset.v; if (!v || !PUSH || DEMO) return;
+  $('#pushSays').textContent = '';
+  try {
+    if (v === 'off') {
+      const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
+      if (sub) { await api('/api/push', { endpoint: sub.endpoint, off: true }); await sub.unsubscribe(); }
+      $('#sPush').dataset.sub = ''; diag('push-sub', { off: true });
+    } else {
+      const asked = Notification.requestPermission(); // first, while the tap still counts
+      const [perm, reg, { key }] = await Promise.all([asked, navigator.serviceWorker.ready, getJson('/api/push/key')]);
+      if (perm !== 'granted') { $('#pushSays').textContent = IOS ? 'blocked: allow them in Settings, Notifications, Lax' : 'blocked: allow them in this site\'s settings'; return; }
+      const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true,
+        applicationServerKey: Uint8Array.from(atob(key.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)) });
+      await pushSend(sub); saveSettings({ push: v });
+    }
+  } catch (err) { pushFail(err); }
+  showPush();
+});
 // Rebirth needs a 2-second hold so it can't happen by accident.
 { const btn = $('#rebirth'), fill = btn.querySelector('i'); let t0, raf;
   const tick = () => { const k = Math.min(1, (performance.now() - t0) / 2000); fill.style.width = k * 100 + '%';

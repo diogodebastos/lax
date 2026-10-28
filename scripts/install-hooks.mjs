@@ -6,7 +6,9 @@ import { EVENTS } from '../hooks/timeouts.mjs';
 
 const file = path.join(os.homedir(), '.claude', 'settings.json');
 const hook = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'hooks', 'lax-hook.mjs');
-const command = `node "${hook}"`;
+// The node running this (Lax's, 22.13+), by its full path: a Claude Code started outside your shell (launchd, the desktop
+// app) may find another node on its PATH, or none, and then the hook fails and nothing reaches the phone.
+const node = `"${process.execPath}"`, command = `${node} "${hook}"`;
 
 const settings = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
 fs.writeFileSync(file + '.bak-lax', JSON.stringify(settings, null, 2));
@@ -22,7 +24,7 @@ if (!Object.keys(settings.hooks).length) delete settings.hooks;
 const status = path.resolve(path.dirname(hook), 'lax-status.mjs');
 const ours = String(settings.statusLine?.command || '').includes('lax-status.mjs');
 if (process.argv.includes('--remove')) { if (ours) delete settings.statusLine; }
-else if (!settings.statusLine || ours) settings.statusLine = { type: 'command', command: `node "${status}"` };
+else if (!settings.statusLine || ours) settings.statusLine = { type: 'command', command: `${node} "${status}"` };
 else console.log('You have your own status line, so Lax won\'t see your plan usage (it comes from the status line).');
 fs.writeFileSync(file, JSON.stringify(settings, null, 2) + '\n');
 console.log(process.argv.includes('--remove') ? 'Lax hooks removed.' : `Lax hooks installed → ${file} (backup: settings.json.bak-lax)`);

@@ -4,9 +4,20 @@ Pairing, the layouts for each screen, hearing you, and the Life menu. Back to th
 
 ## Phone
 
-1. Open `http://localhost:7777/pair` on the Mac and scan the QR code with the phone. Open it in **Chrome**; Brave has no speech recognition.
+1. Open `http://localhost:7777/pair` on the Mac and scan the QR code with the phone. Open it in **Chrome** on Android, or **Safari** on an iPhone (below); Brave has no speech recognition.
 2. Tap "wake", then tap Lax to talk. (Through your own domain, Access asks for your email and a PIN the first time.)
 3. The Android app adds a background link, approvals that wake the phone, and the Flip's cover screen: [android/README.md](../android/README.md).
+
+### iPhone
+
+Safari, no app to install. It needs **iOS 16.4 or newer** (older Safari can't read Lax's page). On the pairing page, the "iPhone / browser" QR.
+
+- **Talking** in Safari works as in Chrome, with Dictation on (Settings, General, Keyboard, Enable Dictation).
+- **The Home Screen app:** Share, Add to Home Screen gives a full-screen Lax with its own icon. Worth it: Safari forgets a site's storage (the pairing) after 7 days without a visit; a Home Screen app doesn't. It has storage of its own, so it starts unpaired: in Safari, **LAX ≡**, "copy link for the Home Screen app"; open the icon, tap, paste, OK.
+- **Talking in the Home Screen app:** iOS has no speech recognition there, so Lax records you and Whisper on your computer writes it down (below): tap Lax, talk, tap again (or hold and let go). Without Whisper you type.
+- **Approvals and questions, locked or not:** iOS pauses a page in the background, so turn on notifications in the Home Screen app (not in Safari): **LAX ≡**, notifications, "when away", Allow. A session that needs you while Lax isn't open then sends a notification with the project and what it wants. It has no buttons: tap it, Lax opens on the question, ✓ or ✗ there. With no Lax page open, a session waits at least a minute before going back to the terminal (or your "wait before terminal", if longer). "always" sends one even while a page is open; "off" stops this phone's. A Focus mode that silences Lax holds them back. Coming back to Lax, it relinks and shows what you missed, and anything still waiting for you.
+- The ringer switch on silent mutes Lax's tunes.
+- The Android app checks that its page was signed by your computer; a browser can't, so on an iPhone the page's integrity rests on TLS to your own Worker. What you and Lax say is still sealed end to end.
 
 ### Hearing: Whisper on the Mac
 
@@ -26,7 +37,7 @@ One URL. The layout follows the screen, and `?layout=wide|tall|big` forces one:
 ## Life menu
 
 Tap **LAX ≡** to open the menu. It reads top to bottom:
-- **Settings**: name, species (what it hatched as; "pick it myself" while the bars get tuned), theme (system / light / dark), voice and pitch, whether it reads every "done", where talk goes, phone approvals and the wait time
+- **Settings**: name, species (what it hatched as; "pick it myself" while the bars get tuned), theme (system / light / dark), voice and pitch, whether it reads every "done", where talk goes, phone approvals and the wait time, notifications
 - **♥ Lax's life** (read-only): stats (level, stage, XP, streak, mood, traits…), tools (this week, each trait's tools added up as the traits count them, Bash a tenth, against what it needs; the worn one marked), milestones
 - **What Lax knows**: how many notes and episodes, its skills (install or decline a draft after reading it; forget an installed one), its newest episodes (forget one: tap twice). Milestones and episodes show the newest 5; "show all" opens the rest
 - **Rebirth**: hold for 2s to start a new life. Its life (`life.db`) is wiped; your settings stay. What it knows stays too, unless you switch on "forget what it knows too" (notes, episodes and skills go; how it learns stays)
