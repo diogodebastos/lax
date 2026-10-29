@@ -43,7 +43,7 @@ console.log(JSON.stringify({ result: 'Done.\\n' + JSON.stringify({ learned: ['de
 
 const CC = path.join(HOME, 'cc-projects'); // Claude Code's transcripts, for this test
 const ENV = { ...process.env, LAX_CLAUDE_PROJECTS: CC, LAX_HOME: HOME, LAX_PORT: String(PORT), LAX_URL: LAX, LAX_PUBLIC_URL: '', LAX_CLAUDE: FAKE, LAX_REFLECT_IDLE: '1' };
-delete ENV.LAX_DATA;
+delete ENV.LAX_DATA; delete ENV.LAX_BUILD; // a build's fence on its own steps isn't the hook under test
 const server = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server.mjs')], { env: ENV, stdio: 'ignore' });
 const cleanup = () => { server.kill(); fs.rmSync(HOME, { recursive: true, force: true }); };
 process.on('exit', cleanup);

@@ -40,7 +40,7 @@ check('said back plainly', describeWhen(parseWhen({ time: '08:30', days: 'weekda
 
 // ---------- the job fence ----------
 const hook = (env, h) => { const o = execFileSync(process.execPath, [path.join(ROOT, 'hooks', 'lax-hook.mjs')],
-  { env: { ...process.env, LAX_URL: 'http://127.0.0.1:1', LAX_JOB: 'j1', LAX_JOB_DIR: PROJ, ...env }, encoding: 'utf8', input: JSON.stringify({ hook_event_name: 'PreToolUse', cwd: PROJ, ...h }) });
+  { env: { ...process.env, LAX_BUILD: '', LAX_URL: 'http://127.0.0.1:1', LAX_JOB: 'j1', LAX_JOB_DIR: PROJ, ...env }, encoding: 'utf8', input: JSON.stringify({ hook_event_name: 'PreToolUse', cwd: PROJ, ...h }) });
   return JSON.parse(o || '{}').hookSpecificOutput?.permissionDecision; };
 fs.mkdirSync(path.join(HOME, 'secrets'), { recursive: true }); fs.writeFileSync(path.join(HOME, 'secrets', 'token'), 'x');
 check('a job reads, searches and runs read-only commands', hook({}, { tool_name: 'Read', tool_input: { file_path: path.join(PROJ, 'a') } }) === 'allow'
@@ -111,7 +111,7 @@ const runsLog = () => { try { return fs.readFileSync(path.join(HOME, 'runs.log')
 // ---------- end to end: the voice assistant's `schedule` tool, "yes" said on the phone, "run it now" ----------
 fs.rmSync(path.join(HOME, 'jobs.json'), { force: true }); fs.rmSync(path.join(HOME, 'secrets'), { recursive: true, force: true });
 const ENV = { ...process.env, LAX_HOME: HOME, LAX_PORT: String(PORT), LAX_URL: LAX, LAX_PUBLIC_URL: '', LAX_CLAUDE: FAKE, LAX_MIGRATE_AFTER: '9999' };
-delete ENV.LAX_DATA;
+delete ENV.LAX_DATA; delete ENV.LAX_BUILD; // a build's fence on its own steps isn't the hook under test
 const server = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server.mjs')], { env: ENV, stdio: 'ignore' });
 process.on('exit', () => { server.kill(); fs.rmSync(HOME, { recursive: true, force: true }); });
 for (let i = 0; i < 50 && !fs.existsSync(path.join(HOME, 'secrets', 'token')); i++) await sleep(100);

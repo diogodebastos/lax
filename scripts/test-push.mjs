@@ -58,7 +58,7 @@ const fake = http.createServer((req, res) => { const b = []; req.on('data', (d) 
 await new Promise((r) => fake.listen(0, '127.0.0.1', r));
 const ENDPOINT = `http://127.0.0.1:${fake.address().port}/push/abc`;
 const server = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server.mjs')], { stdio: ['ignore', 'pipe', 'ignore'],
-  env: { ...process.env, LAX_HOME: LH, LAX_DATA: '', LAX_PORT: String(PORT), LAX_CLAUDE: '/usr/bin/false', LAX_WHISPER: '0', LAX_PUSH_TEST: '1', LAX_ASK_TIMEOUT: '15' } });
+  env: { ...process.env, LAX_HOME: LH, LAX_DATA: '', LAX_PORT: String(PORT), LAX_CLAUDE: '/usr/bin/false', LAX_WHISPER: '0', LAX_PUSH_TEST: '1', LAX_ASK_TIMEOUT: '2' } });
 let out = ''; server.stdout.on('data', (d) => (out += d));
 process.on('exit', () => server.kill());
 for (let i = 0; i < 80 && !/Phone:/.test(out); i++) await sleep(100);
@@ -92,6 +92,24 @@ const m2 = JSON.parse(decrypt(got2[1].body, phone.getPrivateKey(), auth) || '{}'
 check('a question says who asks', m2.kind === 'question' && m2.body === 'quokka asks: Which branch?', m2.body);
 check('a push service that says it\'s gone loses the subscription', JSON.parse(fs.readFileSync(path.join(LH, 'push.json'), 'utf8')).length === 0);
 await post('/api/decide', { id: m2.id, decision: 'pass' }); await asked2;
+
+// Lax's assistant asks and nobody answers: for a while after, with no page open, it isn't kept waiting again.
+reply = 201; await sub(ENDPOINT);
+const voice = (command) => post('/api/ask', { session_id: 's2', cwd: '/tmp/quokka', tool_name: 'Bash', tool_input: { command }, lax_voice: true }).then((x) => x.json());
+const open = async () => { const c = new AbortController(), res = await fetch(`${LAX}/api/stream?t=${tok}`, { signal: c.signal }), st = { buf: '', c };
+  (async () => { try { for await (const d of res.body) st.buf += Buffer.from(d).toString(); } catch {} })(); return st; };
+let page = await open();
+check('a page open and no answer: it waits the usual time', (await voice('rm a')).decision === 'none');
+page.c.abort(); await sleep(300);
+let t0 = Date.now(); r = await voice('rm b');
+check('…then, no page open: no answer at once, saying why', r.decision === 'none' && /a moment ago/.test(r.why) && Date.now() - t0 < 1000, JSON.stringify(r));
+page = await open(); await sleep(200);
+const asked3 = voice('rm c');
+for (let i = 0; i < 50 && !/rm c/.test(page.buf); i++) await sleep(100);
+const id3 = [...page.buf.matchAll(/^data: (.*)$/gm)].map((x) => { try { return JSON.parse(x[1]); } catch { return {}; } }).find((d) => d.kind === 'permission' && /rm c/.test(d.text || ''))?.id;
+await post('/api/decide', { id: id3, decision: 'allow' });
+check('…a page open again: the ask goes to the phone, and a yes comes back', !!id3 && (await asked3).decision === 'allow');
+page.c.abort();
 fake.close();
 
 console.log(failed ? `\n${failed} push check(s) failed` : '\nall push checks passed');
