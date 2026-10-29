@@ -637,6 +637,7 @@ function onHook(h) {
 // Lax's assistant, while it answers you: what your yeses on the phone already cover (lib/allow.mjs grantKey):
 // edits anywhere in a repo you let it edit, a command you let it run. Forgotten when it finishes (Stop).
 const grants = new Map(); // session id -> Set of grant keys
+let lastUnanswered = 0; // when an ask last went unanswered on the phone; an answer resets it
 
 // A hook is waiting for the human: show the bubble, resolve when the phone answers (or time out).
 // Decisions: allow | deny | answer (AskUserQuestion, with answers) | none (fall back to the terminal).
@@ -650,6 +651,9 @@ function ask(h) {
     // Lax's own assistant (h.lax_voice) has no terminal: its requests always come to the phone, whatever "ask me on the phone"
     // (which is about your terminal sessions) says. If it can't be asked, say why.
     if (clients.size === 0 && (settings.push === 'off' || !push.subscribers())) return resolve({ decision: 'none', why: 'no phone is connected to Lax' });
+    // Nobody answered a moment ago and no page is open: likely nobody's holding the phone, so don't wait again.
+    if (h.lax_voice && !h.lax_job && clients.size === 0 && Date.now() - lastUnanswered < 10 * 60e3)
+      return resolve({ decision: 'none', why: 'no answer on the phone a moment ago' });
     if (!settings.phoneApprovals && !h.lax_voice) return resolve({ decision: 'none', why: 'phone approvals are off' });
     // Sessions with a live lax channel relay tool approvals themselves (no duplicate bubble); questions still come here.
     if (h.tool_name !== 'AskUserQuestion' && h.lax_session_pid && [...channels.values()].some((c) => c.sessionPid === h.lax_session_pid))
@@ -665,11 +669,12 @@ function ask(h) {
     // to unlock the phone.
     const wait = job ? MAX_WAIT_S : Math.min(MAX_WAIT_S, Math.max(settings.askTimeout * (questions ? 4 : 1), clients.size ? 0 : 60)); // hooks/timeouts.mjs
     const timer = setTimeout(() => { // nobody answered on the phone: friction (lib/improve.mjs)
-      improve.note('unanswered', `${project} asked ${bubble.gist || bubble.text}: no answer on the phone in time`); finish('none'); }, wait * 1000);
+      lastUnanswered = Date.now(); improve.note('unanswered', `${project} asked ${bubble.gist || bubble.text}: no answer on the phone in time`); finish('none'); }, wait * 1000);
     function finish(decision, answers) {
       clearTimeout(timer); pending.delete(id); broadcast('clear', { id });
       const ss = sessions.get(h.session_id); if (ss?.status === 'waiting') { ss.status = 'working'; pushState(); }
       if (decision === 'allow' || decision === 'answer') pet.approvals++; else if (decision === 'deny') pet.denials++;
+      if (decision !== 'none') lastUnanswered = 0;
       if (decision === 'allow' && grant) grants.set(h.session_id, (grants.get(h.session_id) || new Set()).add(grant));
       const line = { allow: '✓ approved from phone', deny: '✗ denied from phone', answer: '✓ answered from phone' }[decision];
       if (line) { feed(`  ${line}`, decision === 'deny' ? 'error' : 'done', project, h.session_id); save(); }
