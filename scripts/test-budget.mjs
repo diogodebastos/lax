@@ -27,10 +27,16 @@ check('normal: it works on until 75%', b.may('draft').ok);
 usage = { five_hour: w(80), seven_day: w(10) };
 check('…and waits past it', !b.may('nightly').ok);
 usage = { five_hour: w(20), seven_day: w(88) };
-check('the weekly limit counts too (normal: 85%)', b.may('review').why === 'your weekly limit is at 88%');
-usage = { five_hour: w(92), seven_day: w(10) };
+check('the weekly limit counts too (normal: 80%)', b.may('review').why === 'your weekly limit is at 88%');
+usage = { five_hour: w(79), seven_day: w(10) };
+check('your jobs run up to 80%', b.may('job').ok);
+usage = { five_hour: w(81), seven_day: w(10) };
 m = b.may('job');
-check('your jobs wait at 5h 90%, so they never take you over', !m.ok && /5-hour limit is at 92%/.test(m.why));
+check('…and wait past it, so they never take you over', !m.ok && /5-hour limit is at 81%/.test(m.why));
+check('talking to me still works at 81%', b.may('voice').ok);
+usage = { five_hour: w(20), seven_day: w(96) };
+m = b.may('voice');
+check('…but not at 95%', !m.ok && m.why === 'your weekly limit is at 96%', m.why);
 usage = { five_hour: w(99, t - 60e3), seven_day: w(10) };
 check('a window past its reset counts as 0', b.may('reflect').ok && b.may('job').ok);
 
@@ -39,7 +45,7 @@ for (let i = 0; i < LEVELS.light.cap; i++) b.spent(['reflect', 'draft', 'nightly
 m = b.may('reflect');
 check(`light: ${LEVELS.light.cap} of its own runs a day, then it waits`, !m.ok && m.why === `I've done my ${LEVELS.light.cap} runs for today`, m.why);
 b.spent('job'); b.spent('job');
-check('…your jobs never count against it', b.may('job').ok && b.view().jobs === 2 && b.view().own === LEVELS.light.cap);
+check('…your jobs and talking to me never count against it', b.may('voice').ok && b.may('job').ok && b.view().jobs === 2 && b.view().own === LEVELS.light.cap);
 check('the Life menu says why it waits', b.view().paused === `I've done my ${LEVELS.light.cap} runs for today`);
 settings = { budget: 'normal' };
 check('normal gives it more', b.may('reflect').ok && b.view().cap === LEVELS.normal.cap);

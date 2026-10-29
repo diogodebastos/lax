@@ -25,7 +25,7 @@ import { createLearn } from './lib/learn.mjs';
 import { createSchedule } from './lib/schedule.mjs';
 import { createImprove, ANNOYED, unheard } from './lib/improve.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus, tabCommand } from './lib/actions.mjs';
-import { readUsage, usageText } from './lib/usage.mjs';
+import { readUsage, eventLimits, limitWarnings, usageText } from './lib/usage.mjs';
 import { openTerminal, q, ON_MAC, closeTarget } from './lib/terminal.mjs';
 import { tailRecords, newAssistantText, conversation } from './lib/transcript.mjs';
 import { editDiff } from './lib/diff.mjs';
@@ -45,6 +45,7 @@ import { story, timelapseGif, mindChanges } from './lib/timelapse.mjs';
 import { POSTS, IMAGES, postPage, indexPage } from './lib/blog.mjs';
 import { MAX_WAIT_S } from './hooks/timeouts.mjs';
 import { createBudget, LEVELS } from './lib/budget.mjs';
+import { onRateLimit } from './lib/claude-run.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const PORT = Number(process.env.LAX_PORT || 7777);
@@ -411,8 +412,16 @@ function setUsage(rl) {
   // Days you hit the 5-hour limit: enough of them and a fox becomes the coin cat at level 50.
   if ((u.five_hour?.pct || 0) >= LIMIT_PCT && !(pet.limitDays ||= []).includes(dayKey(Date.now()))) { pet.limitDays.push(dayKey(Date.now())); save(); }
   if (changed) pushState(); // the status line runs often; the phone only hears when a number moves
+  // At 80% and 90% of either window: said aloud and sent to the phone, once each (lib/usage.mjs).
+  const w = limitWarnings(u, kvGet('limitWarned', {})); kvSet('limitWarned', w.seen);
+  if (w.say.length) {
+    const text = `Heads up: ${w.say.join(' and ')}. My own work and your scheduled jobs wait from 80%, and at 95% I stop answering too.`;
+    const b = { id: 'limit' + Date.now(), kind: 'reply', text, speak: true };
+    broadcast('bubble', b); feed(`! ${text}`, 'diary', settings.name.toLowerCase()); notify(b);
+  }
   return true;
 }
+onRateLimit((info) => setUsage(eventLimits(info))); // Lax's own background runs report it too
 const pushState = () => { broadcast('state', stateMsg()); publicMind?.changed(); };
 // A session's status line (hooks/lax-status.mjs): its model and how full its context is, for the tab's status row.
 function sessionInfo(b) {
@@ -1028,6 +1037,9 @@ function talk(text, voice = false, spelled = []) {
     broadcast('bubble', { id: 'fresh' + Date.now(), kind: 'reply', text: say, speak: true });
     return true;
   }
+  // Near your plan's limit I don't start another answer: past 100% a company plan spends extra credits (lib/budget.mjs).
+  const room = budget.may('voice');
+  if (!room.ok) { youSaid(text, name); broadcast('bubble', { id: 'limit' + Date.now(), kind: 'reply', text: `I'll stay quiet for now: ${room.why}. Talk to me again once it resets.`, speak: true }); return true; }
   // After a quiet spell, or once it's long, the next message starts a new one (every message re-sends the whole chat).
   const due = voiceSessions[ASSISTANT] && freshDue(laxTalk, Date.now(), FRESH_LIMITS);
   if (due) freshTalk(due);
@@ -1051,6 +1063,7 @@ function talk(text, voice = false, spelled = []) {
       let m; try { m = JSON.parse(line); } catch { continue; }
       if (m.type === 'system' && m.subtype === 'init') { voiceSessions[ASSISTANT] = m.session_id; voiceRun.sessionId = m.session_id; save(); }
       if (m.type === 'result') result = m;
+      if (m.type === 'rate_limit_event') setUsage(eventLimits(m.rate_limit_info)); // your usage, known with no terminal open
       if (m.type === 'assistant' && !m.parent_tool_use_id && m.message?.usage) laxTalk.tokens = contextSize(m.message.usage); // how full the conversation is now
       if (m.type === 'assistant' && !m.parent_tool_use_id) for (const b of m.message?.content || []) {
         if (b.type === 'text' && b.text?.trim()) pendingSay = b.text.trim();
