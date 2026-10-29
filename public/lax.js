@@ -691,8 +691,9 @@ const isBrave = !!navigator.brave;
 let voiceBroken = !SR && !NATIVE;
 // Then, with Whisper up on the computer, Lax records you instead (the iPhone's Home Screen app has no recognition): the
 // same audio the Android app sends, so nothing changes there. Not MediaRecorder: Safari only makes AAC, which it can't read.
+// On an iPhone always, while Whisper is up: Apple's recognizer hears one language, so English words said in Portuguese came out as sound-alikes.
 const canRecord = !NATIVE && !!navigator.mediaDevices?.getUserMedia && !!window.AudioContext;
-const recordsNow = () => voiceBroken && canRecord && whisperOn && !macAsleep;
+const recordsNow = () => (voiceBroken || IOS) && canRecord && whisperOn && !macAsleep;
 let micAc = null, recording = null; // recording: while it records, { stop() → the audio }
 let rec, said = '', heard = '', talkMode = 'tap', releasing = false, quietTimer = 0, deafTimer = 0;
 const QUIET_MS = 2000;
@@ -731,7 +732,7 @@ function beginListening(m) {
   said = ''; heard = ''; releasing = false; talkMode = m; listening = true; playTune('listen');
   if (m === 'hold') buzz([30]);
   NATIVE ? NATIVE.hush() : speechSynthesis.cancel();
-  if (voiceBroken) { diag('rec-' + m); startRecording(); return showHeard(); }
+  if (recordsNow()) { diag('rec-' + m); startRecording(); return showHeard(); }
   diag('talk-' + m, { native: !!NATIVE }); showHeard(); listenStretch();
   // A tap and then nothing: iOS may never end the stretch, and Lax would listen forever.
   if (m === 'tap') deafTimer = setTimeout(() => listening && !words() && failListening('no-speech'), 15000);
