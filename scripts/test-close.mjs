@@ -1,6 +1,6 @@
 // "Close the quokka session" by voice, end to end on a PRIVATE Lax (own port + temp data dir): the session's claude
 // process ends, its tab leaves the phone, a busy one asks first, a dead one is only reported. The claude is a stand-in:
-// a copy of `sleep` named claude, so the hub's "is it a running claude?" check (lib/claude-pid.mjs) holds.
+// `sleep` linked as claude, so the hub's "is it a running claude?" check (lib/claude-pid.mjs) holds.
 // The hub also lists the real sessions on this Mac (~/.claude/sessions), so the names here are ones no project has.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -37,7 +37,7 @@ const tabs = () => phone.filter((e) => e.ev === 'state').pop()?.d?.sessions?.map
 const said = async (re) => { for (let i = 0; i < 40; i++) { const b = phone.filter((e) => e.ev === 'bubble' && re.test(e.d.text || '')).pop(); if (b) return b.d; await sleep(250); } return null; };
 
 // A stand-in claude per session, and its SessionStart as the hooks send it.
-const bin = path.join(DATA, 'bin'); fs.mkdirSync(bin); fs.copyFileSync('/bin/sleep', path.join(bin, 'claude'));
+const bin = path.join(DATA, 'bin'); fs.mkdirSync(bin); fs.symlinkSync('/bin/sleep', path.join(bin, 'claude')); // a link, not a copy: macOS kills a copied Apple binary (SIGKILL)
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 async function open(sid, project) {
   const p = spawn(path.join(bin, 'claude'), ['600'], { stdio: 'ignore' }); fakes.push(p);

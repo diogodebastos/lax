@@ -49,7 +49,7 @@ if (prompt.startsWith('Recall from')) {
 
 const ENV = { ...process.env, LAX_HOME: HOME, LAX_PORT: String(PORT), LAX_URL: LAX, LAX_PUBLIC_URL: '', LAX_CLAUDE: FAKE,
   LAX_REFLECT_IDLE: '1', LAX_MIGRATE_AFTER: '1', LAX_SKILLS_DIR: SKILLS, LAX_CLAUDE_PROJECTS: CC, LAX_SESSION_PID: String(process.pid) };
-delete ENV.LAX_DATA;
+delete ENV.LAX_DATA; delete ENV.LAX_BUILD; // a build's fence on its own steps isn't the hook under test
 const server = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server.mjs')], { env: ENV, stdio: 'ignore' });
 const cleanup = () => { server.kill(); fs.rmSync(HOME, { recursive: true, force: true }); };
 process.on('exit', cleanup);

@@ -8,7 +8,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { ensureHome, commitMind, mindHead, forgotSince, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice, addFreshAdvice, addEpisodesAdvice, addScheduleAdvice, addSelfAdvice } from './lib/home.mjs';
+import { ensureHome, commitMind, mindHead, forgotSince, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice, addFreshAdvice, addEpisodesAdvice, addScheduleAdvice, addSelfAdvice, addVisualsAdvice } from './lib/home.mjs';
 import { ensureSelf, self } from './lib/self.mjs';
 import { createRoles, workLog } from './lib/roles.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS, VOCAB, secret } from './lib/paths.mjs';
@@ -25,7 +25,7 @@ import { createLearn } from './lib/learn.mjs';
 import { createSchedule } from './lib/schedule.mjs';
 import { createImprove, ANNOYED, unheard } from './lib/improve.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus, tabCommand } from './lib/actions.mjs';
-import { readUsage, usageText } from './lib/usage.mjs';
+import { readUsage, eventLimits, limitWarnings, usageText } from './lib/usage.mjs';
 import { openTerminal, q, ON_MAC, closeTarget } from './lib/terminal.mjs';
 import { tailRecords, newAssistantText, conversation } from './lib/transcript.mjs';
 import { editDiff } from './lib/diff.mjs';
@@ -34,6 +34,7 @@ import { claudeAlive } from './lib/claude-pid.mjs';
 import { createArchive } from './lib/archive.mjs';
 import { recall } from './lib/recall.mjs';
 import * as whisper from './lib/whisper.mjs';
+import { createVisuals } from './lib/visuals.mjs';
 import { createPublicMind, placesOf, lastCommitFiles, filesIn } from './lib/public-mind.mjs';
 import { startRelay } from './lib/relay.mjs';
 import { once } from './lib/once.mjs';
@@ -46,6 +47,7 @@ import { story, timelapseGif, mindChanges } from './lib/timelapse.mjs';
 import { POSTS, IMAGES, postPage, indexPage } from './lib/blog.mjs';
 import { MAX_WAIT_S } from './hooks/timeouts.mjs';
 import { createBudget, LEVELS } from './lib/budget.mjs';
+import { onRateLimit } from './lib/claude-run.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const PORT = Number(process.env.LAX_PORT || 7777);
@@ -425,8 +427,16 @@ function setUsage(rl) {
   // Days you hit the 5-hour limit: enough of them and a fox becomes the coin cat at level 50.
   if ((u.five_hour?.pct || 0) >= LIMIT_PCT && !(pet.limitDays ||= []).includes(dayKey(Date.now()))) { pet.limitDays.push(dayKey(Date.now())); save(); }
   if (changed) pushState(); // the status line runs often; the phone only hears when a number moves
+  // At 80% and 90% of either window: said aloud and sent to the phone, once each (lib/usage.mjs).
+  const w = limitWarnings(u, kvGet('limitWarned', {})); kvSet('limitWarned', w.seen);
+  if (w.say.length) {
+    const text = `Heads up: ${w.say.join(' and ')}. My own work and your scheduled jobs wait from 80%, and at 95% I stop answering too.`;
+    const b = { id: 'limit' + Date.now(), kind: 'reply', text, speak: true };
+    broadcast('bubble', b); feed(`! ${text}`, 'diary', settings.name.toLowerCase()); notify(b);
+  }
   return true;
 }
+onRateLimit((info) => setUsage(eventLimits(info))); // Lax's own background runs report it too
 const pushState = () => { broadcast('state', stateMsg()); publicMind?.changed(); };
 // A session's status line (hooks/lax-status.mjs): its model and how full its context is, for the tab's status row.
 function sessionInfo(b) {
@@ -627,6 +637,7 @@ function onHook(h) {
 // Lax's assistant, while it answers you: what your yeses on the phone already cover (lib/allow.mjs grantKey):
 // edits anywhere in a repo you let it edit, a command you let it run. Forgotten when it finishes (Stop).
 const grants = new Map(); // session id -> Set of grant keys
+let lastUnanswered = 0; // when an ask last went unanswered on the phone; an answer resets it
 
 // A hook is waiting for the human: show the bubble, resolve when the phone answers (or time out).
 // Decisions: allow | deny | answer (AskUserQuestion, with answers) | none (fall back to the terminal).
@@ -640,6 +651,9 @@ function ask(h) {
     // Lax's own assistant (h.lax_voice) has no terminal: its requests always come to the phone, whatever "ask me on the phone"
     // (which is about your terminal sessions) says. If it can't be asked, say why.
     if (clients.size === 0 && (settings.push === 'off' || !push.subscribers())) return resolve({ decision: 'none', why: 'no phone is connected to Lax' });
+    // Nobody answered a moment ago and no page is open: likely nobody's holding the phone, so don't wait again.
+    if (h.lax_voice && !h.lax_job && clients.size === 0 && Date.now() - lastUnanswered < 10 * 60e3)
+      return resolve({ decision: 'none', why: 'no answer on the phone a moment ago' });
     if (!settings.phoneApprovals && !h.lax_voice) return resolve({ decision: 'none', why: 'phone approvals are off' });
     // Sessions with a live lax channel relay tool approvals themselves (no duplicate bubble); questions still come here.
     if (h.tool_name !== 'AskUserQuestion' && h.lax_session_pid && [...channels.values()].some((c) => c.sessionPid === h.lax_session_pid))
@@ -655,11 +669,12 @@ function ask(h) {
     // to unlock the phone.
     const wait = job ? MAX_WAIT_S : Math.min(MAX_WAIT_S, Math.max(settings.askTimeout * (questions ? 4 : 1), clients.size ? 0 : 60)); // hooks/timeouts.mjs
     const timer = setTimeout(() => { // a phone was open and nobody answered: friction (lib/improve.mjs); none open, the terminal takes over
-      if (clients.size) improve.note('unanswered', `${project} asked ${bubble.gist || bubble.text}: no answer on the phone in time`); finish('none'); }, wait * 1000);
+      lastUnanswered = Date.now(); if (clients.size) improve.note('unanswered', `${project} asked ${bubble.gist || bubble.text}: no answer on the phone in time`); finish('none'); }, wait * 1000);
     function finish(decision, answers) {
       clearTimeout(timer); pending.delete(id); broadcast('clear', { id });
       const ss = sessions.get(h.session_id); if (ss?.status === 'waiting') { ss.status = 'working'; pushState(); }
       if (decision === 'allow' || decision === 'answer') pet.approvals++; else if (decision === 'deny') pet.denials++;
+      if (decision !== 'none') lastUnanswered = 0;
       if (decision === 'allow' && grant) grants.set(h.session_id, (grants.get(h.session_id) || new Set()).add(grant));
       const line = { allow: '✓ approved from phone', deny: '✗ denied from phone', answer: '✓ answered from phone' }[decision];
       if (line) { feed(`  ${line}`, decision === 'deny' ? 'error' : 'done', project, h.session_id); save(); }
@@ -764,7 +779,9 @@ if (voiceSessions[ASSISTANT] && !laxTalk.last) {
 }
 
 // ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
-ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addSkills(); addEpisodesToLearning(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice(); addEpisodesAdvice(); addScheduleAdvice(); ensureSelf(); addSelfAdvice(); addRoles(); addRolesToRemembering();
+ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addSkills(); addEpisodesToLearning(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice(); addEpisodesAdvice(); addScheduleAdvice(); ensureSelf(); addSelfAdvice(); addVisualsAdvice(); addRoles(); addRolesToRemembering();
+// What it makes to be seen opens on the phone as soon as it's written (lib/visuals.mjs).
+const visuals = createVisuals(MIND); visuals.watch((name) => broadcast('visual', { name }));
 // ---------- its mind on the website (lib/public-mind.mjs): the shape of what it knows and does, never what's in it ----------
 publicMind = createPublicMind({ live: () => { const v = petView(); return { color: v.look?.color, stage: v.stage, sessions: sessionList(), heard: weekCount('heard'), spoke: weekCount('spoke'), dreams: weekCount('dreamed'), heardEver: mindEver().heard, spokeEver: mindEver().spoke, busy: working(), owner: settings.publicName || '', doing: doing() }; },
   allow: () => settings.publicProjects || [], allowRoles: () => settings.publicRoles || [], log: (...a) => console.log('[mind]', ...a) });
@@ -1044,6 +1061,9 @@ function talk(text, voice = false, spelled = []) {
     broadcast('bubble', { id: 'fresh' + Date.now(), kind: 'reply', text: say, speak: true });
     return true;
   }
+  // Near your plan's limit I don't start another answer: past 100% a company plan spends extra credits (lib/budget.mjs).
+  const room = budget.may('voice');
+  if (!room.ok) { youSaid(text, name); broadcast('bubble', { id: 'limit' + Date.now(), kind: 'reply', text: `I'll stay quiet for now: ${room.why}. Talk to me again once it resets.`, speak: true }); return true; }
   // After a quiet spell, or once it's long, the next message starts a new one (every message re-sends the whole chat).
   const due = voiceSessions[ASSISTANT] && freshDue(laxTalk, Date.now(), FRESH_LIMITS);
   if (due) freshTalk(due);
@@ -1067,6 +1087,7 @@ function talk(text, voice = false, spelled = []) {
       let m; try { m = JSON.parse(line); } catch { continue; }
       if (m.type === 'system' && m.subtype === 'init') { voiceSessions[ASSISTANT] = m.session_id; voiceRun.sessionId = m.session_id; save(); }
       if (m.type === 'result') result = m;
+      if (m.type === 'rate_limit_event') setUsage(eventLimits(m.rate_limit_info)); // your usage, known with no terminal open
       if (m.type === 'assistant' && !m.parent_tool_use_id && m.message?.usage) laxTalk.tokens = contextSize(m.message.usage); // how full the conversation is now
       if (m.type === 'assistant' && !m.parent_tool_use_id) for (const b of m.message?.content || []) {
         if (b.type === 'text' && b.text?.trim()) pendingSay = b.text.trim();
@@ -1096,9 +1117,18 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.
 const body = (req) => new Promise((res) => { let b = ''; req.on('data', (d) => (b += d)); req.on('end', () => {
   try { const j = JSON.parse(b || '{}'); res(typeof j.sealed === 'string' ? JSON.parse(unseal(j.sealed) ?? '{}') : j); } catch { res({}); } }); });
 const json = (res, obj, code = 200) => {
+  if (res.headersSent) return res.end(res.sealed ? JSON.stringify({ sealed: seal(JSON.stringify(obj)) }) : JSON.stringify(obj)); // after keepAlive
   if (!res.sealed) { res.writeHead(code, { 'content-type': 'application/json' }); return res.end(JSON.stringify(obj)); }
   res.writeHead(code, { 'content-type': 'application/json', 'x-lax-sealed': '1' }); res.end(JSON.stringify({ sealed: seal(JSON.stringify(obj)) }));
 };
+
+// A slow answer (Whisper on a 10-minute message): the head now and a space every 15s, so neither the relay (30s for a head)
+// nor the phone's browser (about a minute idle) gives up. JSON reads past leading spaces. Returns the stop.
+function keepAlive(res) {
+  res.writeHead(200, { 'content-type': 'application/json', ...(res.sealed && { 'x-lax-sealed': '1' }) }); res.flushHeaders();
+  const t = setInterval(() => res.write(' '), 15e3);
+  return () => clearInterval(t);
+}
 
 const onceIds = once();
 http.createServer(async (req, res) => {
@@ -1176,6 +1206,8 @@ http.createServer(async (req, res) => {
     return;
   }
   if (url.pathname === '/api/brief') return json(res, { text: brief(url.searchParams.get('project') || '', settings.name, roles.active()) });
+  if (url.pathname === '/api/visuals') return json(res, { visuals: visuals.list() }); // what it made to be seen (lib/visuals.mjs)
+  if (url.pathname === '/api/visual') { const html = visuals.read(url.searchParams.get('name')); return html === null ? json(res, { error: 'no such page' }, 404) : json(res, { name: url.searchParams.get('name'), html }); }
   if (url.pathname === '/api/self') return json(res, self(petView(), settings, roles.view())); // the `self` tool: how Lax looks today (lib/self.mjs)
   if (url.pathname === '/api/memory') return json(res, { pet: petView(), raw: pet, voiceProject: pickChannel() ? channels.get(pickChannel()).project : 'assistant',
     milestones: db.prepare('SELECT ts,text FROM milestones ORDER BY id DESC').all() });
@@ -1272,9 +1304,10 @@ http.createServer(async (req, res) => {
       return json(res, { ok: true, voiceTarget });
     case '/api/action': return json(res, { ok: quickAction(String(b.cid || ''), voiceAction(b.action)) });
     case '/api/hear': { // what the phone recorded while you talked, written down by Whisper (null: the phone's own words go)
-      const pcm = Buffer.from(String(b.audio || ''), 'base64').subarray(0, 16000 * 2 * 120); // two minutes at most
+      const pcm = Buffer.from(String(b.audio || ''), 'base64').subarray(0, 16000 * 2 * 600); // ten minutes at most
       if (voiceAction(String(b.phone || ''))) return json(res, { ok: false, text: null }); // "clear", "compact": the phone got it, and it's quicker
-      const t0 = Date.now(), text = await whisper.transcribe(pcm, { lang: b.lang, words: vocabNow().words });
+      const done = whisper.seconds(pcm) > 20 ? keepAlive(res) : () => {};
+      const t0 = Date.now(), text = await whisper.transcribe(pcm, { lang: b.lang, words: vocabNow().words }).finally(done);
       console.log(`[whisper] ${whisper.seconds(pcm).toFixed(1)}s (${whisper.seconds(whisper.trimSilence(pcm)).toFixed(1)}s heard) in ${Date.now() - t0}ms: ${text === null ? '(none)' : JSON.stringify(text.slice(0, 120))} | phone: ${JSON.stringify(String(b.phone || '').slice(0, 120))}`);
       return json(res, { ok: text !== null, text });
     }

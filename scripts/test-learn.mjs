@@ -64,7 +64,7 @@ if (prompt.startsWith('Draft a wish')) {
 
 const ENV = { ...process.env, ...GIT_ENV, LAX_HOME: HOME, LAX_PORT: String(PORT), LAX_URL: LAX, LAX_PUBLIC_URL: '', LAX_CLAUDE: FAKE, LAX_GH: GH,
   LAX_BODY: BODY, LAX_RESTART: 'true', LAX_HEALTH_WAIT: '2' };
-delete ENV.LAX_DATA;
+delete ENV.LAX_DATA; delete ENV.LAX_BUILD; // a build's fence on its own steps isn't the hook under test
 const server = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server.mjs')], { env: ENV, stdio: 'ignore' });
 const cleanup = () => { server.kill(); fs.rmSync(HOME, { recursive: true, force: true }); };
 process.on('exit', cleanup);
@@ -188,7 +188,7 @@ check('…and it says so in its log', /rolled back/.test(fs.readFileSync(path.jo
   }).listen(7794);
   await new Promise((r) => spawn(process.execPath, [path.join(BODY, 'scripts', 'after-merge.mjs'), BODY, before, 'w1'], { env: { ...ENV, LAX_URL: 'http://127.0.0.1:7794' }, stdio: 'ignore' }).on('close', r));
   fakeLax.close();
-  check('healthy after the restart → main is pushed', sh(ORIGIN, 'rev-parse', 'main') === sh(BODY, 'rev-parse', 'main'));
+  check('healthy after the restart → main stays on the Mac, never pushed', sh(ORIGIN, 'rev-parse', 'main') !== sh(BODY, 'rev-parse', 'main') && told[0]?.pushed === false);
   check('…and Lax hears it went well', told[0]?.id === 'w1' && told[0]?.ok === true, JSON.stringify(told));
 }
 const merged = await post('/api/learn/merged', { id: wish('Timers').id, ok: true });

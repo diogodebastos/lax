@@ -691,8 +691,9 @@ const isBrave = !!navigator.brave;
 let voiceBroken = !SR && !NATIVE;
 // Then, with Whisper up on the computer, Lax records you instead (the iPhone's Home Screen app has no recognition): the
 // same audio the Android app sends, so nothing changes there. Not MediaRecorder: Safari only makes AAC, which it can't read.
+// On an iPhone always, while Whisper is up: Apple's recognizer hears one language, so English words said in Portuguese came out as sound-alikes.
 const canRecord = !NATIVE && !!navigator.mediaDevices?.getUserMedia && !!window.AudioContext;
-const recordsNow = () => voiceBroken && canRecord && whisperOn && !macAsleep;
+const recordsNow = () => (voiceBroken || IOS) && canRecord && whisperOn && !macAsleep;
 let micAc = null, recording = null; // recording: while it records, { stop() → the audio }
 let rec, said = '', heard = '', talkMode = 'tap', releasing = false, quietTimer = 0, deafTimer = 0;
 const QUIET_MS = 2000;
@@ -731,7 +732,7 @@ function beginListening(m) {
   said = ''; heard = ''; releasing = false; talkMode = m; listening = true; playTune('listen');
   if (m === 'hold') buzz([30]);
   NATIVE ? NATIVE.hush() : speechSynthesis.cancel();
-  if (voiceBroken) { diag('rec-' + m); startRecording(); return showHeard(); }
+  if (recordsNow()) { diag('rec-' + m); startRecording(); return showHeard(); }
   diag('talk-' + m, { native: !!NATIVE }); showHeard(); listenStretch();
   // A tap and then nothing: iOS may never end the stretch, and Lax would listen forever.
   if (m === 'tap') deafTimer = setTimeout(() => listening && !words() && failListening('no-speech'), 15000);
@@ -740,7 +741,7 @@ function beginListening(m) {
 function startRecording() {
   micAc ||= new AudioContext(); micAc.resume().catch(() => {});
   const bufs = [], r = recording = { stop() { r.done = true; r.off?.(); return LaxHeard.pcm16k(bufs, micAc.sampleRate); } };
-  setTimeout(() => recording === r && finishListening(), 60e3); // a mic left open goes by itself after a minute
+  setTimeout(() => recording === r && finishListening(), 600e3); // talk up to 10 minutes; a mic left open goes by itself then
   navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).then((st) => {
     if (r.done) return st.getTracks().forEach((t) => t.stop()); // sent or cancelled before the mic was ready
     const src = micAc.createMediaStreamSource(st), sp = micAc.createScriptProcessor(4096, 1, 1);
@@ -1077,6 +1078,7 @@ function connect() {
   es.addEventListener('state', (e) => { const st = JSON.parse(e.data); applyState(st); remember(); keep(st); });
   es.addEventListener('feed', (e) => { const f = JSON.parse(e.data); feed(f.line, f.kind, f.project, f.session, f); keep(null, f); });
   es.addEventListener('bubble', (e) => showBubble(JSON.parse(e.data)));
+  es.addEventListener('visual', (e) => openVisual(JSON.parse(e.data).name));
   es.addEventListener('clear', (e) => clearBubble(JSON.parse(e.data).id));
   es.addEventListener('tab', (e) => { const v = JSON.parse(e.data).view, chip = $('#chips').querySelector(`[data-view="${CSS.escape(v)}"]`); if (chip) goTab(chip); });
   es.addEventListener('reborn', () => { [...term.children].slice(0, -1).forEach((d) => d.remove()); where.clear(); parts.length = 0; hop(1.8);
@@ -1145,8 +1147,25 @@ function saveSettings(patch) {
 }
 async function openLife() {
   lifeEl.classList.add('open'); showAll.miles = showAll.episodes = false; renderLife();
-  if (!DEMO) { try { memory = await getJson('/api/memory'); } catch {} renderLife(); loadKnows(); }
+  if (!DEMO) { try { memory = await getJson('/api/memory'); } catch {} renderLife(); loadKnows(); loadVisuals(); }
 }
+// What Lax made to be seen (lib/visuals.mjs): its own page in a sandboxed frame (scripts run; no same origin, so it
+// can't read the token or the talk, nor call the Mac as you). A new one opens by itself; the menu opens the newest.
+const visualEl = $('#visual');
+async function loadVisuals() {
+  try { const { visuals = [] } = await getJson('/api/visuals'); $('#visualsRow').hidden = !visuals.length;
+    $('#visualPick').innerHTML = visuals.map((v) => `<option>${esc(v.name)}</option>`).join(''); return visuals; } catch { return []; }
+}
+async function openVisual(name) {
+  if (DEMO) return;
+  const r = await getJson('/api/visual?name=' + encodeURIComponent(name)).catch(() => null);
+  if (!r?.html) return;
+  await loadVisuals(); $('#visualPick').value = name;
+  $('#visualFrame').srcdoc = r.html; visualEl.classList.add('open');
+}
+$('#visualsOpen').addEventListener('click', async () => { const v = await loadVisuals(); if (v[0]) openVisual(v[0].name); });
+$('#visualPick').addEventListener('change', (e) => openVisual(e.target.value));
+$('#visualClose').addEventListener('click', () => { visualEl.classList.remove('open'); $('#visualFrame').srcdoc = ''; });
 // What Lax knows: its skills (a draft waits for your yes, with its whole text) and its newest episodes. Forget = two taps.
 async function loadKnows() { try { knows = await getJson('/api/knows'); } catch {} renderKnows(); }
 const SKILL_STATE = { new: 'draft', later: 'draft', proposed: 'asking you', installed: '' };
