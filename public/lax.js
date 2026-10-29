@@ -741,7 +741,7 @@ function beginListening(m) {
 function startRecording() {
   micAc ||= new AudioContext(); micAc.resume().catch(() => {});
   const bufs = [], r = recording = { stop() { r.done = true; r.off?.(); return LaxHeard.pcm16k(bufs, micAc.sampleRate); } };
-  setTimeout(() => recording === r && finishListening(), 60e3); // a mic left open goes by itself after a minute
+  setTimeout(() => recording === r && finishListening(), 600e3); // talk up to 10 minutes; a mic left open goes by itself then
   navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).then((st) => {
     if (r.done) return st.getTracks().forEach((t) => t.stop()); // sent or cancelled before the mic was ready
     const src = micAc.createMediaStreamSource(st), sp = micAc.createScriptProcessor(4096, 1, 1);

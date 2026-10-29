@@ -73,5 +73,12 @@ check('each message gets fresh numbers', /5-hour limit 67% used/.test(prompt(thi
 const said = phone.filter((e) => e.ev === 'feed' && e.d.kind === 'prompt').map((e) => e.d.line);
 check('the phone shows only what you said', JSON.stringify(said) === JSON.stringify(['> how much usage do I have?', '> and now?', '> and now, again?']), JSON.stringify(said));
 
+// A long voice message (10 minutes of sound, Whisper off in tests): the answer comes back whole and still reads as JSON,
+// after the head went out early and spaces kept it alive.
+const tone = Buffer.alloc(16000 * 2 * 600); for (let i = 0; i < tone.length; i += 2) tone.writeInt16LE(Math.round(8000 * Math.sin(i / 20)), i);
+const hr = await fetch(LAX + '/api/hear', { method: 'POST', headers: H, body: JSON.stringify({ audio: tone.toString('base64'), lang: 'pt-PT' }) });
+const ht = await hr.text();
+check('a 10-minute voice message is taken, and its answer reads as JSON', hr.status === 200 && JSON.parse(ht).text === null, ht.slice(0, 80));
+
 console.log(failed ? `\n${failed} check(s) failed` : '\nall voice usage checks passed');
 process.exit(failed ? 1 : 0);

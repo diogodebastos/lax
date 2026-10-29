@@ -1112,9 +1112,18 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.
 const body = (req) => new Promise((res) => { let b = ''; req.on('data', (d) => (b += d)); req.on('end', () => {
   try { const j = JSON.parse(b || '{}'); res(typeof j.sealed === 'string' ? JSON.parse(unseal(j.sealed) ?? '{}') : j); } catch { res({}); } }); });
 const json = (res, obj, code = 200) => {
+  if (res.headersSent) return res.end(res.sealed ? JSON.stringify({ sealed: seal(JSON.stringify(obj)) }) : JSON.stringify(obj)); // after keepAlive
   if (!res.sealed) { res.writeHead(code, { 'content-type': 'application/json' }); return res.end(JSON.stringify(obj)); }
   res.writeHead(code, { 'content-type': 'application/json', 'x-lax-sealed': '1' }); res.end(JSON.stringify({ sealed: seal(JSON.stringify(obj)) }));
 };
+
+// A slow answer (Whisper on a 10-minute message): the head now and a space every 15s, so neither the relay (30s for a head)
+// nor the phone's browser (about a minute idle) gives up. JSON reads past leading spaces. Returns the stop.
+function keepAlive(res) {
+  res.writeHead(200, { 'content-type': 'application/json', ...(res.sealed && { 'x-lax-sealed': '1' }) }); res.flushHeaders();
+  const t = setInterval(() => res.write(' '), 15e3);
+  return () => clearInterval(t);
+}
 
 const onceIds = once();
 http.createServer(async (req, res) => {
@@ -1290,9 +1299,10 @@ http.createServer(async (req, res) => {
       return json(res, { ok: true, voiceTarget });
     case '/api/action': return json(res, { ok: quickAction(String(b.cid || ''), voiceAction(b.action)) });
     case '/api/hear': { // what the phone recorded while you talked, written down by Whisper (null: the phone's own words go)
-      const pcm = Buffer.from(String(b.audio || ''), 'base64').subarray(0, 16000 * 2 * 120); // two minutes at most
+      const pcm = Buffer.from(String(b.audio || ''), 'base64').subarray(0, 16000 * 2 * 600); // ten minutes at most
       if (voiceAction(String(b.phone || ''))) return json(res, { ok: false, text: null }); // "clear", "compact": the phone got it, and it's quicker
-      const t0 = Date.now(), text = await whisper.transcribe(pcm, { lang: b.lang, words: vocabNow().words });
+      const done = whisper.seconds(pcm) > 20 ? keepAlive(res) : () => {};
+      const t0 = Date.now(), text = await whisper.transcribe(pcm, { lang: b.lang, words: vocabNow().words }).finally(done);
       console.log(`[whisper] ${whisper.seconds(pcm).toFixed(1)}s (${whisper.seconds(whisper.trimSilence(pcm)).toFixed(1)}s heard) in ${Date.now() - t0}ms: ${text === null ? '(none)' : JSON.stringify(text.slice(0, 120))} | phone: ${JSON.stringify(String(b.phone || '').slice(0, 120))}`);
       return json(res, { ok: text !== null, text });
     }
