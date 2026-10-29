@@ -48,6 +48,7 @@ import { POSTS, IMAGES, postPage, indexPage } from './lib/blog.mjs';
 import { MAX_WAIT_S } from './hooks/timeouts.mjs';
 import { createBudget, LEVELS } from './lib/budget.mjs';
 import { onRateLimit } from './lib/claude-run.mjs';
+import * as stuck from './lib/stuck.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const PORT = Number(process.env.LAX_PORT || 7777);
@@ -1207,6 +1208,7 @@ http.createServer(async (req, res) => {
   }
   if (url.pathname === '/api/brief') return json(res, { text: brief(url.searchParams.get('project') || '', settings.name, roles.active()) });
   if (url.pathname === '/api/visuals') return json(res, { visuals: visuals.list() }); // what it made to be seen (lib/visuals.mjs)
+  if (url.pathname === '/api/stuck') return json(res, { stuck: stuck.list() }); // hung runs and tests, for the menu (lib/stuck.mjs)
   if (url.pathname === '/api/visual') { const html = visuals.read(url.searchParams.get('name')); return html === null ? json(res, { error: 'no such page' }, 404) : json(res, { name: url.searchParams.get('name'), html }); }
   if (url.pathname === '/api/self') return json(res, self(petView(), settings, roles.view())); // the `self` tool: how Lax looks today (lib/self.mjs)
   if (url.pathname === '/api/memory') return json(res, { pet: petView(), raw: pet, voiceProject: pickChannel() ? channels.get(pickChannel()).project : 'assistant',
@@ -1303,6 +1305,7 @@ http.createServer(async (req, res) => {
       voiceTarget = b.target === 'auto' || channels.has(b.target) ? b.target : 'background'; pushState();
       return json(res, { ok: true, voiceTarget });
     case '/api/action': return json(res, { ok: quickAction(String(b.cid || ''), voiceAction(b.action)) });
+    case '/api/stuck/stop': return json(res, await stuck.stop(b.pid)); // only one on the list right now (lib/stuck.mjs)
     case '/api/hear': { // what the phone recorded while you talked, written down by Whisper (null: the phone's own words go)
       const pcm = Buffer.from(String(b.audio || ''), 'base64').subarray(0, 16000 * 2 * 600); // ten minutes at most
       if (voiceAction(String(b.phone || ''))) return json(res, { ok: false, text: null }); // "clear", "compact": the phone got it, and it's quicker

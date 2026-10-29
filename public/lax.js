@@ -1147,7 +1147,7 @@ function saveSettings(patch) {
 }
 async function openLife() {
   lifeEl.classList.add('open'); showAll.miles = showAll.episodes = false; renderLife();
-  if (!DEMO) { try { memory = await getJson('/api/memory'); } catch {} renderLife(); loadKnows(); loadVisuals(); }
+  if (!DEMO) { try { memory = await getJson('/api/memory'); } catch {} renderLife(); loadKnows(); loadVisuals(); loadStuck(); }
 }
 // What Lax made to be seen (lib/visuals.mjs): its own page in a sandboxed frame (scripts run; no same origin, so it
 // can't read the token or the talk, nor call the Mac as you). A new one opens by itself; the menu opens the newest.
@@ -1163,6 +1163,17 @@ async function openVisual(name) {
   await loadVisuals(); $('#visualPick').value = name;
   $('#visualFrame').srcdoc = r.html; visualEl.classList.add('open');
 }
+// Hung runs and tests on the Mac (lib/stuck.mjs): a tap stops one, and everything it started.
+const ago = (s) => s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h`;
+async function loadStuck() {
+  try { const { stuck = [] } = await getJson('/api/stuck'); $('#stuckRow').hidden = !stuck.length;
+    $('#stuckList').innerHTML = stuck.map((p) => `<button data-pid="${p.pid}">■ ${esc(p.what)} · ${ago(p.secs)}${p.cwd ? ` · ${esc(p.cwd.split('/').pop())}` : ''}</button>`).join(''); } catch {}
+}
+$('#stuckList').addEventListener('click', async (e) => {
+  const b = e.target.closest('button[data-pid]'); if (!b) return;
+  b.disabled = true; b.textContent = 'stopping…';
+  await api('/api/stuck/stop', { pid: Number(b.dataset.pid) }).catch(() => null); loadStuck();
+});
 $('#visualsOpen').addEventListener('click', async () => { const v = await loadVisuals(); if (v[0]) openVisual(v[0].name); });
 $('#visualPick').addEventListener('change', (e) => openVisual(e.target.value));
 $('#visualClose').addEventListener('click', () => { visualEl.classList.remove('open'); $('#visualFrame').srcdoc = ''; });
