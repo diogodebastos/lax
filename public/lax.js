@@ -940,11 +940,12 @@ function send(text, heard) {
     .catch(() => showBubble({ id: 'net', kind: 'error', text: 'Couldn\'t reach your Mac.' }));
 }
 const topEl = $('#top');
+$('#paste').onclick = typeInstead; // always there: type, or paste a link or text, when talking won't do
 // Tap: talk (or cancel). Hold (350ms): listen until you let go; slide off before letting go to cancel.
 { let press = null;
   const inside = (e) => { const r = topEl.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
   topEl.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('#hud, #bubble') || wakeEl.isConnected || lifeEl.classList.contains('open')) return;
+    if (e.target.closest('#hud, #bubble, #paste') || wakeEl.isConnected || lifeEl.classList.contains('open')) return;
     if (EGG) { eggTapAt = performance.now(); return; }
     if (shell) eggTapAt = performance.now();
     try { topEl.setPointerCapture(e.pointerId); } catch {}
