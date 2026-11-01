@@ -56,7 +56,7 @@ vulnerability**).
 
 - **Lax's assistant runs headless**, so the phone is its terminal: anything that changes something asks you there first.
   Looking (`ls`, `cat`, `git status`…) and small local steps you can undo (`npm test`, `git commit` in a repo) don't ask.
-  Pushing, deleting, sending, `curl`, `ssh`, `osascript`, `sudo`, `launchctl` and anything outside your repos always ask
+  Pushing, deleting, sending, `curl`, `ssh`, `osascript`, `sudo`, `launchctl`, `systemctl` and anything outside your repos always ask
   (`lib/allow.mjs`).
 - **What it spends of your Claude plan by itself** (`lib/budget.mjs`): its own work (reflections, the weekly review,
   drafting a wish, the nightly fix) is capped and pauses near your plan's limits: "light" by default (8 runs a day,
@@ -92,4 +92,4 @@ in code, not only in prompts:
   a tunnel, Access is a second one.
 - **What you approve.** A yes on the phone is a yes.
 - **Claude Code itself**, and the permissions you've given it in `~/.claude/settings.json`.
-- **macOS only** for now: the background services, sharing and text recognition use macOS.
+- **Sharing and on-screen text recognition are macOS only.** On Linux the share tool isn't offered.

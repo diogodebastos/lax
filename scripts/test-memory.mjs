@@ -115,7 +115,7 @@ check('…and recall answers through it', /restarting cloudflared/.test(ans.cont
 const me = await plain.c.callTool({ name: 'self', arguments: {} }), mine = JSON.parse(me.content[0].text);
 check('…and self says how Lax looks today (Phase 6.2)', !me.isError && mine.face.startsWith('<svg') && mine.css.includes('--accent:') && mine.self_md.includes('# How I see myself'));
 await plain.c.close();
-for (const [env, want, what] of [[{ LAX_CHANNEL_FORCE: '1' }, 'gap,misheard,recall,reply,schedule,self,share', 'a live lax session'], [{ LAX_CHANNEL_FORCE: '0', LAX_VOICE: '1' }, 'gap,misheard,schedule,self,tell', 'the voice assistant'],
+for (const [env, want, what] of [[{ LAX_CHANNEL_FORCE: '1' }, `gap,misheard,recall,reply,schedule,self${process.platform === 'darwin' ? ',share' : ''}`, 'a live lax session'], [{ LAX_CHANNEL_FORCE: '0', LAX_VOICE: '1' }, 'gap,misheard,schedule,self,tell', 'the voice assistant'],
   [{ LAX_CHANNEL_FORCE: '0', LAX_JOB: 'j1' }, 'recall,self', 'a scheduled job'],
   [{ LAX_CHANNEL_FORCE: '0', LAX_VOICE: '1', LAX_REFLECT: '1' }, '', 'a reflection'], [{ LAX_CHANNEL_FORCE: '0', LAX_RECALL: '1' }, '', 'a recall run']]) {
   const t = await tools(env); check(`${what}: ${want || 'no tools'}`, t.names === want, t.names); await t.c.close();

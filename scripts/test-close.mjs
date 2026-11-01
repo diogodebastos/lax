@@ -37,10 +37,14 @@ const tabs = () => phone.filter((e) => e.ev === 'state').pop()?.d?.sessions?.map
 const said = async (re) => { for (let i = 0; i < 40; i++) { const b = phone.filter((e) => e.ev === 'bubble' && re.test(e.d.text || '')).pop(); if (b) return b.d; await sleep(250); } return null; };
 
 // A stand-in claude per session, and its SessionStart as the hooks send it.
-const bin = path.join(DATA, 'bin'); fs.mkdirSync(bin); fs.symlinkSync('/bin/sleep', path.join(bin, 'claude')); // a link, not a copy: macOS kills a copied Apple binary (SIGKILL)
+// On Linux a copied sleep may be a multicall binary that goes by its name (uutils, Ubuntu 25.10+): node, by a link
+// named claude (its process name), waits instead.
+const LINUX = process.platform === 'linux';
+const bin = path.join(DATA, 'bin'); fs.mkdirSync(bin);
+if (LINUX) fs.symlinkSync(process.execPath, path.join(bin, 'claude')); else fs.symlinkSync('/bin/sleep', path.join(bin, 'claude')); // a link, not a copy: macOS kills a copied Apple binary (SIGKILL)
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 async function open(sid, project) {
-  const p = spawn(path.join(bin, 'claude'), ['600'], { stdio: 'ignore' }); fakes.push(p);
+  const p = spawn(path.join(bin, 'claude'), LINUX ? ['-e', 'setTimeout(() => {}, 600e3)'] : ['600'], { stdio: 'ignore' }); fakes.push(p);
   const exited = new Promise((r) => p.on('exit', r));
   await post('/api/hook', { hook_event_name: 'SessionStart', session_id: sid, cwd: `/tmp/${project}`, lax_session_pid: p.pid, lax_where: 'cli' });
   return { p, exited };

@@ -113,6 +113,7 @@ const C = { bg: '#000', shadow: '#2a2521', ink: '#000', out: '#120c0a', body: '#
 // ---------- world state ----------
 // What speech gets wrong (lib/vocab.mjs, from the Mac): the names you use, and misheard → meant (fixed by heard.js).
 let vocab = { words: [], heard: {} };
+let host = 'computer'; // what the server calls the computer Lax lives on: 'Mac' on one
 let whisperOn = false, hearing = null; // Whisper on the Mac is up (lib/whisper.mjs); while it writes down what you said: how to drop it
 let settings = { name: 'Lax', color: '#D97757', voice: true, sounds: true, pitch: 1.6, speakDone: false, captions: false, phoneApprovals: true, askTimeout: 30, theme: 'system' };
 const shade = (hex, amt) => { const n = parseInt(hex.slice(1), 16), t = amt < 0 ? 0 : 255, a = Math.abs(amt);
@@ -946,9 +947,9 @@ function send(text, heard) {
   showBubble({ id: 'you' + Date.now(), kind: 'you', text: '“' + text + '”', fixed: heard?.fixed });
   if (DEMO) { voiceBusy = true; setTimeout(() => { voiceBusy = false; showBubble({ id: 'r' + Date.now(), kind: 'reply', text: 'Demo mode — I heard you!', speak: true }); }, 1800); return; }
   api('/api/talk', { text, voice: !!heard, spelled: heard?.spelled, target: tabTarget() }).then((r) => {
-    if (r.queued) showBubble({ id: 'held', kind: 'reply', text: 'Your Mac is asleep. I\'ll pass it on when it wakes.', speak: true });
+    if (r.queued) showBubble({ id: 'held', kind: 'reply', text: `Your ${host} is asleep. I'll pass it on when it wakes.`, speak: true });
     else if (!r.ok) showBubble({ id: 'busy', kind: 'error', text: 'I\'m busy, try again in a sec.' }); })
-    .catch(() => showBubble({ id: 'net', kind: 'error', text: 'Couldn\'t reach your Mac.' }));
+    .catch(() => showBubble({ id: 'net', kind: 'error', text: `Couldn't reach your ${host}.` }));
 }
 const topEl = $('#top');
 // Awake: I work on my own (reflect, draft wishes, fix things at night); asleep: I only answer you. The same as "learns" in the menu.
@@ -1010,7 +1011,7 @@ wakeEl.addEventListener('click', async () => {
 });
 
 // ---------- live link ----------
-function applyState(s) { pet = s.pet; if (s.pet.hatched === false) shell = true; else if (shell && !hatchAt) hatch(); sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; usage = s.usage || null; budget = s.budget || null; if (s.vocab) vocab = s.vocab; whisperOn = !!s.whisper; if (s.ways !== undefined) gotWays(s.ways); updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
+function applyState(s) { pet = s.pet; if (s.pet.hatched === false) shell = true; else if (shell && !hatchAt) hatch(); sessions = s.sessions; voiceBusy = s.voiceBusy; thinking = !!s.thinking; channels = s.channels || []; voiceTarget = s.voiceTarget || 'auto'; usage = s.usage || null; budget = s.budget || null; if (s.vocab) vocab = s.vocab; whisperOn = !!s.whisper; if (s.host) host = s.host; if (s.ways !== undefined) gotWays(s.ways); updateHint(); if (s.settings) settings = s.settings; applyLook(); renderHud(); if (lifeEl.classList.contains('open')) renderLife(); }
 // Remember how Lax looks, so the app's offline page can show the same Lax asleep. In the browser, the last state and
 // the last 150 lines, so a reload while the Mac can't answer (the page then comes from sw.js) shows the same.
 const remember = () => { try { NATIVE?.remember(JSON.stringify({ pet, settings })); } catch {} };

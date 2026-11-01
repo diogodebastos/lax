@@ -1,6 +1,6 @@
-// lib/terminal.mjs: the AppleScript each terminal app gets, and the "open on mac" phrase.
+// lib/terminal.mjs: the AppleScript each terminal app gets, the argv each Linux terminal gets, and the "open on mac" phrase.
 import assert from 'node:assert/strict';
-import { terminalScript, ON_MAC, closeTarget } from '../lib/terminal.mjs';
+import { terminalScript, terminalArgs, q, ON_MAC, closeTarget } from '../lib/terminal.mjs';
 
 const cwd = "/Users/me/it's here", cmd = `exec claude --resume abc --add-dir '/Users/me/REPOS'`;
 const g = terminalScript('Ghostty', cwd, cmd);
@@ -10,7 +10,16 @@ assert.match(terminalScript('iTerm', cwd, cmd), /create window with default prof
 assert.match(terminalScript('Terminal', cwd, cmd), /do script "cd /);
 assert.equal(terminalScript('Hyper', cwd, cmd), null);
 
-for (const t of ['Open on the Mac.', 'continue on mac', 'open this on my Mac', 'Open it on the Mac please', 'move it to the mac']) assert.ok(ON_MAC.test(t), t);
+// Linux: each terminal's argv before `$SHELL -ilc LINE`; an unknown one gets -e.
+const SH = process.env.SHELL || '/bin/sh', here = "/home/me/it's here";
+assert.deepEqual(terminalArgs('konsole', here, 'exec lax'), ['-e', SH, '-ilc', `cd ${q(here)} && exec lax`]);
+assert.equal(q(here), `'/home/me/it'\\''s here'`);
+assert.deepEqual(terminalArgs('kitty', here, 'exec lax'), [SH, '-ilc', `cd ${q(here)} && exec lax`]);
+assert.deepEqual(terminalArgs('/usr/bin/gnome-terminal', here, 'x').slice(0, 2), ['--', SH]);
+assert.deepEqual(terminalArgs('zorbterm', here, 'x').slice(0, 2), ['-e', SH]);
+
+for (const t of ['Open on the Mac.', 'continue on mac', 'open this on my Mac', 'Open it on the Mac please', 'move it to the mac',
+  'open on my computer', 'continue this on my laptop', 'open it on the PC']) assert.ok(ON_MAC.test(t), t);
 for (const t of ['open the readme on the mac', 'open a terminal', 'what is on the mac', 'mac']) assert.ok(!ON_MAC.test(t), t);
 
 // "Close the fisicai session": which one, by project (its folder) or tab name; two alike, ask; no name, a message.

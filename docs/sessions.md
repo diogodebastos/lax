@@ -13,7 +13,7 @@ lax watch                 # follow what Lax sees, live: your sessions, and the c
 lax watch lax             # only Lax (or `lax watch <project>`); --no-history starts from now
 ```
 
-Already in a session that wasn't started with `lax` (the desktop app, or plain `claude`)? Type **`/lax`**: it reopens the same conversation in a new terminal window (Ghostty, else iTerm, else Terminal; `LAX_TERMINAL` picks one) as a live `lax` session. Then close the old one. Claude Code only loads the channel at startup, so a running session can't switch on by itself.
+Already in a session that wasn't started with `lax` (the desktop app, or plain `claude`)? Type **`/lax`**: it reopens the same conversation in a new terminal window (Ghostty, else iTerm, else Terminal; on Linux `$TERMINAL`, else the first of Ghostty, kitty, WezTerm, Alacritty, foot, Konsole, Ptyxis, GNOME Terminal, Console, xfce4-terminal or xterm; `LAX_TERMINAL` picks one) as a live `lax` session. Then close the old one. Claude Code only loads the channel at startup, so a running session can't switch on by itself.
 
 - The first time, accept the development-channel warning and the MCP prompt yourself. Lax answers that warning for you only after you've answered it once (`~/.lax/consent.json`; delete it to be asked again). The startup notice reads "Channels (experimental) … server:lax".
 - Tap Lax and speak. It arrives in that session as `← lax: …`. Claude does the work and calls the `reply` tool, and Lax reads the first sentence aloud.
@@ -23,9 +23,9 @@ Already in a session that wasn't started with `lax` (the desktop app, or plain `
 - Research preview: terminal sessions only (not the Desktop app), and the flag may change.
 - `node scripts/test-channel.mjs` runs an end-to-end check with a fake Claude Code.
 
-## Lax's conversation on the Mac
+## Lax's conversation on your computer
 
-Talking to Lax itself (its own tab, not a live session) runs headless: no terminal window. To carry on in a real terminal, say "open on the Mac" (or "continue this on my Mac"). It opens the same conversation (`claude --resume`, in Lax's mind folder, with your projects folder added) in Ghostty, iTerm or Terminal, like `/lax`. While it's open there, the phone waits: talking to Lax gets "quit there first". When you quit, the phone picks the conversation up again. To only look, without taking over, use `lax watch`.
+Talking to Lax itself (its own tab, not a live session) runs headless: no terminal window. To carry on in a real terminal, say "open on the Mac" (or "continue this on my computer"). It opens the same conversation (`claude --resume`, in Lax's mind folder, with your projects folder added) in a new terminal window, like `/lax`. While it's open there, the phone waits: talking to Lax gets "quit there first". When you quit, the phone picks the conversation up again. To only look, without taking over, use `lax watch`.
 
 ## Behaviour notes
 

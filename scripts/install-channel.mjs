@@ -9,7 +9,8 @@ import { execFileSync } from 'node:child_process';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const remove = process.argv.includes('--remove');
-const NODE = ['/usr/local/bin/node', '/opt/homebrew/bin/node'].find((p) => fs.existsSync(p)) || process.execPath;
+// On Linux the node running this (nvm's, usually): a stray /usr/local/bin/node may be too old.
+const NODE = process.platform === 'linux' ? process.execPath : ['/usr/local/bin/node', '/opt/homebrew/bin/node'].find((p) => fs.existsSync(p)) || process.execPath;
 const CHANNEL = path.join(ROOT, 'channel', 'lax-channel.mjs');
 const RC = path.join(os.homedir(), process.env.SHELL?.endsWith('bash') ? '.bashrc' : '.zshrc');
 // `lax` is the short name, like `claude`; `claude-lax` stays for anything that already uses it.
@@ -42,7 +43,7 @@ claude('mcp', 'remove', '--scope', 'user', 'lax');
 const rc = fs.existsSync(RC) ? fs.readFileSync(RC, 'utf8') : '';
 const without = rc.split('\n').filter((l) => !l.includes('# lax channel')).join('\n');
 
-fs.writeFileSync(RC, without); // drop the old alias line, if any
+if (rc && without !== rc) fs.writeFileSync(RC, without); // drop the old alias line, if any (never creating the file)
 if (remove) {
   for (const b of BINS) fs.rmSync(b, { force: true });
   fs.rmSync(path.dirname(SKILL), { recursive: true, force: true });
@@ -54,4 +55,6 @@ if (remove) {
   fs.mkdirSync(path.dirname(SKILL), { recursive: true });
   fs.writeFileSync(SKILL, SKILL_MD);
   console.log(`installed ${BINS.join(' and ')}, and the /lax skill. Run: lax (or /lax inside a session)`);
+  // Ubuntu adds ~/.local/bin to PATH at login, and only if it existed then.
+  if (!(process.env.PATH || '').split(':').includes(path.dirname(BINS[0]))) console.log(`${path.dirname(BINS[0])} isn't on your PATH yet: log out and back in (or open a login shell) so \`lax\` is found.`);
 }

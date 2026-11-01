@@ -28,7 +28,9 @@ digi-lax is the app; Lax is the companion it hatches. Yours can have any name: s
 
 ## Get started
 
-**You need** a Mac, [Node](https://nodejs.org) 22.13 or newer, `git`, and Claude Code, logged in. For the phone: a free Cloudflare account, and Chrome on Android, Safari on an iPhone (iOS 16.4 or newer), or the Android app.
+**You need** a Mac, or Linux with a systemd user session; [Node](https://nodejs.org) 22.13 or newer; `git`; and Claude Code, logged in. For the phone: a free Cloudflare account, and Chrome on Android, Safari on an iPhone (iOS 16.4 or newer), or the Android app.
+
+**On Linux** also a C++ toolchain, to build `node-pty` (`sudo apt install build-essential python3`, or `sudo dnf install gcc-c++ make python3`), and Node from [nvm](https://github.com/nvm-sh/nvm) or [NodeSource](https://github.com/nodesource/distributions): Ubuntu and Debian ship an older one. After switching Node's major version, `npm rebuild node-pty`. Optional: `curl` and `cmake` for Whisper, `wl-clipboard` or `xclip` for your own domain, `unzip` for the Android app. Native Windows isn't supported; WSL2 with systemd works (without opening terminals or sleep events).
 
 ```bash
 git clone https://github.com/diogodebastos/lax.git
@@ -38,7 +40,7 @@ npm run setup
 
 Setup is a Claude Code conversation: Lax sets itself up with you, one step at a time, and only asks practical things (which folder your projects are in, yes or no). It wires itself into Claude Code, starts in the background, deploys a small relay to your own Cloudflare account so your phone can reach it, and shows a QR code to pair the phone. Your Lax is born fresh: it knows nothing about you, and asks the personal things itself, later. From clone to talking takes about four minutes.
 
-**Try it on the Mac first:** "open Lax" on the pairing page (`http://localhost:7777/pair`) works in Chrome with no phone and no Cloudflare. Hold space to talk. Add the phone any time with `node scripts/setup.mjs relay`.
+**Try it on your computer first:** "open Lax" on the pairing page (`http://localhost:7777/pair`) works in Chrome with no phone and no Cloudflare. Hold space to talk. Add the phone any time with `node scripts/setup.mjs relay`.
 
 **The Android app** is optional. It adds a background link, approvals that wake the phone, and the cover screen. It's built from your clone, so your Lax can change it too: [android/README.md](android/README.md).
 

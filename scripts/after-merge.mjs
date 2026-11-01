@@ -7,10 +7,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { LOGS, readToken } from '../lib/paths.mjs';
+import { restartArgs } from '../lib/service.mjs';
 
 const [BODY, PREV, WISH] = process.argv.slice(2);
 const LAX = process.env.LAX_URL || `http://127.0.0.1:${process.env.LAX_PORT || 7777}`;
-const RESTART = process.env.LAX_RESTART || `launchctl kickstart -k gui/${process.getuid()}/digi-lax.server`;
+const RESTART = process.env.LAX_RESTART || restartArgs().join(' ');
 const WAIT = Number(process.env.LAX_HEALTH_WAIT || 30) * 1000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (t) => { try { fs.appendFileSync(path.join(LOGS, 'merge.log'), `[${new Date().toISOString()}] ${WISH}: ${t}\n`); } catch {} };

@@ -9,7 +9,7 @@ A small native shell around the Lax page. It adds:
 
 It's Kotlin with framework APIs only (no androidx, no third-party libraries). minSdk 30, targetSdk 34.
 
-## Tooling (Mac, once)
+## Tooling (once)
 
 ```bash
 node scripts/setup.mjs android     # or: node scripts/android-tools.mjs
@@ -23,7 +23,7 @@ The Gradle wrapper (`android/gradlew`) is checked in, so Gradle downloads itself
 
 ## Phone (once)
 
-1. Settings → About phone → Software information → tap **Build number** 7×. Then Developer options → **USB debugging** on. Plug it into the Mac and accept the RSA prompt.
+1. Settings → About phone → Software information → tap **Build number** 7×. Then Developer options → **USB debugging** on. Plug it into your computer and accept the RSA prompt. On Linux, adb over USB needs udev rules: `sudo apt install android-sdk-platform-tools-common` (Ubuntu) or `sudo dnf install android-tools` (Fedora).
 2. `npm run android -- --pair` builds, installs, and sends the pairing link. Tap **pair ▶**. You can also scan the app QR on `http://localhost:7777/pair`.
 3. Allow the mic and notifications, and let Lax ignore battery optimisation.
 4. Samsung: if Lax isn't battery-exempt, add it under Settings → Battery → Background usage limits → **Never sleeping apps**. Once it's exempt (unrestricted), One UI leaves it out of that list, and that's fine.
