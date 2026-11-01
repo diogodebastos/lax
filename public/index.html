@@ -67,7 +67,8 @@
 
   /* The hint sits on Lax's ground: a dotted line on both sides of the text, never behind it. */
   #hint { position:absolute; bottom:4px; left:0; right:0; padding:0 4px; display:flex; align-items:center; gap:6px; font-size:13px; color:var(--dim); z-index:2; white-space:nowrap; }
-  #awake, #paste { position:absolute; right:6px; bottom:52px; z-index:2; width:40px; height:40px; font-size:20px; border:2px solid var(--dim); border-radius:8px; background:var(--bg); cursor:pointer; padding:0; }
+  #awake, #paste { position:absolute; right:6px; bottom:52px; z-index:2; width:40px; height:40px; border:2px solid var(--dim); border-radius:8px; background:var(--bg); color:var(--coral); cursor:pointer; padding:0; display:grid; place-items:center; }
+  #awake svg, #paste svg { width:27px; height:27px; shape-rendering:crispEdges; }
   #awake { bottom:98px; }
   #hint::before, #hint::after { content:''; flex:1; min-width:8px; height:2px; background:repeating-linear-gradient(90deg, var(--dot) 0 2px, transparent 2px 6px); }
 
@@ -282,7 +283,7 @@
     <div id="bubble"><span class="tag"></span><div class="text"></div><div class="choices"></div><pre class="det"></pre><div class="actions"><button class="yes">✓ yes</button><button class="no">✗ no</button><button class="more">⋯</button></div></div>
     <div id="hint">tap Lax to talk</div>
     <button id="awake" aria-label="awake or asleep: may I work on my own"></button>
-    <button id="paste" aria-label="type or paste a message">📋</button>
+    <button id="paste" aria-label="type or paste a message"></button>
   </div>
   <div id="bottom">
   <div id="chips"></div>
