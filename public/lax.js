@@ -136,6 +136,7 @@ window.laxOnTheme = applyTheme; // the app calls this when the phone switches da
 function applyLook() {
   applyTheme();
   try { updateHint(); } catch {} // (not ready on the very first call)
+  const awake = document.querySelector('#awake'); if (awake) awake.textContent = settings.learns === false ? '💤' : '☀️';
   const wakeName = document.querySelector('#wakeName'); if (wakeName) wakeName.textContent = settings.name;
   const color = pet.look?.color || settings.color || '#D97757'; // the species' colour (an egg: whatever leads); no server: Lax's own
   C.body = color; C.hi = shade(color, 0.3); C.lo = shade(color, -0.25);
@@ -940,12 +941,14 @@ function send(text, heard) {
     .catch(() => showBubble({ id: 'net', kind: 'error', text: 'Couldn\'t reach your Mac.' }));
 }
 const topEl = $('#top');
+// Awake: I work on my own (reflect, draft wishes, fix things at night); asleep: I only answer you. The same as "learns" in the menu.
+$('#awake').onclick = () => saveSettings({ learns: settings.learns === false });
 $('#paste').onclick = typeInstead; // always there: type, or paste a link or text, when talking won't do
 // Tap: talk (or cancel). Hold (350ms): listen until you let go; slide off before letting go to cancel.
 { let press = null;
   const inside = (e) => { const r = topEl.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
   topEl.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('#hud, #bubble, #paste') || wakeEl.isConnected || lifeEl.classList.contains('open')) return;
+    if (e.target.closest('#hud, #bubble, #paste, #awake') || wakeEl.isConnected || lifeEl.classList.contains('open')) return;
     if (EGG) { eggTapAt = performance.now(); return; }
     if (shell) eggTapAt = performance.now();
     try { topEl.setPointerCapture(e.pointerId); } catch {}
