@@ -24,6 +24,7 @@ import { matchSession, TELL_NOTE } from './lib/tell.mjs';
 import { createLearn } from './lib/learn.mjs';
 import { createSchedule } from './lib/schedule.mjs';
 import { createImprove, ANNOYED, unheard } from './lib/improve.mjs';
+import { createInitiative } from './lib/initiative.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus, tabCommand } from './lib/actions.mjs';
 import { readUsage, eventLimits, limitWarnings, usageText } from './lib/usage.mjs';
 import { openTerminal, q, ON_MAC, closeTarget } from './lib/terminal.mjs';
@@ -824,6 +825,9 @@ const IDLE = Number(process.env.LAX_IDLE || 30 * 60) * 1000;
 const idle = () => !voiceRun && !channelWait && !laxOnMac && pending.size === 0 && ![...sessions.values()].some((s) => Date.now() - s.ts < IDLE);
 const improve = createImprove({ budget, settings: () => settings, feed, learn, body: process.env.LAX_BODY || ROOT, claude: process.env.LAX_CLAUDE,
   idle, log: (...a) => console.log('[improve]', ...a) });
+// Awake and left idle, Lax works on one of your projects by itself, on a branch of its own (lib/initiative.mjs).
+createInitiative({ budget, settings: () => settings, feed, diary: (t) => diary(t), idle, desktop: DEFAULT_WORKDIR, mind: MIND, claude: process.env.LAX_CLAUDE,
+  log: (...a) => console.log('[initiative]', ...a) });
 // ---------- know-how: workflows you repeat become skills, installed on your yes (lib/skills.mjs) ----------
 const skills = createSkills({ settings: () => settings, feed, mind: mindEvent, diary: (t) => diary(t), broadcast, pending, quiet,
   gainXp: (n) => { gainXp(n); save(); pushState(); }, milestone: (t) => { milestone(t); pushState(); }, record: (kind, text) => record(kind, text),
