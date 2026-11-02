@@ -111,7 +111,9 @@ await post('/api/decide', { id: id3, decision: 'allow' });
 check('…a page open again: the ask goes to the phone, and a yes comes back', !!id3 && (await asked3).decision === 'allow');
 page.c.abort(); await sleep(300);
 // Nobody answered with no page open: the terminal takes over as designed, and it isn't friction. With a page open, it is.
-check('no page open and no answer: back to the terminal', (await voice('rm d')).decision === 'none');
+// A terminal session's approval too (not Lax's assistant): asked side by side, so the minute's wait is paid once.
+const [rd, re] = await Promise.all([voice('rm d'), post('/api/ask', { session_id: 's3', cwd: '/tmp/quokka', tool_name: 'Bash', tool_input: { command: 'rm e' } }).then((x) => x.json())]);
+check('no page open and no answer: back to the terminal', rd.decision === 'none' && re.decision === 'none', JSON.stringify([rd, re]));
 const unanswered = (() => { try { return JSON.parse(fs.readFileSync(path.join(LH, 'friction.json'), 'utf8')).items; } catch { return []; } })().filter((x) => x.kind === 'unanswered');
 check('…and only the one a page was open for counts as unanswered', unanswered.length === 1 && /rm a/.test(unanswered[0].text), JSON.stringify(unanswered));
 fake.close();
