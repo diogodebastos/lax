@@ -100,7 +100,7 @@ if (!kvGet('newPath', false)) { if (kvGet('pet', null)) milestone(`${readSetting
 
 // Life menu settings — live on the Mac, edited from the phone.
 const DEFAULTS = { name: DEFAULT_COMPANION_NAME, voice: true, sounds: true, pitch: 1.6, speakDone: false, captions: false,
-  phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system', learns: true, listen: 'phone',
+  phoneApprovals: true, freeHands: false, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system', learns: true, listen: 'phone',
   push: 'away', // notifications to a subscribed phone (lib/push.mjs): off, away (only while no page is open) or always
   budget: 'light', // what Lax may spend of your plan by itself (lib/budget.mjs): light or normal
   speciesPick: false, speciesOverride: null, // while the species bars get tuned: pick one by hand
@@ -116,7 +116,7 @@ syncMindName(settings.name);
 function updateSettings(b) {
   const clean = {};
   if (typeof b.name === 'string' && b.name.trim()) clean.name = b.name.trim().slice(0, 12);
-  for (const k of ['voice', 'sounds', 'speakDone', 'captions', 'phoneApprovals', 'learns', 'speciesPick']) if (typeof b[k] === 'boolean') clean[k] = b[k];
+  for (const k of ['voice', 'sounds', 'speakDone', 'captions', 'phoneApprovals', 'learns', 'speciesPick', 'freeHands']) if (typeof b[k] === 'boolean') clean[k] = b[k];
   const o = b.speciesOverride;
   if (o === null) clean.speciesOverride = null;
   else if (o && o.id === 'plain' && /^#[0-9a-f]{6}$/i.test(o.color || '')) clean.speciesOverride = { id: 'plain', color: o.color, branch: null, rare: false };

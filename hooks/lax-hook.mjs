@@ -4,8 +4,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { claudePid } from '../lib/claude-pid.mjs';
-import { MIND, SECRETS, DB, ARCHIVE, readToken } from '../lib/paths.mjs';
-import { bashKind } from '../lib/allow.mjs';
+import { HOME, MIND, SECRETS, DB, ARCHIVE, SETTINGS, readToken } from '../lib/paths.mjs';
+import { bashKind, freeAsk } from '../lib/allow.mjs';
 import { offLimits } from '../lib/guard.mjs';
 import { ASK_MS } from './timeouts.mjs';
 
@@ -23,6 +23,10 @@ const post = (p, body, ms) => fetch(URL_BASE + p, {
 // Tools that never need a human in voice mode.
 const SAFE = /^(Read|Glob|Grep|LS|TodoWrite|WebSearch|WebFetch|Task|Agent|ToolSearch|Skill|BashOutput|NotebookRead)$/;
 const ev = input.hook_event_name;
+// Free hands (settings.json `freeHands`, off unless you turn it on): Lax's voice and your scheduled jobs do what they need
+// without asking, like Claude Code's auto mode; deleting, logging in, root, leaving the machine and its guardrails still ask.
+const freeHands = (() => { try { return JSON.parse(fs.readFileSync(SETTINGS, 'utf8')).freeHands === true; } catch { return false; } })();
+const free = (tool, ti, cwd) => freeHands && freeAsk(tool, ti, cwd, { body: ROOT, home: HOME, mind: MIND }) === null;
 // Where the session runs, for its tab label: mac (Claude desktop app), cli (terminal, claude-lax), api (headless: Lax's voice, SDK), web (cloud).
 const entry = process.env.CLAUDE_CODE_ENTRYPOINT || '';
 input.lax_where = process.env.LAX_VOICE === '1' || entry.startsWith('sdk') ? 'api'
@@ -100,6 +104,7 @@ if (process.env.LAX_JOB) {
     const decide = (d, why) => console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: d, permissionDecisionReason: why } }));
     if (secret) decide('deny', 'Lax\'s secrets and database are never touched.');
     else if (ok) decide('allow', 'This scheduled job may.');
+    else if (free(t, ti, cwd)) decide('allow', 'Free hands: nothing deleted, no login, nothing leaves the machine.');
     else {
       const { decision, why } = await post('/api/ask', { ...input, lax_voice: true, lax_job: process.env.LAX_JOB }, ASK_MS).catch(() => ({}));
       decide(decision === 'allow' ? 'allow' : 'deny', decision === 'allow' ? 'Approved from Lax.' : decision === 'deny' ? 'The user said no on the phone.'
@@ -159,6 +164,8 @@ try {
     decide('allow', 'Lax\'s own mind.');
   } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && input.tool_name === 'Bash' && bashKind(cmd, input.cwd)) {
     decide('allow', bashKind(cmd, input.cwd) === 'read' ? 'Only looking (read-only command).' : 'A local step you can undo.');
+  } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && !SAFE.test(input.tool_name) && free(input.tool_name, ti, input.cwd || process.cwd())) {
+    decide('allow', 'Free hands: nothing deleted, no login, nothing leaves the machine.');
   } else if (ev === 'PreToolUse' && process.env.LAX_VOICE === '1' && !SAFE.test(input.tool_name)) {
     const { decision, why } = await post('/api/ask', { ...input, lax_voice: true }, ASK_MS);
     console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse',

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { bashKind, grantKey } from '../lib/allow.mjs';
+import { bashKind, grantKey, freeAsk } from '../lib/allow.mjs';
 
 const REPO = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const OUT = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'lax-allow-'))); // a folder outside any repo, not under /tmp rules
@@ -63,6 +63,29 @@ assert.equal(grantKey('Bash', { command: 'P=/tmp/x; chrome --screenshot' }), 'ba
 for (const c of ['git push', 'rm -rf build', 'curl -X POST x', 'gh pr create', 'open x.html', 'osascript -e x'])
   assert.equal(grantKey('Bash', { command: c }), null, c);
 assert.equal(grantKey('mcp__claude_ai_Google_Calendar__create_event', {}), null, 'connected apps always ask');
+
+// Free hands: like auto mode. Builds, installs, edits anywhere; asks to delete, log in, sudo, leave the machine, or touch its guardrails.
+const LAXHOME = path.join(OUT, '.lax'), MINDDIR = path.join(LAXHOME, 'mind'), opts = { body: REPO, home: LAXHOME, mind: MINDDIR };
+for (const c of ['npm install', 'npm run build', 'pip install numpy', 'python3 -m venv .venv && .venv/bin/pip install -r requirements.txt',
+  'node server.mjs --port 9999', 'echo hi > notes.md', 'sed -i s/a/b/ x.py', 'git checkout -b lax/x', 'git worktree add ../wt -b y',
+  'curl -sL https://example.com/x.tar.gz -o /tmp/x.tgz', 'cargo build --release', 'mv a b', 'pytest -q', 'git merge lax/x', 'gh pr view 3'])
+  assert.equal(freeAsk('Bash', { command: c }, REPO, opts), null, c);
+for (const c of ['rm -rf build', 'ls && rm x', 'git push -u origin x', 'git reset --hard HEAD~1', 'git clean -fd', 'git branch -D old',
+  'git worktree remove ../wt', 'git checkout -- lib/x.mjs', 'git restore .', 'sudo apt install x', 'gh auth login', 'claude login',
+  'npm login', 'npm publish', 'ssh box', 'scp a b:c', 'curl -X POST https://x', 'curl -d a=b https://x', 'find . -name x -delete',
+  'kill 123', 'systemctl --user restart lax', 'gh pr merge 3', 'gh pr create', `node ${path.join(REPO, 'lib/share.mjs')} send Rita`,
+  'echo x > hooks/lax-hook.mjs', 'cp x lib/allow.mjs', 'ssh-keygen -t ed25519', 'truncate -s 0 f', 'cloudflared tunnel list'])
+  assert.notEqual(freeAsk('Bash', { command: c }, REPO, opts), null, c);
+assert.notEqual(freeAsk('Bash', { command: 'cat hooks/lax-hook.mjs && echo x >> lib/allow.mjs' }, REPO, opts), null, 'reading then writing a guardrail');
+assert.equal(freeAsk('Bash', { command: 'grep -n x hooks/lax-hook.mjs' }, REPO, opts), null, 'reading a guardrail is fine');
+assert.equal(freeAsk('Edit', { file_path: path.join(REPO, 'server.mjs') }, REPO, opts), null);
+assert.equal(freeAsk('Write', { file_path: path.join(NOREPO, 'x.txt') }, REPO, opts), null, 'anywhere on the machine');
+assert.equal(freeAsk('Write', { file_path: path.join(MINDDIR, 'CLAUDE.md') }, REPO, opts), null);
+for (const f of [path.join(REPO, 'hooks/lax-hook.mjs'), path.join(REPO, 'lib/allow.mjs'), path.join(REPO, 'lib/guard.mjs'),
+  path.join(LAXHOME, 'settings.json'), path.join(LAXHOME, 'secrets/token'), path.join(os.homedir(), '.claude/settings.json'),
+  path.join(os.homedir(), '.ssh/config'), path.join(NOREPO, '.env')])
+  assert.notEqual(freeAsk('Write', { file_path: f }, REPO, opts), null, f);
+assert.notEqual(freeAsk('mcp__claude_ai_Gmail__send', {}, REPO, opts), null, 'connected apps act as you');
 
 fs.rmSync(OUT, { recursive: true, force: true });
 console.log('allow: ok');
