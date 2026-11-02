@@ -139,6 +139,7 @@ function pixIcon(name) {
   const rows = {
     sun: ['....#....', '.#.....#.', '...###...', '..#####..', '#.#####.#', '..#####..', '...###...', '.#.....#.', '....#....'],
     moon: ['..##.###.', '.##....#.', '##....#..', '##...###.', '##.......', '##.......', '.##....##', '..######.', '...####..'],
+    stop: ['.........', '.#######.', '.#######.', '.#######.', '.#######.', '.#######.', '.#######.', '.#######.', '.........'],
     clip: ['...###...', '.##.#.##.', '.#######.', '.#.....#.', '.#.###.#.', '.#.....#.', '.#.###.#.', '.#.....#.', '.#######.'],
   }[name];
   const px = rows.flatMap((r, y) => [...r].map((c, x) => c === '#' ? `<rect x="${x}" y="${y}" width="1" height="1"/>` : '')).join('');
@@ -960,7 +961,7 @@ $('#paste').onclick = typeInstead; // always there: type, or paste a link or tex
 { let press = null;
   const inside = (e) => { const r = topEl.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
   topEl.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('#hud, #bubble, #paste, #awake') || wakeEl.isConnected || lifeEl.classList.contains('open')) return;
+    if (e.target.closest('#hud, #bubble, #paste, #awake, #stop, #stopPop') || wakeEl.isConnected || lifeEl.classList.contains('open')) return;
     if (EGG) { eggTapAt = performance.now(); return; }
     if (shell) eggTapAt = performance.now();
     try { topEl.setPointerCapture(e.pointerId); } catch {}
@@ -1181,10 +1182,23 @@ async function openVisual(name) {
 }
 // Hung runs and tests on the Mac (lib/stuck.mjs): a tap stops one, and everything it started.
 const ago = (s) => s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h`;
+// The same list sits on the main screen: the ■ button (red, with a count, when something is stuck) opens it.
 async function loadStuck() {
   try { const { stuck = [] } = await getJson('/api/stuck'); $('#stuckRow').hidden = !stuck.length;
-    $('#stuckList').innerHTML = stuck.map((p) => `<button data-pid="${p.pid}">■ ${esc(p.what)} · ${ago(p.secs)}${p.cwd ? ` · ${esc(p.cwd.split('/').pop())}` : ''}</button>`).join(''); } catch {}
+    const rows = stuck.map((p) => `<button data-pid="${p.pid}">■ ${esc(p.what)} · ${ago(p.secs)}${p.cwd ? ` · ${esc(p.cwd.split('/').pop())}` : ''}</button>`).join('');
+    $('#stuckList').innerHTML = rows;
+    $('#stopList').innerHTML = rows || '<p>nothing stuck right now</p>';
+    $('#stop').classList.toggle('on', stuck.length > 0); $('#stopN').textContent = stuck.length || ''; } catch {}
 }
+$('#stop').innerHTML = pixIcon('stop') + '<b id="stopN"></b>';
+$('#stop').onclick = () => { const open = !$('#stopPop').classList.contains('open'); $('#stopPop').classList.toggle('open', open); if (open && !DEMO) loadStuck(); };
+document.addEventListener('pointerdown', (e) => { if (!e.target.closest('#stop, #stopPop')) $('#stopPop').classList.remove('open'); });
+if (!DEMO) { loadStuck(); setInterval(() => { if (!document.hidden) loadStuck(); }, 20e3); }
+$('#stopList').addEventListener('click', async (e) => {
+  const b = e.target.closest('button[data-pid]'); if (!b) return;
+  b.disabled = true; b.textContent = 'stopping…';
+  await api('/api/stuck/stop', { pid: Number(b.dataset.pid) }).catch(() => null); loadStuck();
+});
 $('#stuckList').addEventListener('click', async (e) => {
   const b = e.target.closest('button[data-pid]'); if (!b) return;
   b.disabled = true; b.textContent = 'stopping…';
