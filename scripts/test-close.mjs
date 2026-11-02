@@ -37,14 +37,14 @@ const tabs = () => phone.filter((e) => e.ev === 'state').pop()?.d?.sessions?.map
 const said = async (re) => { for (let i = 0; i < 40; i++) { const b = phone.filter((e) => e.ev === 'bubble' && re.test(e.d.text || '')).pop(); if (b) return b.d; await sleep(250); } return null; };
 
 // A stand-in claude per session, and its SessionStart as the hooks send it.
-// On Linux a copied sleep may be a multicall binary that goes by its name (uutils, Ubuntu 25.10+): node, by a link
-// named claude (its process name), waits instead.
+// On Linux a copied sleep may be a multicall binary that goes by its name (uutils, Ubuntu 25.10+), and node renames
+// itself MainThread: sh, by a link named claude (its process name), waits on a pipe instead (a builtin, no child).
 const LINUX = process.platform === 'linux';
 const bin = path.join(DATA, 'bin'); fs.mkdirSync(bin);
-if (LINUX) fs.symlinkSync(process.execPath, path.join(bin, 'claude')); else fs.symlinkSync('/bin/sleep', path.join(bin, 'claude')); // a link, not a copy: macOS kills a copied Apple binary (SIGKILL)
+fs.symlinkSync(LINUX ? '/bin/sh' : '/bin/sleep', path.join(bin, 'claude')); // a link, not a copy: macOS kills a copied Apple binary (SIGKILL)
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 async function open(sid, project) {
-  const p = spawn(path.join(bin, 'claude'), LINUX ? ['-e', 'setTimeout(() => {}, 600e3)'] : ['600'], { stdio: 'ignore' }); fakes.push(p);
+  const p = spawn(path.join(bin, 'claude'), LINUX ? ['-c', 'read x'] : ['600'], { stdio: [LINUX ? 'pipe' : 'ignore', 'ignore', 'ignore'] }); fakes.push(p);
   const exited = new Promise((r) => p.on('exit', r));
   await post('/api/hook', { hook_event_name: 'SessionStart', session_id: sid, cwd: `/tmp/${project}`, lax_session_pid: p.pid, lax_where: 'cli' });
   return { p, exited };
@@ -57,8 +57,7 @@ check('both sessions have a tab', tabs().includes('quokka') && tabs().includes('
 await post('/api/talk', { text: 'close the quokka session', voice: true });
 const closed = await said(/^Closed quokka/);
 await Promise.race([quo.exited, sleep(2000)]);
-check('"close the quokka session": its claude ends', !!closed && !alive(quo.p.pid), closed?.text);
-await sleep(200);
+check('"close the quokka session": its claude ends', !!closed && !alive(quo.p.pid), closed?.text);await sleep(200);
 check('…its tab leaves the phone, the other stays', !tabs().includes('quokka') && tabs().includes('wombat-pond'), JSON.stringify(tabs()));
 
 await post('/api/talk', { text: 'close the zorblat session', voice: true });
