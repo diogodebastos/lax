@@ -67,9 +67,20 @@
 
   /* The hint sits on Lax's ground: a dotted line on both sides of the text, never behind it. */
   #hint { position:absolute; bottom:4px; left:0; right:0; padding:0 4px; display:flex; align-items:center; gap:6px; font-size:13px; color:var(--dim); z-index:2; white-space:nowrap; }
-  #awake, #paste { position:absolute; right:6px; bottom:52px; z-index:2; width:40px; height:40px; border:2px solid var(--dim); border-radius:8px; background:var(--bg); color:var(--coral); cursor:pointer; padding:0; display:grid; place-items:center; }
-  #awake svg, #paste svg { width:27px; height:27px; shape-rendering:crispEdges; }
+  #awake, #paste, #stop { position:absolute; right:6px; bottom:52px; z-index:2; width:40px; height:40px; border:2px solid var(--dim); border-radius:8px; background:var(--bg); color:var(--coral); cursor:pointer; padding:0; display:grid; place-items:center; }
+  #awake svg, #paste svg, #stop svg { width:27px; height:27px; shape-rendering:crispEdges; }
   #awake { bottom:98px; }
+  /* Stop: hung runs and tests (lib/stuck.mjs), one tap away on the main screen. Quiet when nothing is stuck, red with a count when something is. */
+  #stop { bottom:144px; color:var(--dim); }
+  #stop.on { color:var(--red); border-color:var(--red); }
+  #stop b { position:absolute; top:-7px; right:-7px; min-width:18px; height:18px; padding:0 4px; border-radius:9px; background:var(--red); color:#fff; font:13px/18px inherit; display:none; }
+  #stop.on b { display:block; }
+  #stopPop { position:absolute; right:52px; bottom:52px; z-index:3; width:min(270px, calc(100% - 64px)); max-height:60%; overflow-y:auto; background:var(--bg); border:2px solid var(--dim); border-radius:8px; padding:8px; display:none; }
+  #stopPop.open { display:block; }
+  #stopPop h3 { font-size:15px; color:var(--dim); font-weight:normal; margin:0 0 6px; }
+  #stopPop button { display:block; width:100%; text-align:left; font:inherit; font-size:15px; color:var(--fg); background:none; border:2px solid var(--red); border-radius:6px; padding:5px 7px; margin-top:6px; cursor:pointer; }
+  #stopPop button:disabled { opacity:.5; }
+  #stopPop p { font-size:15px; color:var(--dim); margin:0; }
   #hint::before, #hint::after { content:''; flex:1; min-width:8px; height:2px; background:repeating-linear-gradient(90deg, var(--dot) 0 2px, transparent 2px 6px); }
 
   /* Terminal feed */
@@ -284,6 +295,8 @@
     <div id="hint">tap Lax to talk</div>
     <button id="awake" aria-label="awake or asleep: may I work on my own"></button>
     <button id="paste" aria-label="type or paste a message"></button>
+    <button id="stop" aria-label="stop a stuck run"><b id="stopN"></b></button>
+    <div id="stopPop"><h3>stuck · tap one to stop it</h3><div id="stopList"></div></div>
   </div>
   <div id="bottom">
   <div id="chips"></div>
