@@ -161,5 +161,21 @@ if (last) await post('/api/decide', { id: last.d.id, decision: 'deny' });
 await fresh;
 await post('/api/settings', { phoneApprovals: true });
 
+// Claude Code gone: a linked channel goes too, whether its stdio is shut or its claude died and left it to init.
+{
+  const CH = path.join(ROOT, 'channel', 'lax-channel.mjs'), CENV = { ...ENV, LAX_CHANNEL_FORCE: '1' };
+  const exited = (pid, ms) => new Promise(async (r) => { for (let t = 0; t < ms; t += 100) { try { process.kill(pid, 0); } catch { return r(true); } await sleep(100); } r(false); });
+  const lone = spawn(process.execPath, ['--no-warnings', CH], { env: CENV, stdio: ['pipe', 'ignore', 'ignore'] });
+  await sleep(1000); lone.stdin.end();
+  check('a linked channel whose session shuts stdio exits', await exited(lone.pid, 3000));
+  // Its claude (sh here) dies; stdin stays open, held by this test, as by a leftover grandchild.
+  const sh = spawn('/bin/sh', ['-c', `"${process.execPath}" --no-warnings "${CH}" <&0 >/dev/null 2>&1 & echo $!`], { env: CENV, stdio: ['pipe', 'pipe', 'ignore'] });
+  let out = ''; sh.stdout.on('data', (d) => (out += d)); await new Promise((r) => sh.on('exit', r));
+  const orphan = Number(out.trim());
+  check('…and one whose claude died, left to init, exits too', orphan > 0 && await exited(orphan, 8000), `pid ${orphan}`);
+  try { process.kill(orphan); } catch {}
+  sh.stdin.end();
+}
+
 console.log(failed ? `\n${failed} check(s) failed` : '\nall channel checks passed');
 process.exit(failed ? 1 : 0);
