@@ -251,6 +251,11 @@ mcp.setNotificationHandler(z.object({
 }), async ({ params }) => { await post({ type: 'permission', ...params }); });
 
 await mcp.connect(new StdioServerTransport());
+// Claude Code gone (its end of stdio shut, or it died and left us to systemd/init): go too. The link to Lax below
+// would otherwise keep this alive for good; dozens of them were left behind by Lax's own runs, ~100 MB each.
+const PARENT = process.ppid, bye = () => process.exit(0);
+process.stdin.on('end', bye).on('close', bye);
+setInterval(() => { if (process.ppid !== PARENT) bye(); }, 5000).unref();
 
 // Lax server → channel: messages from the phone and permission verdicts, over a loopback SSE stream.
 async function listen() {
