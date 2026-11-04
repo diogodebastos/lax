@@ -7,9 +7,10 @@ import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { freePort } from './free-port.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const PORT = 7798, LAX = `http://127.0.0.1:${PORT}`, DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-test-'));
+const PORT = await freePort(), LAX = `http://127.0.0.1:${PORT}`, DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-test-'));
 // A throwaway Lax home: memory, secrets and mind all in a temp folder.
 // One pretend Claude Code session (its pid) for the channel and the hooks, so this runs the same with or without a real
 // claude above it (Lax runs the tests from its server when it builds something it learned).

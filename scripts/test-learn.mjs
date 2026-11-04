@@ -10,9 +10,10 @@ import http from 'node:http';
 import { spawn, execFileSync } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { freePort } from './free-port.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const PORT = 7795, LAX = `http://127.0.0.1:${PORT}`, HOME = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'lax-learn-')));
+const PORT = await freePort(), LAX = `http://127.0.0.1:${PORT}`, HOME = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'lax-learn-')));
 const BODY = path.join(HOME, 'body'), ORIGIN = path.join(HOME, 'origin.git'), PROJ = path.join(HOME, 'edge-cava');
 const GIT_ENV = { GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 'Test', GIT_COMMITTER_EMAIL: 't@t', GIT_CONFIG_GLOBAL: '/dev/null' };
 const sh = (cwd, ...a) => execFileSync('git', ['-C', cwd, ...a], { encoding: 'utf8', env: { ...process.env, ...GIT_ENV }, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -174,9 +175,10 @@ check('…and it says so in its log', /rolled back/.test(fs.readFileSync(path.jo
 // after-merge on its own: a healthy restart pushes main (to their own repo only) and tells Lax.
 {
   sh(BODY, 'commit', '-q', '--allow-empty', '-m', 'merged thing');
+  const P0 = await freePort(), P1 = await freePort();
   const told0 = [], lax0 = http.createServer((req, res) => { let b = ''; req.on('data', (d) => (b += d)); req.on('end', () => {
-    if (req.url === '/api/learn/merged') told0.push(JSON.parse(b)); res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ ok: true, started: Date.now() })); }); }).listen(7796);
-  await new Promise((r) => spawn(process.execPath, [path.join(BODY, 'scripts', 'after-merge.mjs'), BODY, before, 'w1'], { env: { ...ENV, LAX_URL: 'http://127.0.0.1:7796', FAKE_GH_PERM: 'READ' }, stdio: 'ignore' }).on('close', r));
+    if (req.url === '/api/learn/merged') told0.push(JSON.parse(b)); res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ ok: true, started: Date.now() })); }); }).listen(P0);
+  await new Promise((r) => spawn(process.execPath, [path.join(BODY, 'scripts', 'after-merge.mjs'), BODY, before, 'w1'], { env: { ...ENV, LAX_URL: `http://127.0.0.1:${P0}`, FAKE_GH_PERM: 'READ' }, stdio: 'ignore' }).on('close', r));
   lax0.close();
   check('a clone of someone else\'s repo: healthy, but main is never pushed there', sh(ORIGIN, 'rev-parse', 'main') !== sh(BODY, 'rev-parse', 'main') && told0[0]?.ok === true && told0[0]?.pushed === false, JSON.stringify(told0));
   const told = [];
@@ -185,8 +187,8 @@ check('…and it says so in its log', /rolled back/.test(fs.readFileSync(path.jo
       if (req.url === '/api/learn/merged') told.push(JSON.parse(b));
       res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ ok: true, started: Date.now() }));
     });
-  }).listen(7794);
-  await new Promise((r) => spawn(process.execPath, [path.join(BODY, 'scripts', 'after-merge.mjs'), BODY, before, 'w1'], { env: { ...ENV, LAX_URL: 'http://127.0.0.1:7794' }, stdio: 'ignore' }).on('close', r));
+  }).listen(P1);
+  await new Promise((r) => spawn(process.execPath, [path.join(BODY, 'scripts', 'after-merge.mjs'), BODY, before, 'w1'], { env: { ...ENV, LAX_URL: `http://127.0.0.1:${P1}` }, stdio: 'ignore' }).on('close', r));
   fakeLax.close();
   check('healthy after the restart → main stays on the Mac, never pushed', sh(ORIGIN, 'rev-parse', 'main') !== sh(BODY, 'rev-parse', 'main') && told[0]?.pushed === false);
   check('…and Lax hears it went well', told[0]?.id === 'w1' && told[0]?.ok === true, JSON.stringify(told));

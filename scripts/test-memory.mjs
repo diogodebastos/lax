@@ -8,9 +8,10 @@ import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { freePort } from './free-port.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const PORT = 7796, LAX = `http://127.0.0.1:${PORT}`, HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-memory-'));
+const PORT = await freePort(), LAX = `http://127.0.0.1:${PORT}`, HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-memory-'));
 const MIND = path.join(HOME, 'mind'), SKILLS = path.join(HOME, 'claude-skills'), CC = path.join(HOME, 'cc-projects');
 const PROJ = path.join(HOME, 'demo-proj'); fs.mkdirSync(PROJ);
 

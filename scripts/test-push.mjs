@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { freePort } from './free-port.mjs';
 
 const HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-push-'));
 process.env.LAX_HOME = HOME;
@@ -51,7 +52,7 @@ check('…ES256, for the push service\'s origin, under 24 hours, with an https c
 // On a throwaway Lax, with a fake push service: a session that asks while no page is open reaches the phone as a push,
 // and its answer on the phone still goes back to the hook. A push service that says it's gone (410) loses it.
 const { spawn } = await import('node:child_process'), http = await import('node:http');
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..'), PORT = 7818, LAX = `http://127.0.0.1:${PORT}`, LH = path.join(HOME, 'lax');
+const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..'), PORT = await freePort(), LAX = `http://127.0.0.1:${PORT}`, LH = path.join(HOME, 'lax');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const got2 = []; let reply = 201;
 const fake = http.createServer((req, res) => { const b = []; req.on('data', (d) => b.push(d)); req.on('end', () => { got2.push({ headers: req.headers, body: Buffer.concat(b) }); res.writeHead(reply); res.end(); }); });

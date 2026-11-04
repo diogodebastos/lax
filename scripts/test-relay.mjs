@@ -11,9 +11,10 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { spawn, execFileSync } from 'node:child_process';
 import { startRelay } from '../lib/relay.mjs';
+import { freePort } from './free-port.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const W = 8799, RELAY = `http://127.0.0.1:${W}`, KEY = 'test-key-' + crypto.randomBytes(4).toString('hex'), ECHO = 7814, LAXP = 7815;
+const W = await freePort(), RELAY = `http://127.0.0.1:${W}`, KEY = 'test-key-' + crypto.randomBytes(4).toString('hex'), ECHO = await freePort(), LAXP = await freePort();
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-relay-'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = 0;

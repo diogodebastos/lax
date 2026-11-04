@@ -6,9 +6,10 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { freePort } from './free-port.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const PORT = 7817, LAX = `http://127.0.0.1:${PORT}`, HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-seal-'));
+const PORT = await freePort(), LAX = `http://127.0.0.1:${PORT}`, HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-seal-'));
 const ENV = { ...process.env, LAX_HOME: HOME, LAX_DATA: '', LAX_PORT: String(PORT), LAX_PUBLIC_URL: 'https://lax.example.com', LAX_CLAUDE: '/usr/bin/false', LAX_WHISPER: '0' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = 0;

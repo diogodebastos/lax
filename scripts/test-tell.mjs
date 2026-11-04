@@ -8,6 +8,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { matchSession } from '../lib/tell.mjs';
+import { freePort } from './free-port.mjs';
 
 let failed = 0;
 const check = (name, ok, extra = '') => { console.log(`${ok ? '✓' : '✗'} ${name}${extra ? '  ' + extra : ''}`); if (!ok) failed++; };
@@ -25,7 +26,7 @@ check('no name, one session → that one; several → ask', matchSession([live[0
 
 // ---------- end to end ----------
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const PORT = 7796, LAX = `http://127.0.0.1:${PORT}`, DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-tell-'));
+const PORT = await freePort(), LAX = `http://127.0.0.1:${PORT}`, DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-tell-'));
 const REPORTS = path.join(DATA, 'reports'); fs.mkdirSync(REPORTS);
 const ENV = { ...process.env, LAX_HOME: DATA, LAX_PORT: String(PORT), LAX_URL: LAX, LAX_PUBLIC_URL: '', LAX_SESSION_PID: String(process.pid) };
 delete ENV.LAX_DATA; delete ENV.LAX_VOICE; delete ENV.LAX_BUILD; // a build's fence on its own steps isn't the hook under test

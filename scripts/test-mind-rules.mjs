@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { freePort } from './free-port.mjs';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-rules-'));
 process.env.LAX_HOME = path.join(tmp, 'home');
@@ -27,7 +28,7 @@ check('an older mind gets them once, keeping what was there', JSON.stringify(p.a
   && p.deny[0] === 'Read(//x)' && JSON.parse(fs.readFileSync(FILE, 'utf8')).model === 'x', JSON.stringify(p));
 
 // A Lax started the way launchd starts it: no node on PATH. Its "claude" says which node a hook would get.
-const fake = path.join(tmp, 'claude'), seen = path.join(tmp, 'node-seen'), PORT = 7819, LH = path.join(tmp, 'lax');
+const fake = path.join(tmp, 'claude'), seen = path.join(tmp, 'node-seen'), PORT = await freePort(), LH = path.join(tmp, 'lax');
 fs.writeFileSync(fake, `#!/bin/sh\ncommand -v node > "${seen}"\n`, { mode: 0o755 });
 const server = spawn(process.execPath, ['--no-warnings', path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'server.mjs')], { stdio: ['ignore', 'pipe', 'ignore'],
   env: { HOME: os.homedir(), PATH: '/usr/bin:/bin:/usr/sbin:/sbin', LAX_HOME: LH, LAX_PORT: String(PORT), LAX_CLAUDE: fake, LAX_WHISPER: '0' } });
