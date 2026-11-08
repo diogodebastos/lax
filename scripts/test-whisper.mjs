@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import * as whisper from '../lib/whisper.mjs';
+import { freePort } from './free-port.mjs';
 
 let failed = 0;
 const check = (name, ok, extra = '') => { console.log(`${ok ? '✓' : '✗'} ${name}${extra ? '  ' + extra : ''}`); if (!ok) failed++; };
@@ -43,7 +44,7 @@ if (whisper.available() && process.platform === 'darwin') {
     execFileSync('say', ['-v', 'Daniel', '-o', path.join(TMP, 'a.aiff'), 'Lax, open the fisicai project and run the tests.']);
     execFileSync('afconvert', ['-f', 'WAVE', '-d', 'LEI16@16000', '-c', '1', path.join(TMP, 'a.aiff'), path.join(TMP, 'a.wav')]);
     const f = fs.readFileSync(path.join(TMP, 'a.wav')), data = f.indexOf('data'), spoken = f.subarray(data + 8, data + 8 + f.readUInt32LE(data + 4));
-    whisper.start({ port: 7790 });
+    whisper.start({ port: await freePort() });
     for (let i = 0; i < 100 && !whisper.running(); i++) await new Promise((r) => setTimeout(r, 200));
     const t0 = Date.now(), text = await whisper.transcribe(spoken, { lang: 'en-US', words: ['Lax', 'fisicai'], timeout: 20000 });
     check('a spoken sentence comes back with its names right', /\bLax\b/.test(text || '') && /fisicai/.test(text || ''), `${JSON.stringify(text)} in ${Date.now() - t0}ms`);
