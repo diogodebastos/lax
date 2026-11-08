@@ -2,13 +2,24 @@
 // the Mac first; when the Mac can't answer (asleep behind the relay, 503; down behind the tunnel, 5xx or no network),
 // the last copy, so a reload still shows Lax asleep as it last looked. Only the page's own files: never /api/, never
 // another site's. Nothing of yours is kept here; what the page remembers is in its own storage (lax.js, lax_last).
-const CACHE = 'lax-page-v1';
-const PAGE = /^\/(|index\.html|lax\.js|heard\.js|body\.js|favicon\.svg|demo\/favicon\.svg)$/;
+const CACHE = 'lax-page-v3';
+const PAGE = /^\/(|index\.html|lax\.js|heard\.js|chip\.js|body\.js|favicon\.svg|demo\/favicon\.svg|manifest\.webmanifest|apple-touch-icon\.png)$/;
 
 // Kept from the start, not only from the second load (the first one's files came before this worker was there).
-const FILES = ['/', '/lax.js', '/heard.js', '/chip.js', '/body.js'];
+const FILES = ['/', '/lax.js', '/heard.js', '/chip.js', '/body.js', '/manifest.webmanifest', '/apple-touch-icon.png'];
 self.addEventListener('install', (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).catch(() => {}).then(() => self.skipWaiting())));
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+
+// A session that needs you (lib/push.mjs): always a notification, even from a push it can't read (iOS takes the
+// permission away from a push that shows none). No buttons (iOS has none): a tap opens Lax, where its question waits.
+self.addEventListener('push', (e) => {
+  let m = {}; try { m = e.data.json(); } catch {}
+  e.waitUntil(self.registration.showNotification(m.title || 'Lax', { body: m.body || 'a session needs you', tag: m.id || 'lax', data: { id: m.id }, icon: '/apple-touch-icon.png' }));
+});
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((ws) => (ws[0] ? ws[0].focus() : self.clients.openWindow('/index.html'))));
+});
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);

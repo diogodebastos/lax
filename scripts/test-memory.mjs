@@ -8,9 +8,10 @@ import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { freePort } from './free-port.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const PORT = 7796, LAX = `http://127.0.0.1:${PORT}`, HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-memory-'));
+const PORT = await freePort(), LAX = `http://127.0.0.1:${PORT}`, HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-memory-'));
 const MIND = path.join(HOME, 'mind'), SKILLS = path.join(HOME, 'claude-skills'), CC = path.join(HOME, 'cc-projects');
 const PROJ = path.join(HOME, 'demo-proj'); fs.mkdirSync(PROJ);
 
@@ -49,7 +50,7 @@ if (prompt.startsWith('Recall from')) {
 
 const ENV = { ...process.env, LAX_HOME: HOME, LAX_PORT: String(PORT), LAX_URL: LAX, LAX_PUBLIC_URL: '', LAX_CLAUDE: FAKE,
   LAX_REFLECT_IDLE: '1', LAX_MIGRATE_AFTER: '1', LAX_SKILLS_DIR: SKILLS, LAX_CLAUDE_PROJECTS: CC, LAX_SESSION_PID: String(process.pid) };
-delete ENV.LAX_DATA;
+delete ENV.LAX_DATA; delete ENV.LAX_BUILD; // a build's fence on its own steps isn't the hook under test
 const server = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server.mjs')], { env: ENV, stdio: 'ignore' });
 const cleanup = () => { server.kill(); fs.rmSync(HOME, { recursive: true, force: true }); };
 process.on('exit', cleanup);
@@ -115,7 +116,7 @@ check('…and recall answers through it', /restarting cloudflared/.test(ans.cont
 const me = await plain.c.callTool({ name: 'self', arguments: {} }), mine = JSON.parse(me.content[0].text);
 check('…and self says how Lax looks today (Phase 6.2)', !me.isError && mine.face.startsWith('<svg') && mine.css.includes('--accent:') && mine.self_md.includes('# How I see myself'));
 await plain.c.close();
-for (const [env, want, what] of [[{ LAX_CHANNEL_FORCE: '1' }, 'gap,misheard,recall,reply,schedule,self,share', 'a live lax session'], [{ LAX_CHANNEL_FORCE: '0', LAX_VOICE: '1' }, 'gap,misheard,schedule,self,tell', 'the voice assistant'],
+for (const [env, want, what] of [[{ LAX_CHANNEL_FORCE: '1' }, `gap,misheard,recall,reply,schedule,self${process.platform === 'darwin' ? ',share' : ''}`, 'a live lax session'], [{ LAX_CHANNEL_FORCE: '0', LAX_VOICE: '1' }, 'gap,misheard,schedule,self,tell', 'the voice assistant'],
   [{ LAX_CHANNEL_FORCE: '0', LAX_JOB: 'j1' }, 'recall,self', 'a scheduled job'],
   [{ LAX_CHANNEL_FORCE: '0', LAX_VOICE: '1', LAX_REFLECT: '1' }, '', 'a reflection'], [{ LAX_CHANNEL_FORCE: '0', LAX_RECALL: '1' }, '', 'a recall run']]) {
   const t = await tools(env); check(`${what}: ${want || 'no tools'}`, t.names === want, t.names); await t.c.close();

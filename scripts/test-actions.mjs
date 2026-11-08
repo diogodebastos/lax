@@ -11,10 +11,11 @@ import { createRequire } from 'node:module';
 import { voiceAction, sendAction, screenMode, readStatus, tabCommand } from '../lib/actions.mjs';
 import { verdict, laterFor, WISH_ASK, MERGE_IT } from '../lib/learn.mjs';
 import { FRESH } from '../lib/talk.mjs';
+import { freePort } from './free-port.mjs';
 
 const pty = createRequire(import.meta.url)('node-pty');
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const PORT = 7796, LAX = `http://127.0.0.1:${PORT}`, HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-act-'));
+const PORT = await freePort(), LAX = `http://127.0.0.1:${PORT}`, HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-act-'));
 const ENV = { ...process.env, LAX_HOME: HOME, LAX_PORT: String(PORT), LAX_URL: LAX, LAX_PUBLIC_URL: '' };
 delete ENV.LAX_DATA;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

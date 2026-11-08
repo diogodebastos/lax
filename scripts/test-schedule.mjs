@@ -8,9 +8,10 @@ import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { freePort } from './free-port.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const PORT = 7797, LAX = `http://127.0.0.1:${PORT}`, HOME = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'lax-schedule-')));
+const PORT = await freePort(), LAX = `http://127.0.0.1:${PORT}`, HOME = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'lax-schedule-')));
 const PROJ = path.join(HOME, 'edge-cava');
 fs.mkdirSync(PROJ);
 let failed = 0;
@@ -40,7 +41,7 @@ check('said back plainly', describeWhen(parseWhen({ time: '08:30', days: 'weekda
 
 // ---------- the job fence ----------
 const hook = (env, h) => { const o = execFileSync(process.execPath, [path.join(ROOT, 'hooks', 'lax-hook.mjs')],
-  { env: { ...process.env, LAX_URL: 'http://127.0.0.1:1', LAX_JOB: 'j1', LAX_JOB_DIR: PROJ, ...env }, encoding: 'utf8', input: JSON.stringify({ hook_event_name: 'PreToolUse', cwd: PROJ, ...h }) });
+  { env: { ...process.env, LAX_BUILD: '', LAX_URL: 'http://127.0.0.1:1', LAX_JOB: 'j1', LAX_JOB_DIR: PROJ, ...env }, encoding: 'utf8', input: JSON.stringify({ hook_event_name: 'PreToolUse', cwd: PROJ, ...h }) });
   return JSON.parse(o || '{}').hookSpecificOutput?.permissionDecision; };
 fs.mkdirSync(path.join(HOME, 'secrets'), { recursive: true }); fs.writeFileSync(path.join(HOME, 'secrets', 'token'), 'x');
 check('a job reads, searches and runs read-only commands', hook({}, { tool_name: 'Read', tool_input: { file_path: path.join(PROJ, 'a') } }) === 'allow'
@@ -111,7 +112,7 @@ const runsLog = () => { try { return fs.readFileSync(path.join(HOME, 'runs.log')
 // ---------- end to end: the voice assistant's `schedule` tool, "yes" said on the phone, "run it now" ----------
 fs.rmSync(path.join(HOME, 'jobs.json'), { force: true }); fs.rmSync(path.join(HOME, 'secrets'), { recursive: true, force: true });
 const ENV = { ...process.env, LAX_HOME: HOME, LAX_PORT: String(PORT), LAX_URL: LAX, LAX_PUBLIC_URL: '', LAX_CLAUDE: FAKE, LAX_MIGRATE_AFTER: '9999' };
-delete ENV.LAX_DATA;
+delete ENV.LAX_DATA; delete ENV.LAX_BUILD; // a build's fence on its own steps isn't the hook under test
 const server = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server.mjs')], { env: ENV, stdio: 'ignore' });
 process.on('exit', () => { server.kill(); fs.rmSync(HOME, { recursive: true, force: true }); });
 for (let i = 0; i < 50 && !fs.existsSync(path.join(HOME, 'secrets', 'token')); i++) await sleep(100);

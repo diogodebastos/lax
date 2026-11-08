@@ -6,15 +6,15 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { HOME, MIND, SECRETS, LOGS, DB, ensureDirs } from '../lib/paths.mjs';
 import { CLAUDE_MD, ensureHome, commitMind } from '../lib/home.mjs';
+import { SERVER, TUNNEL, LINUX, stopArgs } from '../lib/service.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const OLD = path.join(ROOT, 'data');
 const dry = process.argv.includes('--dry-run');
 const say = (s) => console.log((dry ? '[dry] ' : '') + s);
-const DOMAIN = `gui/${process.getuid()}`;
 
-if (!dry) for (const label of ['digi-lax.server', 'digi-lax.tunnel', 'com.diogodebastos.lax', 'com.diogodebastos.lax-tunnel']) {
-  try { execFileSync('launchctl', ['bootout', `${DOMAIN}/${label}`], { stdio: 'ignore' }); say(`stopped ${label}`); } catch {}
+if (!dry) for (const label of [SERVER, TUNNEL, ...(LINUX ? [] : ['com.diogodebastos.lax', 'com.diogodebastos.lax-tunnel'])]) {
+  try { const [c, ...a] = stopArgs(label); execFileSync(c, a, { stdio: 'ignore' }); say(`stopped ${label}`); } catch {}
 }
 if (!dry) ensureDirs();
 

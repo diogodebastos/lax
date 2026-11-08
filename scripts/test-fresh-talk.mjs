@@ -4,9 +4,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { freePort } from './free-port.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const PORT = 7792, LAX = `http://127.0.0.1:${PORT}`, HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-fresh-'));
+const PORT = await freePort(), LAX = `http://127.0.0.1:${PORT}`, HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-fresh-'));
 const CALLS = path.join(HOME, 'calls.jsonl'), TOKENS = path.join(HOME, 'tokens');
 
 // A fake `claude -p --output-format stream-json`: notes its arguments, resumes or starts a session, keeps a transcript

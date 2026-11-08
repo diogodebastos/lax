@@ -1,14 +1,15 @@
 // "Close the quokka session" by voice, end to end on a PRIVATE Lax (own port + temp data dir): the session's claude
 // process ends, its tab leaves the phone, a busy one asks first, a dead one is only reported. The claude is a stand-in:
-// a copy of `sleep` named claude, so the hub's "is it a running claude?" check (lib/claude-pid.mjs) holds.
+// `sleep` linked as claude, so the hub's "is it a running claude?" check (lib/claude-pid.mjs) holds.
 // The hub also lists the real sessions on this Mac (~/.claude/sessions), so the names here are ones no project has.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { freePort } from './free-port.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const PORT = 7811, LAX = `http://127.0.0.1:${PORT}`, DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-test-'));
+const PORT = await freePort(), LAX = `http://127.0.0.1:${PORT}`, DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-test-'));
 const ENV = { ...process.env, LAX_HOME: DATA, LAX_PORT: String(PORT), LAX_URL: LAX, LAX_PUBLIC_URL: '', LAX_CLAUDE: '/usr/bin/false' };
 delete ENV.LAX_DATA;
 const server = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server.mjs')], { env: ENV, stdio: 'ignore' });
@@ -37,10 +38,14 @@ const tabs = () => phone.filter((e) => e.ev === 'state').pop()?.d?.sessions?.map
 const said = async (re) => { for (let i = 0; i < 40; i++) { const b = phone.filter((e) => e.ev === 'bubble' && re.test(e.d.text || '')).pop(); if (b) return b.d; await sleep(250); } return null; };
 
 // A stand-in claude per session, and its SessionStart as the hooks send it.
-const bin = path.join(DATA, 'bin'); fs.mkdirSync(bin); fs.copyFileSync('/bin/sleep', path.join(bin, 'claude'));
+// On Linux a copied sleep may be a multicall binary that goes by its name (uutils, Ubuntu 25.10+), and node renames
+// itself MainThread: sh, by a link named claude (its process name), waits on a pipe instead (a builtin, no child).
+const LINUX = process.platform === 'linux';
+const bin = path.join(DATA, 'bin'); fs.mkdirSync(bin);
+fs.symlinkSync(LINUX ? '/bin/sh' : '/bin/sleep', path.join(bin, 'claude')); // a link, not a copy: macOS kills a copied Apple binary (SIGKILL)
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 async function open(sid, project) {
-  const p = spawn(path.join(bin, 'claude'), ['600'], { stdio: 'ignore' }); fakes.push(p);
+  const p = spawn(path.join(bin, 'claude'), LINUX ? ['-c', 'read x'] : ['600'], { stdio: [LINUX ? 'pipe' : 'ignore', 'ignore', 'ignore'] }); fakes.push(p);
   const exited = new Promise((r) => p.on('exit', r));
   await post('/api/hook', { hook_event_name: 'SessionStart', session_id: sid, cwd: `/tmp/${project}`, lax_session_pid: p.pid, lax_where: 'cli' });
   return { p, exited };
@@ -53,8 +58,7 @@ check('both sessions have a tab', tabs().includes('quokka') && tabs().includes('
 await post('/api/talk', { text: 'close the quokka session', voice: true });
 const closed = await said(/^Closed quokka/);
 await Promise.race([quo.exited, sleep(2000)]);
-check('"close the quokka session": its claude ends', !!closed && !alive(quo.p.pid), closed?.text);
-await sleep(200);
+check('"close the quokka session": its claude ends', !!closed && !alive(quo.p.pid), closed?.text);await sleep(200);
 check('…its tab leaves the phone, the other stays', !tabs().includes('quokka') && tabs().includes('wombat-pond'), JSON.stringify(tabs()));
 
 await post('/api/talk', { text: 'close the zorblat session', voice: true });

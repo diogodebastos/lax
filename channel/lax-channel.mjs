@@ -106,11 +106,11 @@ const RECALL = {
 // Phase 7 (lib/schedule.mjs): a job, or a reminder, that Lax saves only on the user's yes on the phone.
 const SCHEDULE = {
   name: 'schedule',
-  description: 'Schedule something for Lax to do by itself on this Mac, unattended: "every weekday at 8:30, brief me on open PRs", ' +
+  description: 'Schedule something for Lax to do by itself on this computer, unattended: "every weekday at 8:30, brief me on open PRs", ' +
     '"remind me in 20 minutes to call Rita". Each run is a fresh Claude Code in its own folder (cwd) with a time limit; its answer is ' +
     'read aloud on the phone. A reminder (say) is just spoken, no run. action "add" asks the user "save it?" on the phone and saves ' +
     'only on their yes; "list" shows what is scheduled (with ids); "remove" and "run" (now, to try it) take an id. Times are the ' +
-    'Mac\'s local time.',
+    'computer\'s local time.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -168,7 +168,7 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
       required: ['chat_id', 'text'],
     },
-  }, {
+  }, ...(process.platform === 'darwin' ? [{ // WhatsApp Desktop, Contacts and the share menu are macOS only
     name: 'share',
     description: 'Share a file or text from this Mac. Default (app "whatsapp"): opens the contact\'s chat in WhatsApp ' +
       'Desktop with the text typed in or the file pasted in; Lax then asks the user on the phone and sends only on their yes. ' +
@@ -186,7 +186,7 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
         app: { type: 'string', enum: ['whatsapp', 'airdrop', 'messages', 'mail', 'any'], description: 'Where to share (default whatsapp)' },
       },
     },
-  }],
+  }] : [])],
 }));
 
 // A share that asked "Which Rita?" waits here for your answer from the phone.
@@ -251,6 +251,11 @@ mcp.setNotificationHandler(z.object({
 }), async ({ params }) => { await post({ type: 'permission', ...params }); });
 
 await mcp.connect(new StdioServerTransport());
+// Claude Code gone (its end of stdio shut, or it died and left us to systemd/init): go too. The link to Lax below
+// would otherwise keep this alive for good; dozens of them were left behind by Lax's own runs, ~100 MB each.
+const PARENT = process.ppid, bye = () => process.exit(0);
+process.stdin.on('end', bye).on('close', bye);
+setInterval(() => { if (process.ppid !== PARENT) bye(); }, 5000).unref();
 
 // Lax server → channel: messages from the phone and permission verdicts, over a loopback SSE stream.
 async function listen() {

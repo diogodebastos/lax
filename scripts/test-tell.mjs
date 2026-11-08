@@ -8,6 +8,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { matchSession } from '../lib/tell.mjs';
+import { freePort } from './free-port.mjs';
 
 let failed = 0;
 const check = (name, ok, extra = '') => { console.log(`${ok ? '✓' : '✗'} ${name}${extra ? '  ' + extra : ''}`); if (!ok) failed++; };
@@ -25,10 +26,10 @@ check('no name, one session → that one; several → ask', matchSession([live[0
 
 // ---------- end to end ----------
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const PORT = 7796, LAX = `http://127.0.0.1:${PORT}`, DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-tell-'));
+const PORT = await freePort(), LAX = `http://127.0.0.1:${PORT}`, DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-tell-'));
 const REPORTS = path.join(DATA, 'reports'); fs.mkdirSync(REPORTS);
 const ENV = { ...process.env, LAX_HOME: DATA, LAX_PORT: String(PORT), LAX_URL: LAX, LAX_PUBLIC_URL: '', LAX_SESSION_PID: String(process.pid) };
-delete ENV.LAX_DATA; delete ENV.LAX_VOICE;
+delete ENV.LAX_DATA; delete ENV.LAX_VOICE; delete ENV.LAX_BUILD; // a build's fence on its own steps isn't the hook under test
 const server = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server.mjs')], { env: ENV, stdio: 'ignore' });
 process.on('exit', () => { server.kill(); fs.rmSync(DATA, { recursive: true, force: true }); });
 for (let i = 0; i < 50 && !fs.existsSync(path.join(DATA, 'secrets', 'token')); i++) await sleep(100);
@@ -62,7 +63,7 @@ check('an unknown session: nothing sent, the live ones named', no.isError && got
 // The guardrail: `tell` from a voice run isn't let through like `schedule`; it asks the phone (here, with no Lax to ask,
 // the hook stays out of it and Claude Code's own permission check decides).
 const hook = (tool) => JSON.parse(execFileSync(process.execPath, [path.join(ROOT, 'hooks', 'lax-hook.mjs')], { encoding: 'utf8',
-  env: { ...process.env, LAX_HOME: DATA, LAX_URL: 'http://127.0.0.1:1', LAX_VOICE: '1' },
+  env: { ...process.env, LAX_BUILD: '', LAX_HOME: DATA, LAX_URL: 'http://127.0.0.1:1', LAX_VOICE: '1' },
   input: JSON.stringify({ hook_event_name: 'PreToolUse', cwd: DATA, tool_name: tool, tool_input: { session: 'reports', text: 'x' } }) }) || '{}')
   .hookSpecificOutput?.permissionDecision;
 check('the guardrail doesn\'t let `tell` through without asking', hook('mcp__lax__tell') !== 'allow' && hook('mcp__lax__schedule') === 'allow');

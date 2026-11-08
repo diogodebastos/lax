@@ -7,14 +7,15 @@ import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { freePort } from './free-port.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const PORT = 7798, LAX = `http://127.0.0.1:${PORT}`, DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-test-'));
+const PORT = await freePort(), LAX = `http://127.0.0.1:${PORT}`, DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-test-'));
 // A throwaway Lax home: memory, secrets and mind all in a temp folder.
 // One pretend Claude Code session (its pid) for the channel and the hooks, so this runs the same with or without a real
 // claude above it (Lax runs the tests from its server when it builds something it learned).
 const ENV = { ...process.env, LAX_HOME: DATA, LAX_PORT: String(PORT), LAX_URL: LAX, LAX_PUBLIC_URL: '', LAX_SESSION_PID: String(process.pid) };
-delete ENV.LAX_DATA;
+delete ENV.LAX_DATA; delete ENV.LAX_BUILD; // a build's fence on its own steps isn't the hook under test
 const server = spawn(process.execPath, ['--no-warnings', path.join(ROOT, 'server.mjs')], { env: ENV, stdio: 'ignore' });
 const cleanup = () => { server.kill(); fs.rmSync(DATA, { recursive: true, force: true }); };
 process.on('exit', cleanup);
@@ -160,6 +161,22 @@ const last = phone.filter((e) => e.ev === 'bubble' && e.d.kind === 'permission')
 if (last) await post('/api/decide', { id: last.d.id, decision: 'deny' });
 await fresh;
 await post('/api/settings', { phoneApprovals: true });
+
+// Claude Code gone: a linked channel goes too, whether its stdio is shut or its claude died and left it to init.
+{
+  const CH = path.join(ROOT, 'channel', 'lax-channel.mjs'), CENV = { ...ENV, LAX_CHANNEL_FORCE: '1' };
+  const exited = (pid, ms) => new Promise(async (r) => { for (let t = 0; t < ms; t += 100) { try { process.kill(pid, 0); } catch { return r(true); } await sleep(100); } r(false); });
+  const lone = spawn(process.execPath, ['--no-warnings', CH], { env: CENV, stdio: ['pipe', 'ignore', 'ignore'] });
+  await sleep(1000); lone.stdin.end();
+  check('a linked channel whose session shuts stdio exits', await exited(lone.pid, 3000));
+  // Its claude (sh here) dies; stdin stays open, held by this test, as by a leftover grandchild.
+  const sh = spawn('/bin/sh', ['-c', `"${process.execPath}" --no-warnings "${CH}" <&0 >/dev/null 2>&1 & echo $!`], { env: CENV, stdio: ['pipe', 'pipe', 'ignore'] });
+  let out = ''; sh.stdout.on('data', (d) => (out += d)); await new Promise((r) => sh.on('exit', r));
+  const orphan = Number(out.trim());
+  check('…and one whose claude died, left to init, exits too', orphan > 0 && await exited(orphan, 8000), `pid ${orphan}`);
+  try { process.kill(orphan); } catch {}
+  sh.stdin.end();
+}
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nall channel checks passed');
 process.exit(failed ? 1 : 0);

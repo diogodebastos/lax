@@ -8,7 +8,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { ensureHome, commitMind, mindHead, forgotSince, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice, addFreshAdvice, addEpisodesAdvice, addScheduleAdvice, addSelfAdvice } from './lib/home.mjs';
+import { ensureHome, commitMind, mindHead, forgotSince, syncMindName, syncMindSelf, addMemoryLayout, addToolsAdvice, addWishAdvice, addKnowAdvice, addFreshAdvice, addEpisodesAdvice, addScheduleAdvice, addSelfAdvice, addVisualsAdvice } from './lib/home.mjs';
 import { ensureSelf, self } from './lib/self.mjs';
 import { createRoles, workLog } from './lib/roles.mjs';
 import { HOME, MIND, DB, OLD_DB, SETTINGS, VOCAB, secret } from './lib/paths.mjs';
@@ -24,8 +24,9 @@ import { matchSession, TELL_NOTE } from './lib/tell.mjs';
 import { createLearn } from './lib/learn.mjs';
 import { createSchedule } from './lib/schedule.mjs';
 import { createImprove, ANNOYED, unheard } from './lib/improve.mjs';
+import { createInitiative } from './lib/initiative.mjs';
 import { ACTIONS, voiceAction, sendAction, readStatus, tabCommand } from './lib/actions.mjs';
-import { readUsage, usageText } from './lib/usage.mjs';
+import { readUsage, eventLimits, limitWarnings, usageText } from './lib/usage.mjs';
 import { openTerminal, q, ON_MAC, closeTarget } from './lib/terminal.mjs';
 import { tailRecords, newAssistantText, conversation } from './lib/transcript.mjs';
 import { editDiff } from './lib/diff.mjs';
@@ -34,22 +35,30 @@ import { claudeAlive } from './lib/claude-pid.mjs';
 import { createArchive } from './lib/archive.mjs';
 import { recall } from './lib/recall.mjs';
 import * as whisper from './lib/whisper.mjs';
+import { createVisuals } from './lib/visuals.mjs';
 import { createPublicMind, placesOf, lastCommitFiles, filesIn } from './lib/public-mind.mjs';
 import { startRelay } from './lib/relay.mjs';
 import { once } from './lib/once.mjs';
 import { startWays } from './lib/ways.mjs';
 import { watchPower } from './lib/power.mjs';
 import { seal, unseal, sse, signPage } from './lib/seal.mjs';
+import * as push from './lib/push.mjs';
 import { cardOf, cardPng } from './lib/card.mjs';
 import { story, timelapseGif, mindChanges } from './lib/timelapse.mjs';
 import { POSTS, IMAGES, postPage, indexPage } from './lib/blog.mjs';
 import { MAX_WAIT_S } from './hooks/timeouts.mjs';
 import { createBudget, LEVELS } from './lib/budget.mjs';
+import { onRateLimit } from './lib/claude-run.mjs';
+import * as stuck from './lib/stuck.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const PORT = Number(process.env.LAX_PORT || 7777);
+const MACHINE = process.platform === 'darwin' ? 'Mac' : 'computer'; // what Lax calls the computer it lives on
 const STARTED = Date.now(); // for /api/health: a restart is over when a newer server answers
 const DEFAULT_WORKDIR = process.env.LAX_WORKDIR || path.dirname(ROOT); // your projects: by default the folder Lax was cloned into
+// The hooks run as `node …` in every claude Lax starts (its mind, reflections, jobs). Started by launchd, the PATH may have
+// no node at all (nvm's is only in your shell): the hook then fails, nothing reaches the phone, and `claude -p` refuses.
+process.env.PATH = [path.dirname(process.execPath), process.env.PATH].filter(Boolean).join(path.delimiter);
 
 // ---------- memory ----------
 // lax.db became life.db (what Lax has lived); settings moved out to settings.json. Once, before opening it.
@@ -91,7 +100,8 @@ if (!kvGet('newPath', false)) { if (kvGet('pet', null)) milestone(`${readSetting
 
 // Life menu settings — live on the Mac, edited from the phone.
 const DEFAULTS = { name: DEFAULT_COMPANION_NAME, voice: true, sounds: true, pitch: 1.6, speakDone: false, captions: false,
-  phoneApprovals: true, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system', learns: true, listen: 'phone',
+  phoneApprovals: true, freeHands: false, askTimeout: Number(process.env.LAX_ASK_TIMEOUT || 30), theme: 'system', learns: true, listen: 'phone',
+  push: 'away', // notifications to a subscribed phone (lib/push.mjs): off, away (only while no page is open) or always
   budget: 'light', // what Lax may spend of your plan by itself (lib/budget.mjs): light or normal
   speciesPick: false, speciesOverride: null, // while the species bars get tuned: pick one by hand
   publicProjects: ['lax'], // the projects whose names its mind on the website may show (the others show unnamed)
@@ -106,7 +116,7 @@ syncMindName(settings.name);
 function updateSettings(b) {
   const clean = {};
   if (typeof b.name === 'string' && b.name.trim()) clean.name = b.name.trim().slice(0, 12);
-  for (const k of ['voice', 'sounds', 'speakDone', 'captions', 'phoneApprovals', 'learns', 'speciesPick']) if (typeof b[k] === 'boolean') clean[k] = b[k];
+  for (const k of ['voice', 'sounds', 'speakDone', 'captions', 'phoneApprovals', 'learns', 'speciesPick', 'freeHands']) if (typeof b[k] === 'boolean') clean[k] = b[k];
   const o = b.speciesOverride;
   if (o === null) clean.speciesOverride = null;
   else if (o && o.id === 'plain' && /^#[0-9a-f]{6}$/i.test(o.color || '')) clean.speciesOverride = { id: 'plain', color: o.color, branch: null, rare: false };
@@ -115,6 +125,7 @@ function updateSettings(b) {
   if ([15, 30, 60, 120].includes(b.askTimeout)) clean.askTimeout = b.askTimeout;
   if (['system', 'light', 'dark'].includes(b.theme)) clean.theme = b.theme;
   if (['phone', 'en-US', 'pt-PT'].includes(b.listen)) clean.listen = b.listen;
+  if (['off', 'away', 'always'].includes(b.push)) clean.push = b.push;
   if (Object.hasOwn(LEVELS, b.budget)) clean.budget = b.budget;
   if (Array.isArray(b.hideTraits)) clean.hideTraits = [...new Set(b.hideTraits.filter((t) => typeof t === 'string' && /^[a-z]{1,16}$/.test(t)))];
   const renamed = clean.name && clean.name !== settings.name;
@@ -380,6 +391,14 @@ function dreamed() { const w = kvGet('mindWeek', { heard: [], spoke: [] }), now 
 function broadcast(type, data) {
   for (const c of clients) c.write(sse(type, data, c.sealed)); // sealed for a phone that asked (lib/seal.mjs)
   if (type === 'bubble' && data.speak) heardSpoke('spoke');
+  if (type === 'bubble' && (data.kind === 'permission' || data.kind === 'question')) notify(data);
+}
+// Something waits for you: a notification to the phones that subscribed (lib/push.mjs), for when the page isn't open (an
+// iPhone puts it to sleep), or always. It says only the project and the short gist: it shows on the lock screen.
+function notify(b) {
+  if (settings.push === 'off' || (settings.push !== 'always' && clients.size) || !push.subscribers()) return;
+  const body = b.kind === 'question' ? `${b.project} asks: ${b.questions?.[0]?.question || b.text}` : b.gist ? `${b.project} wants to: ${b.gist}` : b.text;
+  push.send({ id: b.id, kind: b.kind, title: settings.name, body: short(body, 120) }, { topic: b.id, urgency: 'high', ttl: pending.get(b.id)?.wait || 600 });
 }
 // Lax's own conversation, this one or the one before it: never a session of yours (no tab, no reflection).
 const laxOwn = (sid) => !!sid && (sid === voiceSessions[ASSISTANT] || sid === laxTalk.prev);
@@ -388,7 +407,7 @@ function sessionList() {
   return [...sessions.entries()].filter(([id, s]) => (s.pid || s.ts > cutoff) && !resting(s) && !laxOwn(id)).map(([id, s]) => ({ id, ...s }));
 }
 const stateMsg = () => ({ pet: petView(), sessions: sessionList(), voiceBusy: !!voiceRun, thinking: !!channelWait, settings, budget: budget.view(),
-  channels: channelList(), voiceTarget, usage, vocab: vocabNow(), whisper: whisper.running(), ways: ways?.view() || null });
+  channels: channelList(), voiceTarget, usage, vocab: vocabNow(), whisper: whisper.running(), ways: ways?.view() || null, host: MACHINE });
 // What the phone listens for and fixes (lib/vocab.mjs): the names your words may contain, and misheard → meant.
 function vocabNow() {
   const v = readVocab(VOCAB);
@@ -411,8 +430,16 @@ function setUsage(rl) {
   // Days you hit the 5-hour limit: enough of them and a fox becomes the coin cat at level 50.
   if ((u.five_hour?.pct || 0) >= LIMIT_PCT && !(pet.limitDays ||= []).includes(dayKey(Date.now()))) { pet.limitDays.push(dayKey(Date.now())); save(); }
   if (changed) pushState(); // the status line runs often; the phone only hears when a number moves
+  // At 80% and 90% of either window: said aloud and sent to the phone, once each (lib/usage.mjs).
+  const w = limitWarnings(u, kvGet('limitWarned', {})); kvSet('limitWarned', w.seen);
+  if (w.say.length) {
+    const text = `Heads up: ${w.say.join(' and ')}. My own work and your scheduled jobs wait from 80%, and at 95% I stop answering too.`;
+    const b = { id: 'limit' + Date.now(), kind: 'reply', text, speak: true };
+    broadcast('bubble', b); feed(`! ${text}`, 'diary', settings.name.toLowerCase()); notify(b);
+  }
   return true;
 }
+onRateLimit((info) => setUsage(eventLimits(info))); // Lax's own background runs report it too
 const pushState = () => { broadcast('state', stateMsg()); publicMind?.changed(); };
 // A session's status line (hooks/lax-status.mjs): its model and how full its context is, for the tab's status row.
 function sessionInfo(b) {
@@ -613,6 +640,7 @@ function onHook(h) {
 // Lax's assistant, while it answers you: what your yeses on the phone already cover (lib/allow.mjs grantKey):
 // edits anywhere in a repo you let it edit, a command you let it run. Forgotten when it finishes (Stop).
 const grants = new Map(); // session id -> Set of grant keys
+let lastUnanswered = 0; // when an ask last went unanswered on the phone; an answer resets it
 
 // A hook is waiting for the human: show the bubble, resolve when the phone answers (or time out).
 // Decisions: allow | deny | answer (AskUserQuestion, with answers) | none (fall back to the terminal).
@@ -625,7 +653,10 @@ function ask(h) {
   return new Promise((resolve) => {
     // Lax's own assistant (h.lax_voice) has no terminal: its requests always come to the phone, whatever "ask me on the phone"
     // (which is about your terminal sessions) says. If it can't be asked, say why.
-    if (clients.size === 0) return resolve({ decision: 'none', why: 'no phone is connected to Lax' });
+    if (clients.size === 0 && (settings.push === 'off' || !push.subscribers())) return resolve({ decision: 'none', why: 'no phone is connected to Lax' });
+    // Nobody answered a moment ago and no page is open: likely nobody's holding the phone, so don't wait again.
+    if (h.lax_voice && !h.lax_job && clients.size === 0 && Date.now() - lastUnanswered < 10 * 60e3)
+      return resolve({ decision: 'none', why: 'no answer on the phone a moment ago' });
     if (!settings.phoneApprovals && !h.lax_voice) return resolve({ decision: 'none', why: 'phone approvals are off' });
     // Sessions with a live lax channel relay tool approvals themselves (no duplicate bubble); questions still come here.
     if (h.tool_name !== 'AskUserQuestion' && h.lax_session_pid && [...channels.values()].some((c) => c.sessionPid === h.lax_session_pid))
@@ -637,19 +668,22 @@ function ask(h) {
       ? { id, kind: 'question', session: h.session_id, project, questions, text: `${project}: ${questions[0].question}`, speak: true }
       : { id, kind: 'permission', session: h.session_id, project, gist: h.tool_name === 'Bash' && h.tool_input?.description ? `${short(h.tool_input.description, 50)}: ${describeTool(h.tool_name, h.tool_input)}` : describeTool(h.tool_name, h.tool_input), text: `${project} wants to: ${describeTool(h.tool_name, h.tool_input, true)}`, say: `${project} wants to: ${describeTool(h.tool_name, h.tool_input)}`, speak: true, actions: true,
         ...(grant?.startsWith('edit:') && { details: `A yes also lets it edit the rest of ${path.basename(grant.slice(5))} until it finishes this answer.` }) };
-    // Questions are worth waiting longer for: they need reading.
-    const timer = setTimeout(() => { // nobody answered on the phone: friction (lib/improve.mjs)
-      improve.note('unanswered', `${project} asked ${bubble.gist || bubble.text}: no answer on the phone in time`); finish('none'); }, (job ? MAX_WAIT_S : Math.min(MAX_WAIT_S, settings.askTimeout * (questions ? 4 : 1))) * 1000); // hooks/timeouts.mjs
+    // Questions are worth waiting longer for: they need reading. Reached only by a notification, a minute at least: time
+    // to unlock the phone.
+    const wait = job ? MAX_WAIT_S : Math.min(MAX_WAIT_S, Math.max(settings.askTimeout * (questions ? 4 : 1), clients.size ? 0 : 60)); // hooks/timeouts.mjs
+    const timer = setTimeout(() => { // a phone was open and nobody answered: friction (lib/improve.mjs); none open, the terminal takes over
+      lastUnanswered = Date.now(); if (clients.size) improve.note('unanswered', `${project} asked ${bubble.gist || bubble.text}: no answer on the phone in time`); finish('none'); }, wait * 1000);
     function finish(decision, answers) {
       clearTimeout(timer); pending.delete(id); broadcast('clear', { id });
       const ss = sessions.get(h.session_id); if (ss?.status === 'waiting') { ss.status = 'working'; pushState(); }
       if (decision === 'allow' || decision === 'answer') pet.approvals++; else if (decision === 'deny') pet.denials++;
+      if (decision !== 'none') lastUnanswered = 0;
       if (decision === 'allow' && grant) grants.set(h.session_id, (grants.get(h.session_id) || new Set()).add(grant));
       const line = { allow: '✓ approved from phone', deny: '✗ denied from phone', answer: '✓ answered from phone' }[decision];
       if (line) { feed(`  ${line}`, decision === 'deny' ? 'error' : 'done', project, h.session_id); save(); }
       resolve(answers ? { decision, answers } : { decision });
     }
-    pending.set(id, { finish, bubble });
+    pending.set(id, { finish, bubble, wait });
     const s = sessions.get(h.session_id); if (s) { s.status = 'waiting'; pushState(); }
     broadcast('bubble', bubble);
   });
@@ -730,13 +764,13 @@ async function openOnMac() {
   const id = voiceSessions[ASSISTANT], name = settings.name;
   if (!id) return `There's nothing to continue yet. Talk to me first.`;
   if (voiceRun) return `I'm still answering. Try again when I'm done.`;
-  if (laxOnMac) return `I'm already open on the Mac.`;
+  if (laxOnMac) return `I'm already open on the ${MACHINE}.`;
   laxOnMac = true; // before the terminal's SessionStart, so a quick word from the phone can't race it
   try {
     const app = await openTerminal(MIND, `exec claude --resume ${id} --add-dir ${q(DEFAULT_WORKDIR)}`);
-    feed(`○ open on the mac (${app}): the phone waits until you quit there`, 'session', name.toLowerCase());
-    return `Opened on the Mac. Quit there to talk to me here again.`;
-  } catch (e) { laxOnMac = false; return `I couldn't open it on the Mac. ${short(e.message, 120)}`; }
+    feed(`○ open on the ${MACHINE.toLowerCase()} (${app}): the phone waits until you quit there`, 'session', name.toLowerCase());
+    return `Opened on the ${MACHINE}. Quit there to talk to me here again.`;
+  } catch (e) { laxOnMac = false; return `I couldn't open it on the ${MACHINE}. ${short(e.message, 120)}`; }
 }
 const ASSISTANT = 'assistant:' + MIND; // its key in voiceSessions (a conversation only resumes in the folder it started in)
 laxHistory(); // Lax's tab starts with your last conversation, not empty
@@ -748,7 +782,9 @@ if (voiceSessions[ASSISTANT] && !laxTalk.last) {
 }
 
 // ---------- the seed brain: Lax learns from every session by itself (lib/brain.mjs) ----------
-ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addSkills(); addEpisodesToLearning(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice(); addEpisodesAdvice(); addScheduleAdvice(); ensureSelf(); addSelfAdvice(); addRoles(); addRolesToRemembering();
+ensureHome({ repos: DEFAULT_WORKDIR, body: ROOT, name: settings.name }); ensureBrain(); addAcross(); addSkills(); addEpisodesToLearning(); addMemoryLayout(); addToolsAdvice(); addWishAdvice(); addKnowAdvice(); addFreshAdvice(); addEpisodesAdvice(); addScheduleAdvice(); ensureSelf(); addSelfAdvice(); addVisualsAdvice(); addRoles(); addRolesToRemembering();
+// What it makes to be seen opens on the phone as soon as it's written (lib/visuals.mjs).
+const visuals = createVisuals(MIND); visuals.watch((name) => broadcast('visual', { name }));
 // ---------- its mind on the website (lib/public-mind.mjs): the shape of what it knows and does, never what's in it ----------
 publicMind = createPublicMind({ live: () => { const v = petView(); return { color: v.look?.color, stage: v.stage, sessions: sessionList(), heard: weekCount('heard'), spoke: weekCount('spoke'), dreams: weekCount('dreamed'), heardEver: mindEver().heard, spokeEver: mindEver().spoke, busy: working(), owner: settings.publicName || '', doing: doing() }; },
   allow: () => settings.publicProjects || [], allowRoles: () => settings.publicRoles || [], log: (...a) => console.log('[mind]', ...a) });
@@ -790,6 +826,9 @@ const IDLE = Number(process.env.LAX_IDLE || 30 * 60) * 1000;
 const idle = () => !voiceRun && !channelWait && !laxOnMac && pending.size === 0 && ![...sessions.values()].some((s) => Date.now() - s.ts < IDLE);
 const improve = createImprove({ budget, settings: () => settings, feed, learn, body: process.env.LAX_BODY || ROOT, claude: process.env.LAX_CLAUDE,
   idle, log: (...a) => console.log('[improve]', ...a) });
+// Awake and left idle, Lax works on one of your projects by itself, on a branch of its own (lib/initiative.mjs).
+createInitiative({ budget, settings: () => settings, feed, diary: (t) => diary(t), idle, desktop: DEFAULT_WORKDIR, mind: MIND, claude: process.env.LAX_CLAUDE,
+  log: (...a) => console.log('[initiative]', ...a) });
 // ---------- know-how: workflows you repeat become skills, installed on your yes (lib/skills.mjs) ----------
 const skills = createSkills({ settings: () => settings, feed, mind: mindEvent, diary: (t) => diary(t), broadcast, pending, quiet,
   gainXp: (n) => { gainXp(n); save(); pushState(); }, milestone: (t) => { milestone(t); pushState(); }, record: (kind, text) => record(kind, text),
@@ -1020,7 +1059,7 @@ function talk(text, voice = false, spelled = []) {
   if (voiceRun) return false;
   const name = settings.name.toLowerCase();
   if (ON_MAC.test(text.trim())) { youSaid(text, name); openOnMac().then((say) => broadcast('bubble', { id: 'onmac' + Date.now(), kind: 'reply', text: say, speak: true })); return true; }
-  if (laxOnMac) { broadcast('bubble', { id: 'onmac' + Date.now(), kind: 'reply', text: `I'm open on the Mac right now. Quit there and I'll hear you here again.`, speak: true }); return true; }
+  if (laxOnMac) { broadcast('bubble', { id: 'onmac' + Date.now(), kind: 'reply', text: `I'm open on the ${MACHINE} right now. Quit there and I'll hear you here again.`, speak: true }); return true; }
   // "Start fresh": a new conversation, by voice. Its notes stay; only the chat starts over.
   if (FRESH.test(text.trim())) {
     youSaid(text, name);
@@ -1028,6 +1067,9 @@ function talk(text, voice = false, spelled = []) {
     broadcast('bubble', { id: 'fresh' + Date.now(), kind: 'reply', text: say, speak: true });
     return true;
   }
+  // Near your plan's limit I don't start another answer: past 100% a company plan spends extra credits (lib/budget.mjs).
+  const room = budget.may('voice');
+  if (!room.ok) { youSaid(text, name); broadcast('bubble', { id: 'limit' + Date.now(), kind: 'reply', text: `I'll stay quiet for now: ${room.why}. Talk to me again once it resets.`, speak: true }); return true; }
   // After a quiet spell, or once it's long, the next message starts a new one (every message re-sends the whole chat).
   const due = voiceSessions[ASSISTANT] && freshDue(laxTalk, Date.now(), FRESH_LIMITS);
   if (due) freshTalk(due);
@@ -1051,6 +1093,7 @@ function talk(text, voice = false, spelled = []) {
       let m; try { m = JSON.parse(line); } catch { continue; }
       if (m.type === 'system' && m.subtype === 'init') { voiceSessions[ASSISTANT] = m.session_id; voiceRun.sessionId = m.session_id; save(); }
       if (m.type === 'result') result = m;
+      if (m.type === 'rate_limit_event') setUsage(eventLimits(m.rate_limit_info)); // your usage, known with no terminal open
       if (m.type === 'assistant' && !m.parent_tool_use_id && m.message?.usage) laxTalk.tokens = contextSize(m.message.usage); // how full the conversation is now
       if (m.type === 'assistant' && !m.parent_tool_use_id) for (const b of m.message?.content || []) {
         if (b.type === 'text' && b.text?.trim()) pendingSay = b.text.trim();
@@ -1080,9 +1123,18 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.
 const body = (req) => new Promise((res) => { let b = ''; req.on('data', (d) => (b += d)); req.on('end', () => {
   try { const j = JSON.parse(b || '{}'); res(typeof j.sealed === 'string' ? JSON.parse(unseal(j.sealed) ?? '{}') : j); } catch { res({}); } }); });
 const json = (res, obj, code = 200) => {
+  if (res.headersSent) return res.end(res.sealed ? JSON.stringify({ sealed: seal(JSON.stringify(obj)) }) : JSON.stringify(obj)); // after keepAlive
   if (!res.sealed) { res.writeHead(code, { 'content-type': 'application/json' }); return res.end(JSON.stringify(obj)); }
   res.writeHead(code, { 'content-type': 'application/json', 'x-lax-sealed': '1' }); res.end(JSON.stringify({ sealed: seal(JSON.stringify(obj)) }));
 };
+
+// A slow answer (Whisper on a 10-minute message): the head now and a space every 15s, so neither the relay (30s for a head)
+// nor the phone's browser (about a minute idle) gives up. JSON reads past leading spaces. Returns the stop.
+function keepAlive(res) {
+  res.writeHead(200, { 'content-type': 'application/json', ...(res.sealed && { 'x-lax-sealed': '1' }) }); res.flushHeaders();
+  const t = setInterval(() => res.write(' '), 15e3);
+  return () => clearInterval(t);
+}
 
 const onceIds = once();
 http.createServer(async (req, res) => {
@@ -1160,6 +1212,9 @@ http.createServer(async (req, res) => {
     return;
   }
   if (url.pathname === '/api/brief') return json(res, { text: brief(url.searchParams.get('project') || '', settings.name, roles.active()) });
+  if (url.pathname === '/api/visuals') return json(res, { visuals: visuals.list() }); // what it made to be seen (lib/visuals.mjs)
+  if (url.pathname === '/api/stuck') return json(res, { stuck: stuck.list() }); // hung runs and tests, for the menu (lib/stuck.mjs)
+  if (url.pathname === '/api/visual') { const html = visuals.read(url.searchParams.get('name')); return html === null ? json(res, { error: 'no such page' }, 404) : json(res, { name: url.searchParams.get('name'), html }); }
   if (url.pathname === '/api/self') return json(res, self(petView(), settings, roles.view())); // the `self` tool: how Lax looks today (lib/self.mjs)
   if (url.pathname === '/api/memory') return json(res, { pet: petView(), raw: pet, voiceProject: pickChannel() ? channels.get(pickChannel()).project : 'assistant',
     milestones: db.prepare('SELECT ts,text FROM milestones ORDER BY id DESC').all() });
@@ -1179,6 +1234,7 @@ http.createServer(async (req, res) => {
     diary('made its timelapse');
     return json(res, { ok: true, gif: gif.toString('base64'), frames: frames.length });
   }
+  if (url.pathname === '/api/push/key') return json(res, { key: push.vapidPublicKey() }); // the page subscribes with it (lib/push.mjs)
   // What Lax knows (the life menu): counts of its notes, its skills, its newest episodes.
   if (url.pathname === '/api/knows' && req.method === 'GET') {
     let projects = 0; try { projects = fs.readdirSync(PROJECTS).filter((f) => f.endsWith('.md')).length; } catch {}
@@ -1201,6 +1257,11 @@ http.createServer(async (req, res) => {
       return json(res, { ok: !!p });
     }
     case '/api/settings': updateSettings(b); pushState(); return json(res, { ok: true, settings });
+    case '/api/push': { // this phone's notifications (lib/push.mjs): { subscription } to have them, { endpoint, off } to stop
+      if (b.off) { push.unsubscribe(String(b.endpoint || '')); return json(res, { ok: true }); }
+      const why = push.subscribe(b.subscription); if (!why) console.log('[push] a phone subscribed');
+      return json(res, why ? { ok: false, why } : { ok: true }, why ? 400 : 200);
+    }
     case '/api/hatch': return json(res, { ok: true }); // older pages tapped to hatch; the egg hatches on its own now
     case '/api/rebirth': rebirth(!!b.knowledge); broadcast('reborn', {}); pushState(); return json(res, { ok: true });
     case '/api/knows': { // from the life menu: forget an episode, a skill or a role; install or decline a drafted skill, take on a drafted role
@@ -1226,7 +1287,7 @@ http.createServer(async (req, res) => {
         console.log(`[phone ${String(d.at || new Date().toISOString().slice(11, 19)).slice(0, 8)}${d.at ? ' asleep' : ''}] ${JSON.stringify(d).slice(0, 600)}`);
       return json(res, { ok: true });
     case '/api/recall': { // a session's `recall` tool (channel/lax-channel.mjs): Lax searches its long-term memory
-      if (!isLocal(req)) return json(res, { ok: false, answer: 'Only from this Mac.' }, 403);
+      if (!isLocal(req)) return json(res, { ok: false, answer: `Only from this ${MACHINE}.` }, 403);
       const q = String(b.query || '').slice(0, 1000), who = b.cwd ? proj(String(b.cwd)) : settings.name.toLowerCase();
       feed(`  recalling for ${who}: ${short(q, 80)}`, 'diary', settings.name.toLowerCase());
       recalling++; publicMind.changed();
@@ -1249,10 +1310,12 @@ http.createServer(async (req, res) => {
       voiceTarget = b.target === 'auto' || channels.has(b.target) ? b.target : 'background'; pushState();
       return json(res, { ok: true, voiceTarget });
     case '/api/action': return json(res, { ok: quickAction(String(b.cid || ''), voiceAction(b.action)) });
+    case '/api/stuck/stop': return json(res, await stuck.stop(b.pid)); // only one on the list right now (lib/stuck.mjs)
     case '/api/hear': { // what the phone recorded while you talked, written down by Whisper (null: the phone's own words go)
-      const pcm = Buffer.from(String(b.audio || ''), 'base64').subarray(0, 16000 * 2 * 120); // two minutes at most
+      const pcm = Buffer.from(String(b.audio || ''), 'base64').subarray(0, 16000 * 2 * 600); // ten minutes at most
       if (voiceAction(String(b.phone || ''))) return json(res, { ok: false, text: null }); // "clear", "compact": the phone got it, and it's quicker
-      const t0 = Date.now(), text = await whisper.transcribe(pcm, { lang: b.lang, words: vocabNow().words });
+      const done = whisper.seconds(pcm) > 20 ? keepAlive(res) : () => {};
+      const t0 = Date.now(), text = await whisper.transcribe(pcm, { lang: b.lang, words: vocabNow().words }).finally(done);
       console.log(`[whisper] ${whisper.seconds(pcm).toFixed(1)}s (${whisper.seconds(whisper.trimSilence(pcm)).toFixed(1)}s heard) in ${Date.now() - t0}ms: ${text === null ? '(none)' : JSON.stringify(text.slice(0, 120))} | phone: ${JSON.stringify(String(b.phone || '').slice(0, 120))}`);
       return json(res, { ok: text !== null, text });
     }
@@ -1264,7 +1327,7 @@ http.createServer(async (req, res) => {
 }).listen(PORT, HOST, () => {
   // Without a way in from anywhere (the relay or a tunnel), a phone can't reach it: say so, and how.
   const phone = process.env.LAX_PUBLIC_URL ? phoneUrl(PORT) : 'not yet: a phone needs a way in (node scripts/setup.mjs relay)';
-  console.log(`${APP_NAME}: ${settings.name || DEFAULT_COMPANION_NAME} is awake on ${HOST}:${PORT}.\n  Mac:   http://localhost:${PORT}/?t=${TOKEN}\n  Phone: ${phone}\n  Pair:  http://localhost:${PORT}/pair  (QR code)`);
+  console.log(`${APP_NAME}: ${settings.name || DEFAULT_COMPANION_NAME} is awake on ${HOST}:${PORT}.\n  ${MACHINE === 'Mac' ? 'Mac:  ' : 'Here: '} http://localhost:${PORT}/?t=${TOKEN}\n  Phone: ${phone}\n  Pair:  http://localhost:${PORT}/pair  (QR code)`);
 });
 // The relay (lib/relay.mjs, Phase 11): the phone reaches Lax through the person's own Worker. With LAX_RELAY_URL and its key.
 // The ways in (lib/ways.mjs): which of the tunnel and the relay reach this Mac, so the phone can move to the one that does.
@@ -1276,9 +1339,10 @@ var ways = null;
     headers: process.env.CF_ACCESS_CLIENT_ID ? { 'cf-access-client-id': process.env.CF_ACCESS_CLIENT_ID, 'cf-access-client-secret': process.env.CF_ACCESS_CLIENT_SECRET || '' } : {},
     onChange: pushState });
   // The Mac about to sleep (lib/power.mjs): the relay and the phone know now, not a minute later. Not in tests.
-  if (!process.env.LAX_HOME && !process.env.LAX_DATA) watchPower({ log: console.log,
+  // Stopped on exit: the service restarts only this process, and its gdbus watcher was left behind each time.
+  if (!process.env.LAX_HOME && !process.env.LAX_DATA) { const power = watchPower({ log: console.log,
     onSleep: () => { console.log('[power] going to sleep'); relay?.bye(); broadcast('sleeping', {}); },
-    onWake: () => { console.log('[power] awake'); relay?.relink(); } }); }
+    onWake: () => { console.log('[power] awake'); relay?.relink(); } }); process.on('exit', () => power.stop()); } }
 // Whisper on the Mac (lib/whisper.mjs), the port after Lax's. Not in tests (a throwaway LAX_HOME) unless asked.
 if (process.env.LAX_WHISPER === '1' || (process.env.LAX_WHISPER !== '0' && !process.env.LAX_HOME && !process.env.LAX_DATA)) {
   if (whisper.start({ port: PORT + 1, onLog: (m) => { console.log(`[whisper] ${m}`); pushState(); } })) console.log('[whisper] starting');

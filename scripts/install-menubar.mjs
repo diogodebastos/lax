@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
+if (process.platform !== 'darwin') { console.log('The menu bar is macOS only. On Linux: systemctl --user start|stop|restart digi-lax.server'); process.exit(0); }
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const APP = path.join(os.homedir(), 'Applications', 'Lax Bar.app');
 const BIN = path.join(APP, 'Contents', 'MacOS', 'LaxBar');

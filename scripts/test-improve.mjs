@@ -7,9 +7,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
+import { freePort } from './free-port.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const PORT = 7798, LAX = `http://127.0.0.1:${PORT}`, HOME = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'lax-improve-')));
+const PORT = await freePort(), LAX = `http://127.0.0.1:${PORT}`, HOME = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'lax-improve-')));
 const BODY = path.join(HOME, 'body'), ORIGIN = path.join(HOME, 'origin.git');
 const GIT_ENV = { GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 'Test', GIT_COMMITTER_EMAIL: 't@t', GIT_CONFIG_GLOBAL: '/dev/null' };
 const sh = (cwd, ...a) => execFileSync('git', ['-C', cwd, ...a], { encoding: 'utf8', env: { ...process.env, ...GIT_ENV }, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -35,7 +36,7 @@ check('…"that was an annoying bug, fix it" or "is it slow?" are not', !['fix t
 // A throwaway body with a passing test, the after-merge script, and an "origin" that must never see a self-fix.
 write(path.join(BODY, 'package.json'), JSON.stringify({ name: 'body', type: 'module', scripts: { test: 'node scripts/test-ok.mjs' } }, null, 2) + '\n');
 write(path.join(BODY, 'scripts', 'test-ok.mjs'), 'console.log("ok");\n');
-write(path.join(BODY, 'scripts', 'after-merge.mjs'), fs.readFileSync(path.join(ROOT, 'scripts', 'after-merge.mjs'), 'utf8').replace("'../lib/paths.mjs'", JSON.stringify(path.join(ROOT, 'lib', 'paths.mjs'))).replace("'../lib/upstream.mjs'", JSON.stringify(path.join(ROOT, 'lib', 'upstream.mjs'))));
+write(path.join(BODY, 'scripts', 'after-merge.mjs'), fs.readFileSync(path.join(ROOT, 'scripts', 'after-merge.mjs'), 'utf8').replace("'../lib/paths.mjs'", JSON.stringify(path.join(ROOT, 'lib', 'paths.mjs'))).replace("'../lib/upstream.mjs'", JSON.stringify(path.join(ROOT, 'lib', 'upstream.mjs'))).replace("'../lib/service.mjs'", JSON.stringify(path.join(ROOT, 'lib', 'service.mjs'))));
 execFileSync('git', ['init', '-q', '--bare', '-b', 'main', ORIGIN]);
 sh(HOME, 'init', '-q', '-b', 'main', BODY); sh(BODY, 'add', '-A'); sh(BODY, 'commit', '-qm', 'body'); sh(BODY, 'remote', 'add', 'origin', ORIGIN); sh(BODY, 'push', '-q', 'origin', 'main');
 const GH = path.join(HOME, 'fake-gh.mjs');

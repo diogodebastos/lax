@@ -1,16 +1,17 @@
 #!/usr/bin/env node
-// After Lax merged something it learned (lib/learn.mjs, on your "merge it"): restart Lax, check it's healthy, and push main.
-// If it doesn't come back healthy, put main back where it was (nothing was pushed yet), restart again, and say so.
+// After Lax merged something it learned (lib/learn.mjs, on your "merge it"): restart Lax and check it's healthy.
+// "Merge" is local only: main is never pushed; what reaches the remote goes there by a pull request you open.
+// If it doesn't come back healthy, put main back where it was (nothing is ever pushed), restart again, and say so.
 // Detached from the server, since it restarts it.   node scripts/after-merge.mjs <body> <commit before the merge> <wish id>
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { LOGS, readToken } from '../lib/paths.mjs';
-import { ownsOrigin } from '../lib/upstream.mjs';
+import { restartArgs } from '../lib/service.mjs';
 
 const [BODY, PREV, WISH] = process.argv.slice(2);
 const LAX = process.env.LAX_URL || `http://127.0.0.1:${process.env.LAX_PORT || 7777}`;
-const RESTART = process.env.LAX_RESTART || `launchctl kickstart -k gui/${process.getuid()}/digi-lax.server`;
+const RESTART = process.env.LAX_RESTART || restartArgs().join(' ');
 const WAIT = Number(process.env.LAX_HEALTH_WAIT || 30) * 1000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (t) => { try { fs.appendFileSync(path.join(LOGS, 'merge.log'), `[${new Date().toISOString()}] ${WISH}: ${t}\n`); } catch {} };
@@ -49,10 +50,8 @@ async function tell(body) {
 
 await sleep(1500); // let Lax say "merging…" first
 if (await restart()) {
-  let pushed = await ownsOrigin(BODY); // only to their own repo (lib/upstream.mjs); a clone of the project keeps main on the Mac
-  if (pushed) try { git('push', 'origin', 'main'); } catch (e) { pushed = false; log(`push failed: ${String(e.stderr || e.message).trim().slice(0, 300)}`); }
-  log(`healthy${pushed ? ', pushed' : ', not pushed'}`);
-  await tell({ ok: true, pushed });
+  log('healthy');
+  await tell({ ok: true, pushed: false });
 } else {
   const why = 'after the merge I didn\'t come back healthy within ' + WAIT / 1000 + ' seconds';
   try { git('reset', '--keep', PREV); } catch (e) { log(`rollback failed: ${String(e.stderr || e.message).trim()}`); }

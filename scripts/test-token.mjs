@@ -4,9 +4,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { freePort } from './free-port.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const PORT = 7816, LAX = `http://127.0.0.1:${PORT}`, HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-token-'));
+const PORT = await freePort(), LAX = `http://127.0.0.1:${PORT}`, HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'lax-token-'));
 const ENV = { ...process.env, LAX_HOME: HOME, LAX_DATA: '', LAX_PORT: String(PORT), LAX_PUBLIC_URL: '', LAX_CLAUDE: '/usr/bin/false', LAX_WHISPER: '0' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let server = null, failed = 0;

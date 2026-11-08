@@ -6,17 +6,19 @@
 //   node scripts/setup.mjs --all          every step but whisper, in order, without the conversation
 //   node scripts/setup.mjs doctor [--fix] npm run doctor: is it all working? (--fix: secrets' permissions)
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { HOME, MIND, SECRETS, secret, readEnv, readToken, ensureDirs } from '../lib/paths.mjs';
 import { BIN as WHISPER, MODEL as WHISPER_MODEL } from '../lib/whisper.mjs';
 import { SDK, jdkHome } from './android-tools.mjs';
 import { EVENTS } from '../hooks/timeouts.mjs';
+import { SERVER, serviceFile, restartArgs } from '../lib/service.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const MACHINE = process.platform === 'darwin' ? 'Mac' : 'computer';
 const PORT = Number(process.env.LAX_PORT || 7777), LAX = `http://127.0.0.1:${PORT}`;
-const AGENTS = path.join(os.homedir(), 'Library', 'LaunchAgents'), SERVICE = 'digi-lax.server';
 const read = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return ''; } };
 const sh = (cmd, args, opts = {}) => execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...opts });
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: 'inherit', cwd: ROOT, ...opts });
@@ -38,7 +40,7 @@ async function healthy(wait = 20e3) {
   return false;
 }
 // Only this clone's service: a second clone on the same Mac never restarts the first's Lax.
-const restart = () => { if (!read(path.join(AGENTS, `${SERVICE}.plist`)).includes(`${ROOT}/`)) return false; try { sh('launchctl', ['kickstart', '-k', `gui/${process.getuid()}/${SERVICE}`]); return true; } catch { return false; } };
+const restart = () => { if (!read(serviceFile(SERVER)).includes(`${ROOT}/`)) return false; try { const [c, ...a] = restartArgs(); sh(c, a); return true; } catch { return false; } };
 
 // ---------- what's done ----------
 // Lax's hooks in ~/.claude/settings.json: this clone's, on every event, with today's timeouts (hooks/timeouts.mjs).
@@ -63,12 +65,12 @@ async function status() {
     workdir: { ok: !!env.LAX_WORKDIR, detail: env.LAX_WORKDIR || `not chosen (would be ${path.dirname(ROOT)})` },
     hooks: hooksState(settings),
     channel: { ok: read(path.join(os.homedir(), '.local', 'bin', 'lax')).includes(ROOT), detail: '`lax`, `/lax`, and the channel that lets you talk into a session' },
-    service: { ok: read(path.join(AGENTS, `${SERVICE}.plist`)).includes(ROOT) && await healthy(1500), detail: 'Lax runs in the background, from login' },
+    service: { ok: read(serviceFile(SERVER)).includes(ROOT) && await healthy(1500), detail: 'Lax runs in the background, from login' },
     home: { ok: fs.existsSync(path.join(MIND, 'CLAUDE.md')), detail: HOME },
-    whisper: { ok: fs.existsSync(WHISPER) && fs.existsSync(WHISPER_MODEL), detail: 'optional: better hearing, on the Mac (~600 MB)' },
+    whisper: { ok: fs.existsSync(WHISPER) && fs.existsSync(WHISPER_MODEL), detail: `optional: better hearing, on the ${MACHINE} (~600 MB)` },
     android: { ok: !!jdkHome() && fs.existsSync(path.join(SDK, 'platform-tools')), detail: 'optional: what building the Android app needs (~1 GB, no Homebrew)' },
     relay: { ok: !!relayUrl && !!read(secret('relay-key')), detail: relayUrl || 'the phone reaches Lax through your own Worker (a free Cloudflare account)' },
-    phone: { ok: !!env.LAX_PUBLIC_URL, detail: env.LAX_PUBLIC_URL ? `pairs through ${env.LAX_PUBLIC_URL}` : 'on this Mac only, at localhost' },
+    phone: { ok: !!env.LAX_PUBLIC_URL, detail: env.LAX_PUBLIC_URL ? `pairs through ${env.LAX_PUBLIC_URL}` : `on this ${MACHINE} only, at localhost` },
   };
 }
 
@@ -89,13 +91,13 @@ async function doctor(fix) {
   add('secrets', fix || !loose.length, loose.length ? `${fix ? 'tightened' : 'readable by others (npm run doctor -- --fix)'}: ${loose.map((p) => path.basename(p)).join(', ')}` : 'only yours (0700, files 0600)');
   // The ways in, end to end: the page answers with the token.
   const reach = async (url, headers = {}) => { try { return (await fetch(`${url}/?t=${token}`, { headers, signal: AbortSignal.timeout(10000) })).status; } catch (e) { return e.cause?.code || e.message; } };
-  if (env.LAX_RELAY_URL) { const r = await reach(env.LAX_RELAY_URL); add('relay', r === 200, r === 200 ? env.LAX_RELAY_URL : r === 503 ? 'deployed, but the Mac is not linked (is Lax running? see its log)' : `${env.LAX_RELAY_URL}: ${r}`); }
+  if (env.LAX_RELAY_URL) { const r = await reach(env.LAX_RELAY_URL); add('relay', r === 200, r === 200 ? env.LAX_RELAY_URL : r === 503 ? `deployed, but the ${MACHINE} is not linked (is Lax running? see its log)` : `${env.LAX_RELAY_URL}: ${r}`); }
   if (env.LAX_PUBLIC_URL && env.LAX_PUBLIC_URL !== env.LAX_RELAY_URL) {
     const r = await reach(env.LAX_PUBLIC_URL, env.CF_ACCESS_CLIENT_ID ? { 'CF-Access-Client-Id': env.CF_ACCESS_CLIENT_ID, 'CF-Access-Client-Secret': env.CF_ACCESS_CLIENT_SECRET } : {});
     add('tunnel', r === 200, r === 200 ? env.LAX_PUBLIC_URL : `${env.LAX_PUBLIC_URL}: ${r}`);
   }
   if (!env.LAX_PUBLIC_URL) add('phone', false, 'no way in from a phone yet (node scripts/setup.mjs relay)', false);
-  if (s.whisper.ok) { let ok = false; try { ok = (await (await fetch(`http://127.0.0.1:${PORT + 1}/health`, { signal: AbortSignal.timeout(3000) })).json()).status === 'ok'; } catch {} add('whisper', ok, ok ? 'hearing on the Mac' : 'set up, but not answering (it starts with Lax)', false); }
+  if (s.whisper.ok) { let ok = false; try { ok = (await (await fetch(`http://127.0.0.1:${PORT + 1}/health`, { signal: AbortSignal.timeout(3000) })).json()).status === 'ok'; } catch {} add('whisper', ok, ok ? `hearing on the ${MACHINE}` : 'set up, but not answering (it starts with Lax)', false); }
   for (const c of checks) say(`${c.ok ? '✓' : c.needed ? '✗' : '·'} ${c.name.padEnd(8)} ${c.detail}`);
   const bad = checks.filter((c) => c.needed && !c.ok);
   say(bad.length ? `\n${bad.length} thing${bad.length > 1 ? 's' : ''} to fix.` : '\nAll good.');
@@ -103,8 +105,21 @@ async function doctor(fix) {
 }
 
 // ---------- the steps ----------
+// node-pty has no Linux prebuild, so npm install compiles it; without these it fails and the whole install with it.
+// A PATH scan, not `which`: minimal Fedora has none.
+function toolchain() {
+  if (process.platform !== 'linux') return;
+  const need = ['make', 'g++', 'python3'].filter((t) => !(process.env.PATH || '').split(':').some((d) => d && fs.existsSync(path.join(d, t))));
+  if (!need.length) return;
+  const rel = (read('/etc/os-release').match(/^(ID|ID_LIKE)=.*$/gm) || []).join(' ');
+  const apt = 'sudo apt install build-essential python3', dnf = 'sudo dnf install gcc-c++ make python3';
+  const cmd = /fedora|rhel|centos/.test(rel) ? dnf : /debian|ubuntu/.test(rel) ? apt : `${apt}   (or: ${dnf})`;
+  console.error(`Lax compiles one part of itself (node-pty) and needs ${need.join(', ')} for it. Install them, then run this again:\n  ${cmd}`);
+  process.exit(1);
+}
+
 const STEPS = {
-  deps() { if (!fs.existsSync(path.join(ROOT, 'node_modules', 'node-pty'))) run('npm', ['install']); say('deps: installed'); },
+  deps() { if (!fs.existsSync(path.join(ROOT, 'node_modules', 'node-pty'))) { toolchain(); run('npm', ['install']); } say('deps: installed'); },
   workdir(dir) {
     const d = path.resolve(dir ? dir.replace(/^~(?=$|\/)/, os.homedir()) : path.dirname(ROOT));
     if (!fs.existsSync(d) || !fs.statSync(d).isDirectory()) throw new Error(`${d} is not a folder`);
@@ -139,14 +154,14 @@ const STEPS = {
     }
     const url = new RegExp(`https://${name}\\.[a-z0-9-]+\\.workers\\.dev`, 'i').exec(out)?.[0];
     if (!url) throw new Error('deployed, but its workers.dev address was not in wrangler\'s output:\n' + out.slice(-500));
-    if (!read(secret('relay-key'))) { ensureDirs(); fs.writeFileSync(secret('relay-key'), execFileSync('openssl', ['rand', '-hex', '24'], { encoding: 'utf8' }).trim(), { mode: 0o600 }); }
+    if (!read(secret('relay-key'))) { ensureDirs(); fs.writeFileSync(secret('relay-key'), crypto.randomBytes(24).toString('hex'), { mode: 0o600 }); }
     const env = readEnv(), put = (key, value) => wrangler(['secret', 'put', key, ...config], { input: value, stdio: ['pipe', 'pipe', 'pipe'] });
     put('RELAY_KEY', read(secret('relay-key')));
     // Its public face: with your own domain's demo (LAX_DEMO_ROUTE), the relay's /demo goes there; without, the relay
     // keeps Lax's mind itself, pushed by the Mac with its mind key.
     if (env.LAX_DEMO_ROUTE && env.LAX_PUBLIC_URL) put('PUBLIC_HOME', new URL(env.LAX_PUBLIC_URL).origin);
     else {
-      if (!read(secret('mind-key'))) { ensureDirs(); fs.writeFileSync(secret('mind-key'), execFileSync('openssl', ['rand', '-hex', '24'], { encoding: 'utf8' }).trim(), { mode: 0o600 }); }
+      if (!read(secret('mind-key'))) { ensureDirs(); fs.writeFileSync(secret('mind-key'), crypto.randomBytes(24).toString('hex'), { mode: 0o600 }); }
       put('MIND_KEY', read(secret('mind-key')));
     }
     setEnv({ LAX_RELAY_URL: url, LAX_RELAY_NAME: name === 'lax-relay' ? null : name, LAX_PUBLIC_URL: env.LAX_PUBLIC_URL || url }); // a Lax with its own domain keeps pairing there
@@ -161,7 +176,9 @@ const STEPS = {
   },
   pair() {
     const url = `http://localhost:${PORT}/pair`;
-    try { sh('open', [url]); } catch {}
+    // xdg-open detached and without pipes: the browser it starts inherits them, and setup would wait on it.
+    if (process.platform === 'linux') spawn('xdg-open', [url], { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
+    else try { sh('open', [url]); } catch {}
     say(`pair: ${url} (opened in your browser). Scan the QR with the phone, or open Lax right here: http://localhost:${PORT}/?t=…`);
   },
 };

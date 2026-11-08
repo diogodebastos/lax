@@ -55,9 +55,9 @@ ingress:
 - an **Allow** policy for your email (one-time PIN, 1-month session)
 - a **Service Auth** policy for the `lax-android` service token, which the Android app uses for its background connection
 
-`/pair` only answers requests from the Mac itself. Anything that arrives through the tunnel gets a 403.
+`/pair` only answers requests from the computer itself. Anything that arrives through the tunnel gets a 403.
 
-## Always on (launchd)
+## Always on (launchd, or systemd on Linux)
 
 ```bash
 npm run install-service   # server (+ tunnel once configured): starts at login, restarts on crash (setup does this)
@@ -65,4 +65,18 @@ npm run remove-service
 npm run logs
 ```
 
-On power, turn on System Settings → Battery → Options → *Prevent automatic sleeping when the display is off*.
+On a Mac these are launchd agents in `~/Library/LaunchAgents`. On power, turn on System Settings → Battery → Options →
+*Prevent automatic sleeping when the display is off*.
+
+On Linux they're systemd user services in `~/.config/systemd/user` (`digi-lax.server.service`, `digi-lax.tunnel.service`):
+
+```bash
+systemctl --user status digi-lax.server     # or start | stop | restart
+loginctl enable-linger $USER                # optional: keeps Lax running while you're logged out, and from boot
+```
+
+Without lingering, Lax runs while you're logged in, like a LaunchAgent. To keep it reachable on power: GNOME Settings →
+Power → *Automatic Suspend* off, or KDE's Power Management; for a closed lid, `HandleLidSwitchExternalPower=ignore` in
+`/etc/systemd/logind.conf`. cloudflared comes from Cloudflare's .deb/.rpm (`/usr/bin/cloudflared`) or, with your own
+domain, from `scripts/domain.mjs` into `~/.lax-tools`. With no systemd user session (WSL without systemd, a container),
+run `npm start` in a terminal instead.

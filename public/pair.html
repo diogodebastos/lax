@@ -25,11 +25,11 @@
 <body>
 <main>
   <h1>pair with Lax</h1>
-  <p>On this Mac: <a href="%%LOCAL%%">open Lax</a> (Chrome; hold space to talk).</p>
+  <p>On this computer: <a href="%%LOCAL%%">open Lax</a> (Chrome; hold space to talk).</p>
   <p id="nophone" hidden>To have Lax on your phone too, it needs a way in from anywhere: <code style="white-space:nowrap">node scripts/setup.mjs relay</code> (a free Cloudflare account), then reload this page.</p>
   <div id="phone">
-  <div class="tabs"><button data-t="app" class="on">Android app</button><button data-t="web">browser</button></div>
-  <section id="app">
+  <div class="tabs"><button data-t="web" class="on">iPhone / browser</button><button data-t="app">Android app</button></div>
+  <section id="app" hidden>
     <div class="qr" id="qrApp"></div>
     <ol>
       <li>Install the app: <code>npm run android</code> with the phone plugged in (USB debugging on).</li>
@@ -38,12 +38,13 @@
     </ol>
     <p style="color:#6b6459">This code holds your Lax token (and Access service token, if you have one). Don't share it.</p>
   </section>
-  <section id="web" hidden>
+  <section id="web">
     <div class="qr" id="qrWeb"></div>
     <ol>
-      <li>Scan with the phone's camera and open the link in <b>Chrome</b>. It works on any network: home Wi-Fi, mobile data, anywhere.</li>
+      <li>Scan with the phone's camera. An iPhone opens it in <b>Safari</b> (iOS 16.4 or newer); on Android, open it in <b>Chrome</b>. It works on any network: home Wi-Fi, mobile data, anywhere.</li>
       <li>Behind Cloudflare Access (your own domain), the first time it asks for your email and sends you a PIN. After that you stay logged in for a month.</li>
-      <li>Tap "wake". Tap the top half to talk (allow the mic), and tap <b>LAX ≡</b> for the life menu. Chrome menu → <b>Add to Home screen</b> gives you an icon.</li>
+      <li>Tap "wake". Tap the top half to talk (allow the mic), and tap <b>LAX ≡</b> for the life menu. Android: Chrome menu → <b>Add to Home screen</b> gives you an icon.</li>
+      <li>iPhone, optional: Share → <b>Add to Home Screen</b> gives a full-screen app. It has storage of its own, so pair it too: in Safari, <b>LAX ≡</b> → <b>copy link for the Home Screen app</b>; then open the icon, tap, paste. Talking there needs Whisper on your computer (<code>npm run whisper</code>).</li>
     </ol>
   </section>
   </div>

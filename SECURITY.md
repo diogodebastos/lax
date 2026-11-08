@@ -20,6 +20,9 @@ vulnerability**).
     that never reaches Cloudflare (it travels after the `#` of the pairing link). Nothing else is stored on Cloudflare.
   - **A tunnel on your own domain** (`cloudflared`), behind Cloudflare Access (an email PIN for the browser, a service
     token for the Android app).
+- **The page itself** comes over HTTPS from your own Worker or tunnel. The Android app also checks that it was signed by
+  your Mac (`x-lax-page`, `lib/seal.mjs`); a browser (Chrome, or Safari on an iPhone) can't, so there the page's
+  integrity rests on TLS to your own Worker. What the phone and the Mac say is still sealed end to end.
 - **The Lax token** is checked on every API call, whichever way the request came in. It lives in `~/.lax/secrets/token`
   and in the phone's pairing link. `npm run rotate-token` replaces it, and every old link then gets 401.
 - **Wrong tokens through the relay** are limited by the caller's address: after 20 in 10 minutes, that address is
@@ -40,6 +43,12 @@ vulnerability**).
 - **What reaches Cloudflare:** with the relay, your requests pass through your own Worker. TLS ends at Cloudflare, so
   the relay could read them; it doesn't store them. End-to-end encryption between the phone and the Mac isn't built
   yet.
+- **Notifications** (if you turn them on in the Home Screen app, `lib/push.mjs`): the Mac sends them straight to your
+  browser's push service (Apple's for an iPhone). Each carries Lax's name, the project and a short gist of what waits
+  (like `quokka wants to: Run the tests: $ npm test`), never file contents or secrets. It's encrypted to the phone
+  (RFC 8291), so the push service can't read it, but it shows on the lock screen as iOS's "Show Previews" allows. The
+  Mac signs as itself with a key in `~/.lax/secrets/vapid.json`; the phones it may send to are in `~/.lax/push.json`
+  (0600: an entry there lets anyone push to that phone), and only push services' own addresses are accepted.
 - **Optional, off by default:** a public demo and a public page with the shape of Lax's mind (counts and times, never
   what's in it), only if you set `LAX_DEMO_ROUTE` and a mind key.
 
@@ -47,7 +56,7 @@ vulnerability**).
 
 - **Lax's assistant runs headless**, so the phone is its terminal: anything that changes something asks you there first.
   Looking (`ls`, `cat`, `git status`…) and small local steps you can undo (`npm test`, `git commit` in a repo) don't ask.
-  Pushing, deleting, sending, `curl`, `ssh`, `osascript`, `sudo`, `launchctl` and anything outside your repos always ask
+  Pushing, deleting, sending, `curl`, `ssh`, `osascript`, `sudo`, `launchctl`, `systemctl` and anything outside your repos always ask
   (`lib/allow.mjs`).
 - **What it spends of your Claude plan by itself** (`lib/budget.mjs`): its own work (reflections, the weekly review,
   drafting a wish, the nightly fix) is capped and pauses near your plan's limits: "light" by default (8 runs a day,
@@ -83,4 +92,4 @@ in code, not only in prompts:
   a tunnel, Access is a second one.
 - **What you approve.** A yes on the phone is a yes.
 - **Claude Code itself**, and the permissions you've given it in `~/.claude/settings.json`.
-- **macOS only** for now: the background services, sharing and text recognition use macOS.
+- **Sharing and on-screen text recognition are macOS only.** On Linux the share tool isn't offered.

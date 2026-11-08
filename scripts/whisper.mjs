@@ -1,7 +1,7 @@
-// Set up Whisper on the Mac (lib/whisper.mjs): build whisper.cpp's server into ~/.lax-tools and fetch the "small" model.
-//   npm run whisper     then restart Lax
+// Set up Whisper on this computer (lib/whisper.mjs): build whisper.cpp's server into ~/.lax-tools and fetch the "small"
+// model.   npm run whisper     then restart Lax
 // No Homebrew: on an Intel Mac `brew install whisper-cpp` compiles cmake and LLVM from source (hours). A prebuilt cmake
-// is fetched instead when there's none. On Apple silicon the same build uses the GPU (Metal).
+// is fetched instead when there's none (on Linux too). On Apple silicon the same build uses the GPU (Metal).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,16 +12,22 @@ const TOOLS = path.join(os.homedir(), '.lax-tools');
 const SRC = path.join(TOOLS, 'whisper.cpp');
 const CMAKE_VERSION = '3.30.5';
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: 'inherit', ...opts });
-const has = (cmd) => { try { execFileSync('which', [cmd], { stdio: 'ignore' }); return true; } catch { return false; } };
+// A PATH scan, not `which`: minimal Linux installs have none.
+const has = (cmd) => (process.env.PATH || '').split(':').some((d) => d && fs.existsSync(path.join(d, cmd)));
+const LINUX = process.platform === 'linux';
+for (const t of LINUX ? ['curl', 'git', 'make', 'g++'] : []) if (!has(t)) {
+  console.error(`Building Whisper needs ${t}: sudo apt install curl git build-essential (or: sudo dnf install curl git gcc-c++ make)`); process.exit(1);
+}
 fs.mkdirSync(TOOLS, { recursive: true });
 
 function cmake() {
   if (has('cmake')) return 'cmake';
-  const dir = path.join(TOOLS, `cmake-${CMAKE_VERSION}-macos-universal`), bin = path.join(dir, 'CMake.app/Contents/bin/cmake');
+  const name = `cmake-${CMAKE_VERSION}-${LINUX ? `linux-${process.arch === 'arm64' ? 'aarch64' : 'x86_64'}` : 'macos-universal'}`;
+  const dir = path.join(TOOLS, name), bin = path.join(dir, LINUX ? 'bin/cmake' : 'CMake.app/Contents/bin/cmake');
   if (!fs.existsSync(bin)) {
     console.log(`fetching cmake ${CMAKE_VERSION}…`);
     const tgz = path.join(TOOLS, 'cmake.tar.gz');
-    run('curl', ['-fsSL', '-o', tgz, `https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-macos-universal.tar.gz`]);
+    run('curl', ['-fsSL', '-o', tgz, `https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/${name}.tar.gz`]);
     run('tar', ['xzf', tgz, '-C', TOOLS]); fs.rmSync(tgz);
   }
   return bin;
